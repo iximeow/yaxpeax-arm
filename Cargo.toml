@@ -1,0 +1,17 @@
+[package]
+
+name = "yaxpeax-pic24"
+version = "0.0.1"
+authors = [ "iximeow <me@iximeow.net>" ]
+license = "0BSD"
+repository = ""
+description = """
+A rust pic24 decoder
+"""
+
+[dependencies]
+yaxpeax-arch = { path = "../../yaxpeax-arch" }
+
+[[test]]
+name = "test"
+path = "test/test.rs"
