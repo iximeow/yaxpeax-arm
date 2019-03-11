@@ -552,21 +552,21 @@ impl ConditionCode {
 }
 
 impl Decodable for Instruction {
-    fn decode<'a, T: IntoIterator<Item=&'a u8>>(bytes: T) -> Option<Self> {
+    fn decode<T: IntoIterator<Item=u8>>(bytes: T) -> Option<Self> {
         let mut blank = Instruction::blank();
         match blank.decode_into(bytes) {
             Some(_) => Some(blank),
             None => None
         }
     }
-    fn decode_into<'a, T: IntoIterator<Item=&'a u8>>(&mut self, bytes: T) -> Option<()> {
-        fn read_word<'a, T: IntoIterator<Item=&'a u8>>(bytes: T) -> Option<u32> {
+    fn decode_into<T: IntoIterator<Item=u8>>(&mut self, bytes: T) -> Option<()> {
+        fn read_word<T: IntoIterator<Item=u8>>(bytes: T) -> Option<u32> {
             let mut iter = bytes.into_iter();
             let instr: u32 =
-                ((*iter.next()? as u32)      ) |
-                ((*iter.next()? as u32) << 8 ) |
-                ((*iter.next()? as u32) << 16) |
-                ((*iter.next()? as u32) << 24);
+                ((iter.next()? as u32)      ) |
+                ((iter.next()? as u32) << 8 ) |
+                ((iter.next()? as u32) << 16) |
+                ((iter.next()? as u32) << 24);
 
             Some(instr)
         }
