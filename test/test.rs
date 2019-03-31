@@ -10,7 +10,7 @@ use yaxpeax_arm::armv7::{ARMv7, Instruction, ConditionCode, Operands, Opcode, Sh
 
 fn test_decode(data: [u8; 4], expected: Instruction) {
     let mut instr = Instruction::blank();
-    instr.decode_into(&data);
+    instr.decode_into(data.to_vec());
     assert!(
         instr == expected,
         "decode error for {:02x}{:02x}{:02x}{:02x}:\n  decoded: {:?}\n expected: {:?}\n",
@@ -21,7 +21,7 @@ fn test_decode(data: [u8; 4], expected: Instruction) {
 
 fn test_display(data: [u8; 4], expected: &'static str) {
     let mut instr = Instruction::blank();
-    instr.decode_into(&data);
+    instr.decode_into(data.to_vec());
     let text = format!("{}", instr);
     assert!(
         text == expected,
@@ -295,7 +295,7 @@ fn test_decode_span() {
     let mut i = 0u32;
     while i < instruction_bytes.len() as u32 {
         let mut instr = Instruction::blank();
-        instr.decode_into(&instruction_bytes[(i as usize)..]);
+        instr.decode_into(instruction_bytes[(i as usize)..].iter().map(|x| *x));
         println!(
             "Decoded {:02x}{:02x}{:02x}{:02x}: {}", //{:?}\n  {}",
             instruction_bytes[i as usize],
@@ -377,7 +377,7 @@ use test::Bencher;
 pub fn bench_60000_instrs(b: &mut Bencher) {
     b.iter(|| {
         for i in (0..1000) {
-            let mut iter = instruction_bytes.iter();
+            let mut iter = instruction_bytes.iter().map(|x| *x);
             let mut result = Instruction::blank();
             loop {
                 match result.decode_into(&mut iter) {
