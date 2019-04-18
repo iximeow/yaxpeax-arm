@@ -1,6 +1,240 @@
 use std::fmt::{Display, Formatter};
 
-use yaxpeax_arch::{Arch, Decodable, LengthedInstruction};
+use yaxpeax_arch::{Arch, Colorize, Colored, ColorSettings, Decodable, LengthedInstruction, ShowContextual, YaxColors};
+
+struct ConditionedOpcode(pub Opcode, pub ConditionCode);
+
+impl Display for ConditionedOpcode {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        write!(f, "{}{}", self.0, self.1)
+    }
+}
+
+impl <T: std::fmt::Write> ShowContextual<u32, [Option<String>], T> for Instruction {
+    fn contextualize(&self, colors: Option<&ColorSettings>, address: u32, context: Option<&[Option<String>]>, out: &mut T) -> std::fmt::Result {
+        match self.opcode {
+            Opcode::LDR(true, false, false) => {
+                match self.operands {
+                    Operands::TwoRegImm(13, Rt, 4) => {
+                        ConditionedOpcode(Opcode::POP, self.condition).colorize(colors, out)?;
+                        return write!(out, " {{{}}}", reg_name_colorize(Rt, colors));
+                    },
+                    _ => {}
+                }
+            },
+            Opcode::STR(false, true, true) => {
+                match self.operands {
+                    Operands::TwoRegImm(13, Rt, 4) => {
+                        ConditionedOpcode(Opcode::PUSH, self.condition).colorize(colors, out)?;
+                        return write!(out, " {{{}}}", reg_name_colorize(Rt, colors));
+                    },
+                    _ => {}
+                }
+            },
+            Opcode::LDM(true, false, true, _usermode) => {
+                // TODO: what indicates usermode in the ARM syntax?
+                match self.operands {
+                    Operands::RegRegList(13, list) => {
+                        ConditionedOpcode(Opcode::POP, self.condition).colorize(colors, out)?;
+                        write!(out, " ")?;
+                        return format_reg_list(out, list, colors);
+                    }
+                    _ => {}
+                }
+            }
+            Opcode::STM(false, true, true, _usermode) => {
+                // TODO: what indicates usermode in the ARM syntax?
+                match self.operands {
+                    Operands::RegRegList(13, list) => {
+                        ConditionedOpcode(Opcode::PUSH, self.condition).colorize(colors, out)?;
+                        write!(out, " ")?;
+                        return format_reg_list(out, list, colors);
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+
+        match self.opcode {
+            Opcode::LDR(add, pre, wback) |
+            Opcode::STR(add, pre, wback) |
+            Opcode::STRB(add, pre, wback) |
+            Opcode::LDRB(add, pre, wback) => {
+                match self.operands {
+                    Operands::TwoRegImm(Rn, Rt, imm) => {
+                        ConditionedOpcode(self.opcode, self.condition).colorize(colors, out)?;
+                        write!(
+                            out, " {}, ",
+                            reg_name_colorize(Rt, colors),
+                        )?;
+                        return format_reg_imm_mem(out, Rn, imm, add, pre, wback, colors);
+                    }
+                    // TODO: this might not be necessary
+                    Operands::RegImm(Rt, imm) => {
+                        ConditionedOpcode(self.opcode, self.condition).colorize(colors, out)?;
+                        write!(
+                            out, " {}, ",
+                            reg_name_colorize(Rt, colors)
+                        )?;
+                        return format_reg_imm_mem(out, 15, imm, add, pre, wback, colors);
+                    },
+                    Operands::ThreeOperandWithShift(Rd, Rn, Rm, shift) => {
+                        ConditionedOpcode(self.opcode, self.condition).colorize(colors, out)?;
+                        write!(
+                            out, " {}, ",
+                            reg_name_colorize(Rn, colors)
+                        )?;
+                        return format_reg_shift_mem(out, Rd, Rm, shift, add, pre, wback, colors);
+                    }
+                    _ => { unreachable!(); }
+                }
+            }
+            Opcode::STM(add, pre, wback, usermode) |
+            Opcode::LDM(add, pre, wback, usermode) => {
+                match self.operands {
+                    Operands::RegRegList(Rr, list) => {
+                        ConditionedOpcode(self.opcode, self.condition).colorize(colors, out)?;
+                        write!(
+                            out, " {}{}, ",
+                            reg_name_colorize(Rr, colors),
+                            if wback { "!" } else { "" }
+                        )?;
+                        return format_reg_list(out, list, colors);
+                    },
+                    _ => { unreachable!(); }
+                }
+            },
+            Opcode::Incomplete(word) => {
+                write!(out, "incomplete: {:#x}", word)
+            },
+            _ => {
+                ConditionedOpcode(self.opcode, self.condition).colorize(colors, out)?;
+                match self.operands {
+                    Operands::RegisterList(list) => {
+                        write!(out, " ")?;
+                        format_reg_list(out, list, colors)?;
+                    },
+                    Operands::TwoOperand(a, b) => {
+                        write!(out, " {}, {}", reg_name_colorize(a, colors), reg_name_colorize(b, colors))?;
+                    },
+                    Operands::RegImm(a, imm) => {
+                        write!(out, " {}, {:#x}", reg_name_colorize(a, colors), imm * 4)?;
+                    },
+                    Operands::RegRegList(r, list) => {
+                        write!(out, " {}, ", reg_name_colorize(r, colors))?;
+                        format_reg_list(out, list, colors)?;
+                    },
+                    Operands::TwoRegImm(a, b, imm) => {
+                        write!(out, " <unimplemented>")?;
+                    },
+                    Operands::ThreeOperand(a, b, c) => {
+                        write!(out, " {}, {}, {}", reg_name_colorize(a, colors), reg_name_colorize(b, colors), reg_name_colorize(c, colors))?;
+                    },
+                    Operands::ThreeOperandImm(a, b, imm) => {
+                        write!(out, " <unimplemented>")?;
+                    },
+                    Operands::ThreeOperandWithShift(a, b, c, shift) => {
+                        write!(out, " {}, {}, ", reg_name_colorize(a, colors), reg_name_colorize(b, colors))?;
+                        format_shift(out, c, shift, colors)?;
+                    },
+                    Operands::MulThreeRegs(a, b, c) => {
+                        write!(out, " {}, {}, {}", reg_name_colorize(a, colors), reg_name_colorize(b, colors), reg_name_colorize(c, colors))?;
+                    },
+                    Operands::MulFourRegs(a, b, c, d) => {
+                        write!(out, " <unimplemented>")?;
+                    },
+                    Operands::BranchOffset(imm) => {
+                        if imm < 0 {
+                            write!(out, " $-{:#x}", (-imm) * 4)?;
+                        } else {
+                            write!(out, " $+{:#x}", imm * 4)?;
+                        }
+                    }
+                };
+                Ok(())
+            }
+        }
+    }
+}
+
+impl <T: std::fmt::Write> Colorize<T> for ConditionedOpcode {
+    fn colorize(&self, colors: Option<&ColorSettings>, out: &mut T) -> std::fmt::Result {
+        match self.0 {
+            Opcode::Incomplete(_) |
+            Opcode::Invalid => { write!(out, "{}", colors.invalid_op(self)) },
+            Opcode::B |
+            Opcode::BL |
+            Opcode::BLX |
+            Opcode::BX |
+            Opcode::BXJ => { write!(out, "{}", colors.control_flow_op(self)) },
+
+            Opcode::AND |
+            Opcode::EOR |
+            Opcode::ORR |
+            Opcode::LSL |
+            Opcode::LSR |
+            Opcode::ROR |
+            Opcode::ASR |
+            Opcode::RRX |
+            Opcode::BIC |
+
+            Opcode::ADR |
+            Opcode::SUB |
+            Opcode::RSB |
+            Opcode::ADD |
+            Opcode::ADC |
+            Opcode::SBC |
+            Opcode::RSC |
+
+            Opcode::MUL |
+            Opcode::MLA |
+            Opcode::UMAAL |
+            Opcode::MLS |
+            Opcode::UMULL |
+            Opcode::UMLAL |
+            Opcode::SMULL |
+            Opcode::SMLAL => { write!(out, "{}", colors.arithmetic_op(self)) },
+
+            Opcode::PUSH |
+            Opcode::POP => { write!(out, "{}", colors.stack_op(self)) },
+
+            Opcode::TST |
+            Opcode::TEQ |
+            Opcode::CMP |
+            Opcode::CMN => { write!(out, "{}", colors.comparison_op(self)) },
+
+            Opcode::LDREXH |
+            Opcode::STREXH |
+            Opcode::LDREXB |
+            Opcode::STREXB |
+            Opcode::LDREXD |
+            Opcode::STREXD |
+            Opcode::LDREX |
+            Opcode::STREX |
+            Opcode::LDM(false, false, _, _) |
+            Opcode::LDM(false, true, _, _) |
+            Opcode::LDM(true, false, _, _) |
+            Opcode::LDM(true, true, _, _) |
+            Opcode::STM(false, false, _, _) |
+            Opcode::STM(false, true, _, _) |
+            Opcode::STM(true, false, _, _) |
+            Opcode::STM(true, true, _, _) |
+            Opcode::LDR(_, _, _) |
+            Opcode::STR(_, _, _) |
+            Opcode::LDRB(_, _, _) |
+            Opcode::STRB(_, _, _) |
+            Opcode::LDRT(_) |
+            Opcode::STRT(_) |
+            Opcode::LDRBT(_) |
+            Opcode::STRBT(_) |
+            Opcode::SWP |
+            Opcode::SWPB |
+            Opcode::MOV |
+            Opcode::MVN => { write!(out, "{}", colors.data_op(self)) },
+        }
+    }
+}
 
 impl Display for Opcode {
     fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
@@ -8,6 +242,7 @@ impl Display for Opcode {
             Opcode::Incomplete(word) => { write!(f, "incomplete: {:#x}", word) },
             Opcode::Invalid => { write!(f, "invalid") },
             Opcode::POP => { write!(f, "pop") },
+            Opcode::PUSH => { write!(f, "push") },
             Opcode::B => { write!(f, "b") },
             Opcode::BL => { write!(f, "bl") },
             Opcode::BLX => { write!(f, "blx") },
@@ -77,7 +312,14 @@ impl Display for Opcode {
 pub enum Opcode {
     Incomplete(u32),
     Invalid,
+    /*
+     * These two don't really have direct encodings, but are for the specific instances
+     * where the semantics of the original instruction are the same as push (specifically
+     * ldm/stm/mov that write to the stack and increment/decrement appropriately
+     */
     POP,
+    PUSH,
+
     B,
     BL,
     BLX,
@@ -198,278 +440,137 @@ impl Instruction {
     pub fn S(&self) -> bool { self.s }
 }
 
+fn format_reg_list<T: std::fmt::Write>(f: &mut T, mut list: u16, colors: Option<&ColorSettings>) -> Result<(), std::fmt::Error> {
+    write!(f, "{{");
+    let mut i = 0;
+    let mut tail = false;
+    while i < 16 {
+        let present = (list & 1) == 1;
+        if present {
+            if tail {
+                write!(f, ", ")?;
+            } else {
+                tail = true;
+            }
+            write!(f, "{}", reg_name_colorize(i, colors));
+        }
+        i += 1;
+        list >>= 1;
+    }
+    write!(f, "}}")
+}
+
+fn format_shift<T: std::fmt::Write>(f: &mut T, Rm: u8, shift: ShiftSpec, colors: Option<&ColorSettings>) -> Result<(), std::fmt::Error> {
+    fn shift_tpe_to_str(tpe: u8) -> &'static str {
+        match tpe {
+            0b00 => "lsl",
+            0b01 => "lsr",
+            0b10 => "asr",
+            0b11 => "ror",
+            _ => { unreachable!(); }
+        }
+    }
+    match shift {
+        ShiftSpec::Immediate(0) => {
+            write!(f, "{}", reg_name_colorize(Rm, colors))
+        },
+        ShiftSpec::Immediate(v) => {
+            let tpe = v & 0x3;
+            let imm = v >> 2;
+            write!(f, "{}, {} {}", reg_name_colorize(Rm, colors), shift_tpe_to_str(tpe), imm)
+        },
+        ShiftSpec::Register(v) => {
+            let tpe = v & 0x3;
+            let Rs = v >> 2;
+            write!(f, "{}, {} {}", reg_name_colorize(Rm, colors), shift_tpe_to_str(tpe), reg_name_colorize(Rs, colors))
+        },
+    }
+}
+
+fn format_reg_shift_mem<T: std::fmt::Write>(f: &mut T, Rd: u8, Rm: u8, shift: ShiftSpec, add: bool, pre: bool, wback: bool, colors: Option<&ColorSettings>) -> Result<(), std::fmt::Error> {
+    let op = if add { "" } else { "-" };
+
+    match (pre, wback) {
+        (true, true) => {
+            write!(f, "[{}, {}", reg_name_colorize(Rd, colors), op)?;
+            format_shift(f, Rm, shift, colors)?;
+            write!(f, "]!")
+        },
+        (true, false) => {
+            write!(f, "[{}, {}", reg_name_colorize(Rd, colors), op)?;
+            format_shift(f, Rm, shift, colors)?;
+            write!(f, "]")
+        },
+        (false, true) => {
+            unreachable!("I don't know how to render an operand with pre==false and wback==true, this seems like it should be LDRT");
+        },
+        (false, false) => {
+            write!(f, "[{}], {}", reg_name_colorize(Rd, colors), op)?;
+            format_shift(f, Rm, shift, colors)
+        }
+    }
+}
+
+fn format_reg_imm_mem<T: std::fmt::Write>(f: &mut T, Rn: u8, imm: u32, add: bool, pre: bool, wback: bool, colors: Option<&ColorSettings>) -> Result<(), std::fmt::Error> {
+    if imm != 0 {
+        let op = if add { "" } else { "-" };
+
+        match (pre, wback) {
+            (true, true) => {
+                write!(f, "[{}, #{}{:#x}]!", reg_name_colorize(Rn, colors), op, imm * 4)
+            },
+            (true, false) => {
+                write!(f, "[{}, #{}{:#x}]", reg_name_colorize(Rn, colors), op, imm * 4)
+            },
+            (false, true) => {
+                unreachable!("I don't know how to render an operand with pre==false and wback==true, this seems like it should be LDRT");
+            },
+            (false, false) => {
+                write!(f, "[{}], #{}{:#x}", reg_name_colorize(Rn, colors), op, imm * 4)
+            }
+        }
+    } else {
+        match (pre, wback) {
+            (true, true) => {
+                write!(f, "[{}]!", reg_name_colorize(Rn, colors))
+            },
+            (true, false) => {
+                write!(f, "[{}]", reg_name_colorize(Rn, colors))
+            },
+            (false, true) => {
+                unreachable!("I don't know how to render an operand with pre==false and wback==true, this seems like it should be LDRT");
+            },
+            (false, false) => {
+                write!(f, "[{}]", reg_name_colorize(Rn, colors))
+            }
+        }
+    }
+}
+fn reg_name_colorize(num: u8, colors: Option<&ColorSettings>) -> Colored<&'static str> {
+    match num {
+        0 => colors.register("r0"),
+        1 => colors.register("r1"),
+        2 => colors.register("r2"),
+        3 => colors.register("r3"),
+        4 => colors.register("r4"),
+        5 => colors.register("r5"),
+        6 => colors.register("r6"),
+        7 => colors.register("r7"),
+        8 => colors.register("r8"),
+        9 => colors.register("sb"),
+        10 => colors.register("r10"),
+        11 => colors.register("fp"),
+        12 => colors.register("ip"),
+        13 => colors.register("sp"),
+        14 => colors.register("lr"),
+        15 => colors.program_counter("pc"),
+        _ => { unreachable!(); }
+    }
+}
+
 impl Display for Instruction {
     fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
-        fn format_reg_list(f: &mut Formatter, mut list: u16) -> Result<(), std::fmt::Error> {
-            write!(f, "{{");
-            let mut i = 0;
-            let mut tail = false;
-            while i < 16 {
-                let present = (list & 1) == 1;
-                if present {
-                    if tail {
-                        write!(f, ", ")?;
-                    } else {
-                        tail = true;
-                    }
-                    write!(f, "{}", reg_name(i));
-                }
-                i += 1;
-                list >>= 1;
-            }
-            write!(f, "}}")
-        }
-
-        fn format_shift(f: &mut Formatter, Rm: u8, shift: ShiftSpec) -> Result<(), std::fmt::Error> {
-            fn shift_tpe_to_str(tpe: u8) -> &'static str {
-                match tpe {
-                    0b00 => "lsl",
-                    0b01 => "lsr",
-                    0b10 => "asr",
-                    0b11 => "ror",
-                    _ => { unreachable!(); }
-                }
-            }
-            match shift {
-                ShiftSpec::Immediate(0) => {
-                    write!(f, "{}", reg_name(Rm))
-                },
-                ShiftSpec::Immediate(v) => {
-                    let tpe = v & 0x3;
-                    let imm = v >> 2;
-                    write!(f, "{}, {} {}", reg_name(Rm), shift_tpe_to_str(tpe), imm)
-                },
-                ShiftSpec::Register(v) => {
-                    let tpe = v & 0x3;
-                    let Rs = v >> 2;
-                    write!(f, "{}, {} {}", reg_name(Rm), shift_tpe_to_str(tpe), reg_name(Rs))
-                },
-            }
-        }
-
-        fn format_reg_shift_mem(f: &mut Formatter, Rd: u8, Rm: u8, shift: ShiftSpec, add: bool, pre: bool, wback: bool) -> Result<(), std::fmt::Error> {
-            let op = if add { "" } else { "-" };
-
-            match (pre, wback) {
-                (true, true) => {
-                    write!(f, "[{}, {}", reg_name(Rd), op)?;
-                    format_shift(f, Rm, shift)?;
-                    write!(f, "]!")
-                },
-                (true, false) => {
-                    write!(f, "[{}, {}", reg_name(Rd), op)?;
-                    format_shift(f, Rm, shift)?;
-                    write!(f, "]")
-                },
-                (false, true) => {
-                    unreachable!("I don't know how to render an operand with pre==false and wback==true, this seems like it should be LDRT");
-                },
-                (false, false) => {
-                    write!(f, "[{}], {}", reg_name(Rd), op)?;
-                    format_shift(f, Rm, shift)
-                }
-            }
-        }
-
-        fn format_reg_imm_mem(f: &mut Formatter, Rn: u8, imm: u32, add: bool, pre: bool, wback: bool) -> Result<(), std::fmt::Error> {
-            if imm != 0 {
-                let op = if add { "" } else { "-" };
-
-                match (pre, wback) {
-                    (true, true) => {
-                        write!(f, "[{}, #{}{:#x}]!", reg_name(Rn), op, imm * 4)
-                    },
-                    (true, false) => {
-                        write!(f, "[{}, #{}{:#x}]", reg_name(Rn), op, imm * 4)
-                    },
-                    (false, true) => {
-                        unreachable!("I don't know how to render an operand with pre==false and wback==true, this seems like it should be LDRT");
-                    },
-                    (false, false) => {
-                        write!(f, "[{}], #{}{:#x}", reg_name(Rn), op, imm * 4)
-                    }
-                }
-            } else {
-                match (pre, wback) {
-                    (true, true) => {
-                        write!(f, "[{}]!", reg_name(Rn))
-                    },
-                    (true, false) => {
-                        write!(f, "[{}]", reg_name(Rn))
-                    },
-                    (false, true) => {
-                        unreachable!("I don't know how to render an operand with pre==false and wback==true, this seems like it should be LDRT");
-                    },
-                    (false, false) => {
-                        write!(f, "[{}]", reg_name(Rn))
-                    }
-                }
-            }
-        }
-        fn reg_name(num: u8) -> &'static str {
-            match num {
-                0 => "r0",
-                1 => "r1",
-                2 => "r2",
-                3 => "r3",
-                4 => "r4",
-                5 => "r5",
-                6 => "r6",
-                7 => "r7",
-                8 => "r8",
-                9 => "sb",
-                10 => "r10",
-                11 => "fp",
-                12 => "ip",
-                13 => "sp",
-                14 => "lr",
-                15 => "pc",
-                _ => { unreachable!(); }
-            }
-        }
-        match self.opcode {
-            Opcode::LDR(true, false, false) => {
-                match self.operands {
-                    Operands::TwoRegImm(13, Rt, 4) => {
-                        return write!(f, "pop{} {{{}}}", self.condition, reg_name(Rt));
-                    },
-                    _ => {}
-                }
-            },
-            Opcode::STR(false, true, true) => {
-                match self.operands {
-                    Operands::TwoRegImm(13, Rt, 4) => {
-                        return write!(f, "push{} {{{}}}", self.condition, reg_name(Rt));
-                    },
-                    _ => {}
-                }
-            },
-            Opcode::LDM(true, false, true, _usermode) => {
-                // TODO: what indicates usermode in the ARM syntax?
-                match self.operands {
-                    Operands::RegRegList(13, list) => {
-                        write!(f, "pop{} ", self.condition)?;
-                        return format_reg_list(f, list);
-                    }
-                    _ => {}
-                }
-            }
-            Opcode::STM(false, true, true, _usermode) => {
-                // TODO: what indicates usermode in the ARM syntax?
-                match self.operands {
-                    Operands::RegRegList(13, list) => {
-                        write!(f, "push{} ", self.condition)?;
-                        return format_reg_list(f, list);
-                    }
-                    _ => {}
-                }
-            }
-            _ => {}
-        }
-
-        match self.opcode {
-            Opcode::LDR(add, pre, wback) |
-            Opcode::STR(add, pre, wback) |
-            Opcode::STRB(add, pre, wback) |
-            Opcode::LDRB(add, pre, wback) => {
-                match self.operands {
-                    Operands::TwoRegImm(Rn, Rt, imm) => {
-                        write!(
-                            f, "{}{} {}, ",
-                            self.opcode,
-                            self.condition,
-                            reg_name(Rt),
-                        )?;
-                        return format_reg_imm_mem(f, Rn, imm, add, pre, wback);
-                    }
-                    // TODO: this might not be necessary
-                    Operands::RegImm(Rt, imm) => {
-                        write!(
-                            f, "{}{} {}, ",
-                            self.opcode,
-                            self.condition,
-                            reg_name(Rt)
-                        )?;
-                        return format_reg_imm_mem(f, 15, imm, add, pre, wback);
-                    },
-                    Operands::ThreeOperandWithShift(Rd, Rn, Rm, shift) => {
-                        write!(
-                            f, "{}{} {}, ",
-                            self.opcode,
-                            self.condition,
-                            reg_name(Rn)
-                        )?;
-                        return format_reg_shift_mem(f, Rd, Rm, shift, add, pre, wback);
-                    }
-                    _ => { unreachable!(); }
-                }
-            }
-            Opcode::STM(add, pre, wback, usermode) |
-            Opcode::LDM(add, pre, wback, usermode) => {
-                match self.operands {
-                    Operands::RegRegList(Rr, list) => {
-                        write!(
-                            f, "{}{} {}{}, ",
-                            self.opcode,
-                            self.condition,
-                            reg_name(Rr),
-                            if wback { "!" } else { "" }
-                        )?;
-                        return format_reg_list(f, list);
-                    },
-                    _ => { unreachable!(); }
-                }
-            },
-            Opcode::Incomplete(word) => {
-                write!(f, "incomplete: {:#x}", word)
-            },
-            _ => {
-                write!(f, "{}{}", self.opcode, self.condition)?;
-                match self.operands {
-                    Operands::RegisterList(list) => {
-                        write!(f, " ")?;
-                        format_reg_list(f, list)?;
-                    },
-                    Operands::TwoOperand(a, b) => {
-                        write!(f, " {}, {}", reg_name(a), reg_name(b))?;
-                    },
-                    Operands::RegImm(a, imm) => {
-                        write!(f, " {}, {:#x}", reg_name(a), imm * 4)?;
-                    },
-                    Operands::RegRegList(r, list) => {
-                        write!(f, " {}, ", reg_name(r))?;
-                        format_reg_list(f, list)?;
-                    },
-                    Operands::TwoRegImm(a, b, imm) => {
-                        write!(f, " <unimplemented>")?;
-                    },
-                    Operands::ThreeOperand(a, b, c) => {
-                        write!(f, " {}, {}, {}", reg_name(a), reg_name(b), reg_name(c))?;
-                    },
-                    Operands::ThreeOperandImm(a, b, imm) => {
-                        write!(f, " <unimplemented>")?;
-                    },
-                    Operands::ThreeOperandWithShift(a, b, c, shift) => {
-                        write!(f, " {}, {}, ", reg_name(a), reg_name(b))?;
-                        format_shift(f, c, shift)?;
-                    },
-                    Operands::MulThreeRegs(a, b, c) => {
-                        write!(f, " {}, {}, {}", reg_name(a), reg_name(b), reg_name(c))?;
-                    },
-                    Operands::MulFourRegs(a, b, c, d) => {
-                        write!(f, " <unimplemented>")?;
-                    },
-                    Operands::BranchOffset(imm) => {
-                        if imm < 0 {
-                            write!(f, " $-{:#x}", (-imm) * 4)?;
-                        } else {
-                            write!(f, " $+{:#x}", imm * 4)?;
-                        }
-                    }
-                };
-                Ok(())
-            }
-        }
+        self.contextualize(None, 0, None, f)
     }
 }
 
@@ -483,7 +584,7 @@ impl LengthedInstruction for Instruction {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ConditionCode {
     EQ,
     NE,
@@ -1089,6 +1190,7 @@ impl Decodable for Instruction {
     }
 }
 
+#[derive(Debug)]
 pub struct ARMv7;
 impl Arch for ARMv7 {
     type Address = u32;
