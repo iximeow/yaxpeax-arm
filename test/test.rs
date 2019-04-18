@@ -91,6 +91,18 @@ fn test_decode_str_ldr() {
 }
 
 #[test]
+fn test_decode_misc() {
+    test_display(
+        [0x02, 0x00, 0xa0, 0xe3],
+        "mov r0, 0x2"
+    );
+    test_display(
+        [0xe8, 0x10, 0x9f, 0xe5],
+        "ldr r1, [pc, #0x3a0]"
+    );
+}
+
+#[test]
 fn test_decode_pop() {
     test_decode(
         [0x04, 0x10, 0x9d, 0xe4],
