@@ -1,3 +1,6 @@
+#[cfg(feature="use-serde")]
+use serde::{Serialize, Deserialize};
+
 use std::fmt::{Display, Formatter};
 
 use yaxpeax_arch::{Arch, Colorize, Colored, ColorSettings, Decodable, LengthedInstruction, ShowContextual, YaxColors};
@@ -1190,8 +1193,14 @@ impl Decodable for Instruction {
     }
 }
 
+#[cfg(feature="use-serde")]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ARMv7;
+
+#[cfg(not(feature="use-serde"))]
 #[derive(Debug)]
 pub struct ARMv7;
+
 impl Arch for ARMv7 {
     type Address = u32;
     type Instruction = Instruction;

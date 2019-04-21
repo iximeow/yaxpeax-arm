@@ -11,6 +11,8 @@ A rust arm decoder
 
 [dependencies]
 yaxpeax-arch = { path = "../../yaxpeax-arch" }
+"serde" = "*"
+"serde_derive" = "*"
 
 [[test]]
 name = "test"
@@ -19,3 +21,8 @@ path = "test/test.rs"
 [[bench]]
 name = "bench"
 path = "test/test.rs"
+
+[features]
+default = []
+
+use-serde = []
