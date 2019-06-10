@@ -13,6 +13,7 @@ impl Display for ConditionedOpcode {
     }
 }
 
+#[allow(non_snake_case)]
 impl <T: std::fmt::Write> ShowContextual<u32, [Option<String>], T> for Instruction {
     fn contextualize(&self, colors: Option<&ColorSettings>, address: u32, context: Option<&[Option<String>]>, out: &mut T) -> std::fmt::Result {
         match self.opcode {
@@ -428,6 +429,7 @@ pub struct Instruction {
     pub s: bool
 }
 
+#[allow(non_snake_case)]
 impl Instruction {
     pub fn blank() -> Instruction {
         Instruction {
@@ -444,7 +446,7 @@ impl Instruction {
 }
 
 fn format_reg_list<T: std::fmt::Write>(f: &mut T, mut list: u16, colors: Option<&ColorSettings>) -> Result<(), std::fmt::Error> {
-    write!(f, "{{");
+    write!(f, "{{")?;
     let mut i = 0;
     let mut tail = false;
     while i < 16 {
@@ -455,7 +457,7 @@ fn format_reg_list<T: std::fmt::Write>(f: &mut T, mut list: u16, colors: Option<
             } else {
                 tail = true;
             }
-            write!(f, "{}", reg_name_colorize(i, colors));
+            write!(f, "{}", reg_name_colorize(i, colors))?;
         }
         i += 1;
         list >>= 1;
@@ -463,6 +465,7 @@ fn format_reg_list<T: std::fmt::Write>(f: &mut T, mut list: u16, colors: Option<
     write!(f, "}}")
 }
 
+#[allow(non_snake_case)]
 fn format_shift<T: std::fmt::Write>(f: &mut T, Rm: u8, shift: ShiftSpec, colors: Option<&ColorSettings>) -> Result<(), std::fmt::Error> {
     fn shift_tpe_to_str(tpe: u8) -> &'static str {
         match tpe {
@@ -490,6 +493,7 @@ fn format_shift<T: std::fmt::Write>(f: &mut T, Rm: u8, shift: ShiftSpec, colors:
     }
 }
 
+#[allow(non_snake_case)]
 fn format_reg_shift_mem<T: std::fmt::Write>(f: &mut T, Rd: u8, Rm: u8, shift: ShiftSpec, add: bool, pre: bool, wback: bool, colors: Option<&ColorSettings>) -> Result<(), std::fmt::Error> {
     let op = if add { "" } else { "-" };
 
@@ -514,6 +518,7 @@ fn format_reg_shift_mem<T: std::fmt::Write>(f: &mut T, Rd: u8, Rm: u8, shift: Sh
     }
 }
 
+#[allow(non_snake_case)]
 fn format_reg_imm_mem<T: std::fmt::Write>(f: &mut T, Rn: u8, imm: u32, add: bool, pre: bool, wback: bool, colors: Option<&ColorSettings>) -> Result<(), std::fmt::Error> {
     if imm != 0 {
         let op = if add { "" } else { "-" };
@@ -655,6 +660,7 @@ impl ConditionCode {
     }
 }
 
+#[allow(non_snake_case)]
 impl Decodable for Instruction {
     fn decode<T: IntoIterator<Item=u8>>(bytes: T) -> Option<Self> {
         let mut blank = Instruction::blank();
@@ -875,13 +881,13 @@ impl Decodable for Instruction {
                                     0b00110 => {
                                         // self.opcode = Opcode::STRHT_sub;
                                         self.opcode = Opcode::Incomplete(word);
-                                        let imm = ((HiOffset << 4) as u16 | LoOffset as u16);
+                                        let imm = (HiOffset << 4) as u16 | LoOffset as u16;
                                         self.operands = Operands::ThreeOperandImm(Rn, Rd, imm);
                                     }
                                     0b01110 => {
                                         // self.opcode = Opcode::STRHT_add;
                                         self.opcode = Opcode::Incomplete(word);
-                                        let imm = ((HiOffset << 4) as u16 | LoOffset as u16);
+                                        let imm = (HiOffset << 4) as u16 | LoOffset as u16;
                                         self.operands = Operands::ThreeOperandImm(Rn, Rd, imm);
                                     }
                                     _ => {
