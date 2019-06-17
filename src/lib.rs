@@ -5,3 +5,4 @@ extern crate serde;
 extern crate yaxpeax_arch;
 
 pub mod armv7;
+pub mod armv8;

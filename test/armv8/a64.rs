@@ -1,0 +1,2211 @@
+use yaxpeax_arch::{Decodable, LengthedInstruction};
+use yaxpeax_arm::armv8::a64::{ARMv8, Instruction, Operand, Opcode, SizeCode};
+
+fn test_decode(data: [u8; 4], expected: Instruction) {
+    let mut instr = Instruction::blank();
+    instr.decode_into(data.to_vec());
+    assert!(
+        instr == expected,
+        "decode error for {:02x}{:02x}{:02x}{:02x}:\n  decoded: {:?}\n expected: {:?}\n",
+        data[0], data[1], data[2], data[3],
+        instr, expected
+    );
+}
+
+fn test_display(data: [u8; 4], expected: &'static str) {
+    let mut instr = Instruction::blank();
+    instr.decode_into(data.to_vec());
+    let text = format!("{}", instr);
+    assert!(
+        text == expected,
+        "display error for {:02x}{:02x}{:02x}{:02x}:\n  decoded: {:?}\n displayed: {}\n expected: {}\n",
+        data[0], data[1], data[2], data[3],
+        instr,
+        text, expected
+    );
+}
+
+#[test]
+fn test_display_misc() {
+    test_display(
+        [0xc0, 0x03, 0x5f, 0xd6],
+        "ret"
+    );
+    test_display(
+        [0x1f, 0x20, 0x03, 0xd5],
+        "nop"
+    );
+}
+
+#[test]
+fn test_decode_str_ldr() {
+    test_decode(
+        [0x31, 0x03, 0x40, 0xf9],
+        Instruction::blank()
+    );
+    test_decode(
+        [0xf5, 0x5b, 0x00, 0xf9],
+        Instruction::blank()
+    );
+    test_decode(
+        [0x60, 0x02, 0x0a, 0x39],
+        Instruction::blank()
+    );
+    test_decode(
+        [0xfd, 0x7b, 0xbe, 0xa9],
+        Instruction::blank()
+    );
+}
+
+#[test]
+fn test_decode_misc() {
+    test_decode(
+        [0x22, 0x39, 0x04, 0xb0],
+        Instruction {
+            opcode: Opcode::ADRP,
+            operands: [
+                Operand::Register(SizeCode::X, 2),
+                Operand::Immediate(0x8725000),
+                Operand::Nothing,
+                Operand::Nothing
+            ]
+        }
+    );
+    test_display(
+        [0x1d, 0x00, 0x80, 0xd2],
+        "movz x29, 0x0"
+    );
+    test_display(
+        [0x13, 0x00, 0x80, 0xd2],
+        "movz x19, 0x0"
+    );
+    test_display(
+        [0x1d, 0xff, 0xff, 0xd2],
+        "movz x29, 0xfff8, lsl 48"
+    );
+    test_display(
+        [0x22, 0x39, 0x04, 0xb0],
+        "adrp x2, 0x8725000"
+    );
+}
+
+#[test]
+fn test_decode_mov() {
+    test_decode(
+        [0x20, 0x00, 0x80, 0x52],
+        Instruction {
+            opcode: Opcode::MOVZ,
+            operands: [
+                Operand::Register(SizeCode::W, 0),
+                Operand::ImmShift(1, 0),
+                Operand::Nothing,
+                Operand::Nothing
+            ]
+        }
+    );
+}
+
+#[test]
+fn test_decode_branch() {
+    test_decode(
+        [0x41, 0x00, 0x00, 0xb4],
+        Instruction {
+            opcode: Opcode::CBZ,
+            operands: [
+                Operand::Register(SizeCode::X, 1),
+                Operand::Offset(8),
+                Operand::Nothing,
+                Operand::Nothing
+            ]
+        }
+    );
+    test_decode(
+        [0x62, 0x00, 0x00, 0xb4],
+        Instruction {
+            opcode: Opcode::CBZ,
+            operands: [
+                Operand::Register(SizeCode::X, 2),
+                Operand::Offset(12),
+                Operand::Nothing,
+                Operand::Nothing
+            ]
+        }
+    );
+    test_decode(
+        [0x40, 0x00, 0x1f, 0xd6],
+        Instruction {
+            opcode: Opcode::BR,
+            operands: [
+                Operand::Register(SizeCode::X, 2),
+                Operand::Nothing,
+                Operand::Nothing,
+                Operand::Nothing
+            ]
+        }
+    );
+}
+
+#[test]
+fn test_decode_arithmetic() {
+    test_decode(
+        [0x21, 0xfc, 0x41, 0x8b],
+        Instruction::blank()
+    );
+    test_decode(
+        [0x21, 0xfc, 0x43, 0x93],
+        Instruction {
+            opcode: Opcode::SBFM,
+            operands: [
+                Operand::Register(SizeCode::X, 1),
+                Operand::Register(SizeCode::X, 1),
+                Operand::Immediate(3),
+                Operand::Immediate(63)
+            ]
+        }
+    );
+    test_decode(
+        [0x3f, 0x38, 0x00, 0xf1],
+        Instruction {
+            opcode: Opcode::SUBS,
+            operands: [
+                Operand::Register(SizeCode::X, 31),
+                Operand::Register(SizeCode::X, 1),
+                Operand::Immediate(0xe),
+                Operand::Nothing,
+            ]
+        }
+    );
+}
+
+#[test]
+fn test_decode_mul() {
+}
+
+#[test]
+fn test_decode_chrome_entrypoint() {
+    // 1400 instructions from the entrypoint of a chrome binary, sorted by
+    // instruction word for no good reason.
+
+    test_display(
+        [0x00, 0x00, 0x00, 0x00],
+        "invalid"
+    );
+    test_display(
+        [0x00, 0x00, 0x20, 0xd4],
+        "brk 0x0"
+    );
+    test_display(
+        [0x00, 0x00, 0x80, 0x12],
+        "movn w0, 0x0"
+    );
+    test_display(
+        [0x00, 0x01, 0x3f, 0xd6],
+        "blr x8"
+    );
+    test_display(
+        [0x00, 0x02, 0x00, 0x36],
+        "tbz w0, 0x0, $+0x40"
+    );
+    test_display(
+        [0x00, 0x03, 0x00, 0x35],
+        "cbnz w0, $+0x60"
+    );
+    test_display(
+        [0x00, 0x04, 0x00, 0x36],
+        "tbz w0, 0x0, $+0x80"
+    );
+    test_display(
+        [0x00, 0x04, 0x40, 0xf9],
+        "ldr x0, [x0, 0x8]"
+    );
+    test_display(
+        [0x00, 0x07, 0x00, 0x34],
+        "cbz w0, $+0xe0"
+    );
+    test_display(
+        [0x00, 0x08, 0x47, 0xf9],
+        "ldr x0, [x0, 0xe10]"
+    );
+    test_display(
+        [0x00, 0x0b, 0x80, 0x52],
+        "movz w0, 0x58"
+    );
+    test_display(
+        [0x00, 0x14, 0x42, 0xf9],
+        "ldr x0, [x0, 0x428]"
+    );
+    test_display(
+        [0x00, 0x1b, 0x80, 0x52],
+        "movz w0, 0xd8"
+    );
+    test_display(
+        [0x00, 0x20, 0x40, 0xf9],
+        "ldr x0, [x0, 0x40]"
+    );
+    test_display(
+        [0x00, 0x24, 0x47, 0xf9],
+        "ldr x0, [x0, 0xe48]"
+    );
+    test_display(
+        [0x00, 0x2b, 0x03, 0x90],
+        "adrp x0, 0x6560000"
+    );
+    test_display(
+        [0x00, 0x34, 0x42, 0xf9],
+        "ldr x0, [x0, 0x468]"
+    );
+    test_display(
+        [0x00, 0x39, 0x04, 0xb0],
+        "adrp x0, 0x8721000"
+    );
+    test_display(
+        [0x00, 0x3b, 0x04, 0xb0],
+        "adrp x0, 0x8761000"
+    );
+    test_display(
+        [0x00, 0x3c, 0x43, 0xf9],
+        "ldr x0, [x0, 0x678]"
+    );
+    test_display(
+        [0x00, 0x44, 0x44, 0xf9],
+        "ldr x0, [x0, 0x888]"
+    );
+    test_display(
+        [0x00, 0x50, 0x14, 0x91],
+        "add x0, x0, 0x514"
+    );
+    test_display(
+        [0x00, 0x54, 0x44, 0xf9],
+        "ldr x0, [x0, 0x8a8]"
+    );
+    test_display(
+        [0x00, 0x58, 0x42, 0xf9],
+        "ldr x0, [x0, 0x4b0]"
+    );
+    test_display(
+        [0x00, 0x5c, 0x44, 0xf9],
+        "ldr x0, [x0, 0x8b8]"
+    );
+    test_display(
+        [0x00, 0x60, 0x1e, 0x91],
+        "add x0, x0, 0x798"
+    );
+    test_display(
+        [0x00, 0x70, 0x47, 0xf9],
+        "ldr x0, [x0, 0xee0]"
+    );
+    test_display(
+        [0x00, 0x80, 0x1e, 0x91],
+        "add x0, x0, 0x7a0"
+    );
+    test_display(
+        [0x00, 0x80, 0x44, 0xf9],
+        "ldr x0, [x0, 0x900]"
+    );
+    test_display(
+        [0x00, 0x84, 0x47, 0xf9],
+        "ldr x0, [x0, 0xf08]"
+    );
+    test_display(
+        [0x00, 0xac, 0x40, 0xf9],
+        "ldr x0, [x0, 0x158]"
+    );
+    test_display(
+        [0x00, 0xc0, 0x09, 0x91],
+        "add x0, x0, 0x270"
+    );
+    test_display(
+        [0x00, 0xc4, 0x45, 0xf9],
+        "ldr x0, [x0, 0xb88]"
+    );
+    test_display(
+        [0x00, 0xcc, 0x41, 0xf9],
+        "ldr x0, [x0, 0x398]"
+    );
+    test_display(
+        [0x00, 0xdc, 0x35, 0x91],
+        "add x0, x0, 0xd77"
+    );
+    test_display(
+        [0x00, 0xf4, 0x47, 0xf9],
+        "ldr x0, [x0, 0xfe8]"
+    );
+    test_display(
+        [0x01, 0x00, 0x00, 0x14],
+        "b $+0x4"
+    );
+    test_display(
+        [0x01, 0x00, 0x40, 0xf9],
+        "ldr x1, [x0]"
+    );
+    test_display(
+        [0x01, 0x05, 0x40, 0xf9],
+        "ldr x1, [x8, 0x8]"
+    );
+    test_display(
+        [0x01, 0xfb, 0x4b, 0x95],
+        "bl $+0x52fec04"
+    );
+    test_display(
+        [0x02, 0x00, 0x00, 0x14],
+        "b $+0x8"
+    );
+    test_display(
+        [0x02, 0x00, 0x00, 0x90],
+        "adrp x2, 0x0"
+    );
+    test_display(
+        [0x02, 0x00, 0x80, 0x92],
+        "movn x2, 0x0"
+    );
+    test_display(
+        [0x02, 0x04, 0xf8, 0x97],
+        "bl $+0x7e01008"
+    );
+    test_display(
+        [0x02, 0x2c, 0x80, 0x52],
+        "movz w2, 0x160"
+    );
+    test_display(
+        [0x08, 0x00, 0x40, 0xf9],
+        "ldr x8, [x0]"
+    );
+    test_display(
+        [0x08, 0x01, 0x40, 0xf9],
+        "ldr x8, [x8]"
+    );
+    test_display(
+        [0x08, 0x05, 0x40, 0xf9],
+        "ldr x8, [x8, 0x8]"
+    );
+    test_display(
+        [0x08, 0x06, 0xf8, 0x97],
+        "bl $+0x7e01820"
+    );
+    test_display(
+        [0x08, 0x09, 0x40, 0xf9],
+        "ldr x8, [x8, 0x10]"
+    );
+    test_display(
+        [0x08, 0x1d, 0x40, 0x92],
+        "and x8, x8, 0xff"
+    );
+    test_display(
+        [0x08, 0x1f, 0x00, 0x13],
+        "sxtb w8, w24"
+    );
+    test_display(
+        [0x08, 0x21, 0x0a, 0x91],
+        "add x8, x8, 0x288"
+    );
+    test_display(
+        [0x08, 0x41, 0x00, 0x91],
+        "add x8, x8, 0x10"
+    );
+    test_display(
+        [0x08, 0x41, 0x40, 0xf9],
+        "ldr x8, [x8, 0x80]"
+    );
+    test_display(
+        [0x08, 0x81, 0x0a, 0x91],
+        "add x8, x8, 0x2a0"
+    );
+    test_display(
+        [0x08, 0xa1, 0x11, 0x91],
+        "add x8, x8, 0x468"
+    );
+    test_display(
+        [0x08, 0xc1, 0x1e, 0x91],
+        "add x8, x8, 0x7b0"
+    );
+    test_display(
+        [0x08, 0xdd, 0x46, 0xf9],
+        "ldr x8, [x8, 0xdb8]"
+    );
+    test_display(
+        [0x08, 0xe1, 0x0e, 0x91],
+        "add x8, x8, 0x3b8"
+    );
+    test_display(
+        [0x08, 0xf2, 0xff, 0x36],
+        "tbz w8, 0x1f, $+0x3fe40"
+    );
+    test_display(
+        [0x09, 0x1f, 0x00, 0x13],
+        "sxtb w9, w24"
+    );
+    test_display(
+        [0x09, 0x5d, 0xc0, 0x39],
+        "ldrsb w9, [x8, 0x17]"
+    );
+    test_display(
+        [0x0a, 0x2d, 0x40, 0xa9],
+        "ldp x10, x11, [x8]"
+    );
+    test_display(
+        [0x0a, 0xf0, 0x8e, 0x94],
+        "bl $+0x23bc028"
+    );
+    test_display(
+        [0x13, 0x3b, 0x04, 0xb0],
+        "adrp x19, 0x8761000"
+    );
+    test_display(
+        [0x13, 0xfd, 0xdf, 0xc8],
+        "ldar x19, [x8]"
+    );
+    test_display(
+        [0x14, 0x05, 0x00, 0xb4],
+        "cbz x20, $+0xa0"
+    );
+    test_display(
+        [0x15, 0x05, 0x88, 0x1a],
+        "cinc w21, w8, ne"
+    );
+    test_display(
+        [0x17, 0xed, 0x7c, 0x92],
+        "and x23, x8, 0xfffffffffffffff0"
+    );
+    test_display(
+        [0x1d, 0x00, 0x80, 0xd2],
+        "movz x29, 0x0"
+    );
+    test_display(
+        [0x1e, 0x00, 0x80, 0xd2],
+        "movz x30, 0x0"
+    );
+    test_display(
+        [0x1f, 0x00, 0x00, 0x71],
+        "cmp w0, 0x0"
+    );
+    test_display(
+        [0x1f, 0x00, 0x14, 0xeb],
+        "cmp x0, x20"
+    );
+    test_display(
+        [0x1f, 0x01, 0x00, 0x71],
+        "cmp w8, 0x0"
+    );
+    test_display(
+        [0x1f, 0x01, 0x00, 0xf1],
+        "cmp x8, 0x0"
+    );
+    test_display(
+        [0x1f, 0x01, 0x09, 0xeb],
+        "cmp x8, x9"
+    );
+    test_display(
+        [0x1f, 0x01, 0x0c, 0xeb],
+        "cmp x8, x12"
+    );
+    test_display(
+        [0x1f, 0x03, 0x00, 0x71],
+        "cmp w24, 0x0"
+    );
+    test_display(
+        [0x1f, 0x0d, 0x00, 0xf1],
+        "cmp x8, 0x3"
+    );
+    test_display(
+        [0x1f, 0x20, 0x03, 0xd5],
+        "nop"
+    );
+    test_display(
+        [0x20, 0x00, 0x1f, 0xd6],
+        "br x1"
+    );
+    test_display(
+        [0x20, 0x00, 0x3f, 0xd6],
+        "blr x1"
+    );
+    test_display(
+        [0x20, 0x00, 0x80, 0x52],
+        "movz w0, 0x1"
+    );
+    test_display(
+        [0x20, 0xb1, 0x8a, 0x9a],
+        "csel x0, x9, x10, lt"
+    );
+    test_display(
+        [0x20, 0xb1, 0x94, 0x9a],
+        "csel x0, x9, x20, lt"
+    );
+    test_display(
+        [0x20, 0xb1, 0x95, 0x9a],
+        "csel x0, x9, x21, lt"
+    );
+    test_display(
+        [0x21, 0x00, 0x00, 0xcb],
+        "sub x1, x1, x0"
+    );
+    test_display(
+        [0x21, 0x01, 0x00, 0x54],
+        "b.ne $+0x24"
+    );
+    test_display(
+        [0x21, 0x01, 0x00, 0x54],
+        "b.ne $+0x24"
+    );
+    test_display(
+        [0x21, 0x04, 0x36, 0x91],
+        "add x1, x1, 0xd81"
+    );
+    test_display(
+        [0x21, 0x10, 0x34, 0x91],
+        "add x1, x1, 0xd04"
+    );
+    test_display(
+        [0x21, 0x1c, 0x00, 0x91],
+        "add x1, x1, 0x7"
+    );
+    test_display(
+        [0x21, 0x1c, 0x45, 0xf9],
+        "ldr x1, [x1, 0xa38]"
+    );
+    test_display(
+        [0x21, 0x1c, 0x46, 0xf9],
+        "ldr x1, [x1, 0xc38]"
+    );
+    test_display(
+        [0x21, 0x34, 0x42, 0xf9],
+        "ldr x1, [x1, 0x468]"
+    );
+    test_display(
+        [0x21, 0x3c, 0x36, 0x91],
+        "add x1, x1, 0xd8f"
+    );
+    test_display(
+        [0x21, 0x90, 0x36, 0x91],
+        "add x1, x1, 0xda4"
+    );
+    test_display(
+        [0x21, 0x98, 0x41, 0xf9],
+        "ldr x1, [x1, 0x330]"
+    );
+    test_display(
+        [0x21, 0xb4, 0x34, 0x91],
+        "add x1, x1, 0xd2d"
+    );
+    test_display(
+        [0x21, 0xc4, 0x40, 0xf9],
+        "ldr x1, [x1, 0x188]"
+    );
+    test_display(
+        [0x21, 0xc4, 0x45, 0xf9],
+        "ldr x1, [x1, 0xb88]"
+    );
+    test_display(
+        [0x21, 0xd8, 0x40, 0xf9],
+        "ldr x1, [x1, 0x1b0]"
+    );
+    test_display(
+        [0x21, 0xd8, 0x47, 0xf9],
+        "ldr x1, [x1, 0xfb0]"
+    );
+    test_display(
+        [0x21, 0xe4, 0x40, 0xf9],
+        "ldr x1, [x1, 0x1c8]"
+    );
+    test_display(
+        [0x21, 0xf4, 0x36, 0x91],
+        "add x1, x1, 0xdbd"
+    );
+    test_display(
+        [0x21, 0xfc, 0x41, 0x8b],
+        "add x1, x1, x1, lsr 63"
+    );
+    test_display(
+        [0x21, 0xfc, 0x41, 0x93],
+        "asr x1, x1, 0x1"
+    );
+    test_display(
+        [0x21, 0xfc, 0x43, 0x93],
+        "asr x1, x1, 0x3"
+    );
+    test_display(
+        [0x21, 0xfc, 0x44, 0xf9],
+        "ldr x1, [x1, 0x9f8]"
+    );
+    test_display(
+        [0x22, 0x09, 0x80, 0x52],
+        "movz w2, 0x49"
+    );
+    test_display(
+        [0x22, 0xb1, 0x96, 0x9a],
+        "csel x2, x9, x22, lt"
+    );
+    test_display(
+        [0x23, 0xb1, 0x96, 0x9a],
+        "csel x3, x9, x22, lt"
+    );
+    test_display(
+        [0x24, 0x01, 0x80, 0x52],
+        "movz w4, 0x9"
+    );
+    test_display(
+        [0x26, 0x00, 0x00, 0x14],
+        "b $+0x98"
+    );
+    test_display(
+        [0x28, 0x02, 0x00, 0x54],
+        "b.hi $+0x44"
+    );
+    test_display(
+        [0x28, 0x11, 0x08, 0x8b],
+        "add x8, x9, x8, lsl 4"
+    );
+    test_display(
+        [0x28, 0xb1, 0x88, 0x9a],
+        "csel x8, x9, x8, lt"
+    );
+    test_display(
+        [0x29, 0x01, 0x40, 0xf9],
+        "ldr x9, [x9]"
+    );
+    test_display(
+        [0x29, 0x1d, 0x40, 0x92],
+        "and x9, x9, 0xff"
+    );
+    test_display(
+        [0x29, 0xa1, 0x21, 0x91],
+        "add x9, x9, 0x868"
+    );
+    test_display(
+        [0x29, 0xc5, 0x46, 0xf9],
+        "ldr x9, [x9, 0xd88]"
+    );
+    test_display(
+        [0x29, 0xdd, 0x46, 0xf9],
+        "ldr x9, [x9, 0xdb8]"
+    );
+    test_display(
+        [0x2b, 0x1d, 0x00, 0x13],
+        "sxtb w11, w9"
+    );
+    test_display(
+        [0x2b, 0xb1, 0x88, 0x9a],
+        "csel x11, x9, x8, lt"
+    );
+    test_display(
+        [0x34, 0xb1, 0x94, 0x9a],
+        "csel x20, x9, x20, lt"
+    );
+    test_display(
+        [0x35, 0x01, 0x40, 0xb9],
+        "ldr w21, [x9]"
+    );
+    test_display(
+        [0x35, 0x03, 0x00, 0xb5],
+        "cbnz x21, $+0x64"
+    );
+    test_display(
+        [0x35, 0xb1, 0x95, 0x9a],
+        "csel x21, x9, x21, lt"
+    );
+    test_display(
+        [0x3f, 0x01, 0x00, 0x71],
+        "cmp w9, 0x0"
+    );
+    test_display(
+        [0x3f, 0x01, 0x08, 0xeb],
+        "cmp x9, x8"
+    );
+    test_display(
+        [0x3f, 0x38, 0x00, 0xf1],
+        "cmp x1, 0xe"
+    );
+    test_display(
+        [0x40, 0x00, 0x1f, 0xd6],
+        "br x2"
+    );
+    test_display(
+        [0x40, 0x21, 0x00, 0x91],
+        "add x0, x10, 0x8"
+    );
+    test_display(
+        [0x40, 0x7d, 0x80, 0x52],
+        "movz w0, 0x3ea"
+    );
+    test_display(
+        [0x41, 0x01, 0x00, 0x54],
+        "b.ne $+0x28"
+    );
+    test_display(
+        [0x41, 0xb1, 0x88, 0x9a],
+        "csel x1, x10, x8, lt"
+    );
+    test_display(
+        [0x42, 0x00, 0x1b, 0x91],
+        "add x2, x2, 0x6c0"
+    );
+    test_display(
+        [0x42, 0x40, 0x1a, 0x91],
+        "add x2, x2, 0x690"
+    );
+    test_display(
+        [0x42, 0x50, 0x41, 0xf9],
+        "ldr x2, [x2, 0x2a0]"
+    );
+    test_display(
+        [0x42, 0x7d, 0x80, 0x52],
+        "movz w2, 0x3ea"
+    );
+    test_display(
+        [0x42, 0xc0, 0x1b, 0x91],
+        "add x2, x2, 0x6f0"
+    );
+    test_display(
+        [0x42, 0xe4, 0x44, 0xf9],
+        "ldr x2, [x2, 0x9c8]"
+    );
+    test_display(
+        [0x48, 0xb1, 0x89, 0x9a],
+        "csel x8, x10, x9, lt"
+    );
+    test_display(
+        [0x49, 0xb1, 0x89, 0x9a],
+        "csel x9, x10, x9, lt"
+    );
+    test_display(
+        [0x4a, 0x1d, 0x00, 0x13],
+        "sxtb w10, w10"
+    );
+    test_display(
+        [0x4c, 0xb1, 0x89, 0x9a],
+        "csel x12, x10, x9, lt"
+    );
+    test_display(
+        [0x5f, 0x01, 0x00, 0x71],
+        "cmp w10, 0x0"
+    );
+    test_display(
+        [0x60, 0x02, 0x00, 0xb9],
+        "str w0, [x19]"
+    );
+    test_display(
+        [0x60, 0x02, 0x0a, 0x39],
+        "strb w0, [x19, 0x280]"
+    );
+    test_display(
+        [0x60, 0x02, 0x4a, 0x39],
+        "ldrb w0, [x19, 0x280]"
+    );
+    test_display(
+        [0x60, 0x22, 0x00, 0x91],
+        "add x0, x19, 0x8"
+    );
+    test_display(
+        [0x60, 0x36, 0x40, 0xf9],
+        "ldr x0, [x19, 0x68]"
+    );
+    test_display(
+        [0x60, 0x3e, 0x40, 0xf9],
+        "ldr x0, [x19, 0x78]"
+    );
+    test_display(
+        [0x61, 0x02, 0x00, 0x12],
+        "and w1, w19, 0x1"
+    );
+    test_display(
+        [0x61, 0xb1, 0x88, 0x9a],
+        "csel x1, x11, x8, lt"
+    );
+    test_display(
+        [0x62, 0xb1, 0x89, 0x9a],
+        "csel x2, x11, x9, lt"
+    );
+    test_display(
+        [0x63, 0x14, 0x42, 0xf9],
+        "ldr x3, [x3, 0x428]"
+    );
+    test_display(
+        [0x63, 0x18, 0x16, 0x91],
+        "add x3, x3, 0x586"
+    );
+    test_display(
+        [0x63, 0x24, 0x47, 0xf9],
+        "ldr x3, [x3, 0xe48]"
+    );
+    test_display(
+        [0x63, 0x44, 0x44, 0xf9],
+        "ldr x3, [x3, 0x888]"
+    );
+    test_display(
+        [0x63, 0x5c, 0x21, 0x91],
+        "add x3, x3, 0x857"
+    );
+    test_display(
+        [0x63, 0x5c, 0x44, 0xf9],
+        "ldr x3, [x3, 0x8b8]"
+    );
+    test_display(
+        [0x63, 0x80, 0x44, 0xf9],
+        "ldr x3, [x3, 0x900]"
+    );
+    test_display(
+        [0x63, 0x84, 0x47, 0xf9],
+        "ldr x3, [x3, 0xf08]"
+    );
+    test_display(
+        [0x63, 0x88, 0x09, 0x91],
+        "add x3, x3, 0x262"
+    );
+    test_display(
+        [0x63, 0xbc, 0x44, 0xf9],
+        "ldr x3, [x3, 0x978]"
+    );
+    test_display(
+        [0x63, 0xc4, 0x45, 0xf9],
+        "ldr x3, [x3, 0xb88]"
+    );
+    test_display(
+        [0x63, 0xcc, 0x41, 0xf9],
+        "ldr x3, [x3, 0x398]"
+    );
+    test_display(
+        [0x63, 0xf4, 0x47, 0xf9],
+        "ldr x3, [x3, 0xfe8]"
+    );
+    test_display(
+        [0x68, 0x00, 0xf8, 0x36],
+        "tbz w8, 0x1f, $+0x3000c"
+    );
+    test_display(
+        [0x68, 0x01, 0xf8, 0x37],
+        "tbnz w8, 0x1f, $+0x3002c"
+    );
+    test_display(
+        [0x68, 0x02, 0x00, 0xf9],
+        "str x8, [x19]"
+    );
+    test_display(
+        [0x68, 0x1d, 0x00, 0x13],
+        "sxtb w8, w11"
+    );
+    test_display(
+        [0x74, 0x3a, 0x00, 0xf9],
+        "str x20, [x19, 0x70]"
+    );
+    test_display(
+        [0x74, 0x3a, 0x40, 0xf9],
+        "ldr x20, [x19, 0x70]"
+    );
+    test_display(
+        [0x74, 0x5e, 0x40, 0x39],
+        "ldrb w20, [x19, 0x17]"
+    );
+    test_display(
+        [0x75, 0x06, 0x40, 0xf9],
+        "ldr x21, [x19, 0x8]"
+    );
+    test_display(
+        [0x75, 0x36, 0x00, 0xf9],
+        "str x21, [x19, 0x68]"
+    );
+    test_display(
+        [0x75, 0x36, 0x40, 0xf9],
+        "ldr x21, [x19, 0x68]"
+    );
+    test_display(
+        [0x75, 0x3a, 0x40, 0xf9],
+        "ldr x21, [x19, 0x70]"
+    );
+    test_display(
+        [0x76, 0x5e, 0x40, 0x39],
+        "ldrb w22, [x19, 0x17]"
+    );
+    test_display(
+        [0x7f, 0x01, 0x00, 0x71],
+        "cmp w11, 0x0"
+    );
+    test_display(
+        [0x7f, 0x06, 0x00, 0xf1],
+        "cmp x19, 0x1"
+    );
+    test_display(
+        [0x7f, 0x1d, 0x00, 0xf1],
+        "cmp x11, 0x7"
+    );
+    test_display(
+        [0x80, 0x22, 0x00, 0x91],
+        "add x0, x20, 0x8"
+    );
+    test_display(
+        [0x80, 0x3a, 0x40, 0xf9],
+        "ldr x0, [x20, 0x70]"
+    );
+    test_display(
+        [0x81, 0x01, 0x00, 0x54],
+        "b.ne $+0x30"
+    );
+    test_display(
+        [0x82, 0x02, 0x80, 0x52],
+        "movz w2, 0x14"
+    );
+    test_display(
+        [0x84, 0x48, 0x46, 0xf9],
+        "ldr x4, [x4, 0xc90]"
+    );
+    test_display(
+        [0x88, 0x02, 0x00, 0xf9],
+        "str x8, [x20]"
+    );
+    test_display(
+        [0x88, 0x02, 0x40, 0xf9],
+        "ldr x8, [x20]"
+    );
+    test_display(
+        [0x89, 0x5e, 0x40, 0x39],
+        "ldrb w9, [x20, 0x17]"
+    );
+    test_display(
+        [0x8a, 0x06, 0x40, 0xf9],
+        "ldr x10, [x20, 0x8]"
+    );
+    test_display(
+        [0x93, 0x22, 0x00, 0x91],
+        "add x19, x20, 0x8"
+    );
+    test_display(
+        [0x93, 0xfe, 0xdf, 0xc8],
+        "ldar x19, [x20]"
+    );
+    test_display(
+        [0x94, 0x00, 0xf8, 0x36],
+        "tbz w20, 0x1f, $+0x30010"
+    );
+    test_display(
+        [0x94, 0x22, 0x0a, 0x91],
+        "add x20, x20, 0x288"
+    );
+    test_display(
+        [0x94, 0x82, 0x0a, 0x91],
+        "add x20, x20, 0x2a0"
+    );
+    test_display(
+        [0x94, 0xa2, 0x11, 0x91],
+        "add x20, x20, 0x468"
+    );
+    test_display(
+        [0x96, 0x1e, 0x00, 0x13],
+        "sxtb w22, w20"
+    );
+    test_display(
+        [0xa0, 0x03, 0x19, 0xf8],
+        "stur x0, [x29, -0x70]"
+    );
+    test_display(
+        [0xa0, 0x03, 0x1a, 0xf8],
+        "stur x0, [x29, -0x60]"
+    );
+    test_display(
+        [0xa0, 0x03, 0x58, 0xf8],
+        "ldur x0, [x29, -0x80]"
+    );
+    test_display(
+        [0xa0, 0x03, 0x5a, 0xf8],
+        "ldur x0, [x29, -0x60]"
+    );
+    test_display(
+        [0xa0, 0x09, 0x40, 0xd4],
+        "hlt 0x4d"
+    );
+    test_display(
+        [0xa0, 0x22, 0x00, 0x91],
+        "add x0, x21, 0x8"
+    );
+    test_display(
+        [0xa0, 0x23, 0x01, 0xd1],
+        "sub x0, x29, 0x48"
+    );
+    test_display(
+        [0xa0, 0x3e, 0x40, 0xf9],
+        "ldr x0, [x21, 0x78]"
+    );
+    test_display(
+        [0xa0, 0x83, 0x1a, 0xf8],
+        "stur x0, [x29, -0x58]"
+    );
+    test_display(
+        [0xa0, 0x83, 0x58, 0xf8],
+        "ldur x0, [x29, -0x78]"
+    );
+    test_display(
+        [0xa0, 0x83, 0x5b, 0xf8],
+        "ldur x0, [x29, -0x48]"
+    );
+    test_display(
+        [0xa0, 0xe3, 0x01, 0xd1],
+        "sub x0, x29, 0x78"
+    );
+    test_display(
+        [0xa1, 0x23, 0x01, 0xd1],
+        "sub x1, x29, 0x48"
+    );
+    test_display(
+        [0xa1, 0x7e, 0x80, 0x52],
+        "movz w1, 0x3f5"
+    );
+    test_display(
+        [0xa1, 0x83, 0x01, 0xd1],
+        "sub x1, x29, 0x60"
+    );
+    test_display(
+        [0xa1, 0xe3, 0x01, 0xd1],
+        "sub x1, x29, 0x78"
+    );
+    test_display(
+        [0xa2, 0x00, 0x00, 0x54],
+        "b.hs $+0x14"
+    );
+    test_display(
+        [0xa2, 0x01, 0x80, 0x52],
+        "movz w2, 0xd"
+    );
+    test_display(
+        [0xa2, 0x04, 0x80, 0x52],
+        "movz w2, 0x25"
+    );
+    test_display(
+        [0xa2, 0x23, 0x01, 0xd1],
+        "sub x2, x29, 0x48"
+    );
+    test_display(
+        [0xa2, 0x23, 0x80, 0x52],
+        "movz w2, 0x11d"
+    );
+    test_display(
+        [0xa3, 0xe3, 0x01, 0xd1],
+        "sub x3, x29, 0x78"
+    );
+    test_display(
+        [0xa8, 0x03, 0x02, 0xd1],
+        "sub x8, x29, 0x80"
+    );
+    test_display(
+        [0xa8, 0x23, 0x01, 0xd1],
+        "sub x8, x29, 0x48"
+    );
+    test_display(
+        [0xa8, 0x3e, 0x00, 0xf9],
+        "str x8, [x21, 0x78]"
+    );
+    test_display(
+        [0xa8, 0x42, 0x00, 0x91],
+        "add x8, x21, 0x10"
+    );
+    test_display(
+        [0xa8, 0x73, 0x5b, 0x38],
+        "ldurb w8, [x29, -0x49]"
+    );
+    test_display(
+        [0xa8, 0x73, 0xdb, 0x38],
+        "ldursb w8, [x29, -0x49]"
+    );
+    test_display(
+        [0xa8, 0x83, 0x01, 0xd1],
+        "sub x8, x29, 0x60"
+    );
+    test_display(
+        [0xa8, 0x83, 0x19, 0xf8],
+        "stur x8, [x29, -0x68]"
+    );
+    test_display(
+        [0xa8, 0x83, 0x1b, 0xf8],
+        "stur x8, [x29, -0x48]"
+    );
+    test_display(
+        [0xa8, 0x83, 0x1c, 0xf8],
+        "stur x8, [x29, -0x38]"
+    );
+    test_display(
+        [0xa8, 0x83, 0x1d, 0xf8],
+        "stur x8, [x29, -0x28]"
+    );
+    test_display(
+        [0xa8, 0x83, 0x5b, 0xf8],
+        "ldur x8, [x29, -0x48]"
+    );
+    test_display(
+        [0xa8, 0x83, 0x5c, 0xf8],
+        "ldur x8, [x29, -0x38]"
+    );
+    test_display(
+        [0xa8, 0x83, 0x5d, 0xf8],
+        "ldur x8, [x29, -0x28]"
+    );
+    test_display(
+        [0xa8, 0xf3, 0x5c, 0x38],
+        "ldurb w8, [x29, -0x31]"
+    );
+    test_display(
+        [0xa8, 0xf3, 0xd9, 0x38],
+        "ldursb w8, [x29, -0x61]"
+    );
+    test_display(
+        [0xa8, 0xf3, 0xdc, 0x38],
+        "ldursb w8, [x29, -0x31]"
+    );
+    test_display(
+        [0xa9, 0x03, 0x5c, 0xf8],
+        "ldur x9, [x29, -0x40]"
+    );
+    test_display(
+        [0xa9, 0x83, 0x5a, 0xf8],
+        "ldur x9, [x29, -0x58]"
+    );
+    test_display(
+        [0xa9, 0xab, 0x78, 0xa9],
+        "ldp x9, x10, [x29, -0x78]"
+    );
+    test_display(
+        [0xa9, 0xaf, 0x78, 0xa9],
+        "ldp x9, x11, [x29, -0x78]"
+    );
+    test_display(
+        [0xa9, 0x00, 0x00, 0x54],
+        "b.ls $+0x14"
+    );
+    test_display(
+        [0xaa, 0xe3, 0x01, 0xd1],
+        "sub x10, x29, 0x78"
+    );
+    test_display(
+        [0xa9, 0xb2, 0x94, 0x9a],
+        "csel x9, x21, x20, lt"
+    );
+    test_display(
+        [0xb4, 0x22, 0x03, 0x51],
+        "sub w20, w21, 0xc8"
+    );
+    test_display(
+        [0xb4, 0x92, 0x01, 0x51],
+        "sub w20, w21, 0x64"
+    );
+    test_display(
+        [0xb5, 0x56, 0x44, 0xf9],
+        "ldr x21, [x21, 0x8a8]"
+    );
+    test_display(
+        [0xb5, 0x83, 0x18, 0xf8],
+        "stur x21, [x29, -0x78]"
+    );
+    test_display(
+        [0xb5, 0xda, 0x47, 0xf9],
+        "ldr x21, [x21, 0xfb0]"
+    );
+    test_display(
+        [0xb5, 0xe3, 0x01, 0xd1],
+        "sub x21, x29, 0x78"
+    );
+    test_display(
+        [0xb5, 0xf3, 0x19, 0x38],
+        "sturb w21, [x29, -0x61]"
+    );
+    test_display(
+        [0xb6, 0xd7, 0x38, 0xa9],
+        "stp x22, x21, [x29, -0x78]"
+    );
+    test_display(
+        [0xb6, 0xe3, 0x01, 0xd1],
+        "sub x22, x29, 0x78"
+    );
+    test_display(
+        [0xbf, 0x5e, 0x00, 0xf1],
+        "cmp x21, 0x17"
+    );
+    test_display(
+        [0xc0, 0x03, 0x5f, 0xd6],
+        "ret"
+    );
+    test_display(
+        [0xc0, 0x09, 0x40, 0xd4],
+        "hlt 0x4e"
+    );
+    test_display(
+        [0xc0, 0x42, 0x00, 0x91],
+        "add x0, x22, 0x10"
+    );
+    test_display(
+        [0xc0, 0x7e, 0x80, 0x52],
+        "movz w0, 0x3f6"
+    );
+    test_display(
+        [0xc0, 0x80, 0x80, 0x52],
+        "movz w0, 0x406"
+    );
+    test_display(
+        [0xc2, 0x47, 0x80, 0x52],
+        "movz w2, 0x23e"
+    );
+    test_display(
+        [0xc9, 0x1e, 0x00, 0x13],
+        "sxtb w9, w22"
+    );
+    test_display(
+        [0xd6, 0x16, 0x43, 0xf9],
+        "ldr x22, [x22, 0x628]"
+    );
+    test_display(
+        [0xdf, 0x6a, 0x35, 0x38],
+        "strb wzr, [x22, x21]"
+    );
+    test_display(
+        [0xe0, 0x03, 0x00, 0x32],
+        "orr w0, wzr, 0x1"
+    );
+    test_display(
+        [0xe0, 0x03, 0x00, 0x91],
+        "mov x0, sp"
+    );
+    test_display(
+        [0xe0, 0x03, 0x1f, 0x32],
+        "orr w0, wzr, 0x2"
+    );
+    test_display(
+        [0xe0, 0x07, 0x00, 0x32],
+        "orr w0, wzr, 0x3"
+    );
+    test_display(
+        [0xe0, 0x07, 0x00, 0xf9],
+        "str x0, [sp, 0x8]"
+    );
+    test_display(
+        [0xe0, 0x07, 0x40, 0xf9],
+        "ldr x0, [sp, 0x8]"
+    );
+    test_display(
+        [0xe0, 0x09, 0x40, 0xd4],
+        "hlt 0x4f"
+    );
+    test_display(
+        [0xe0, 0x0b, 0x00, 0xf9],
+        "str x0, [sp, 0x10]"
+    );
+    test_display(
+        [0xe0, 0x0f, 0x00, 0x32],
+        "orr w0, wzr, 0xf"
+    );
+    test_display(
+        [0xe0, 0x0f, 0x40, 0xf9],
+        "ldr x0, [sp, 0x18]"
+    );
+    test_display(
+        [0xe0, 0x13, 0x40, 0xf9],
+        "ldr x0, [sp, 0x20]"
+    );
+    test_display(
+        [0xe0, 0x17, 0x00, 0xf9],
+        "str x0, [sp, 0x28]"
+    );
+    test_display(
+        [0xe0, 0x17, 0x9f, 0x1a],
+        "cset w0, eq"
+    );
+    test_display(
+        [0xe0, 0x1b, 0x40, 0xf9],
+        "ldr x0, [sp, 0x30]"
+    );
+    test_display(
+        [0xe0, 0x1f, 0x40, 0xf9],
+        "ldr x0, [sp, 0x38]"
+    );
+    test_display(
+        [0xe0, 0x22, 0x00, 0x91],
+        "add x0, x23, 0x8"
+    );
+    test_display(
+        [0xe0, 0x23, 0x00, 0x91],
+        "add x0, sp, 0x8"
+    );
+    test_display(
+        [0xe0, 0x23, 0x00, 0xf9],
+        "str x0, [sp, 0x40]"
+    );
+    test_display(
+        [0xe0, 0x27, 0x40, 0xf9],
+        "ldr x0, [sp, 0x48]"
+    );
+    test_display(
+        [0xe0, 0x33, 0x40, 0xf9],
+        "ldr x0, [sp, 0x60]"
+    );
+    test_display(
+        [0xe0, 0x63, 0x00, 0x91],
+        "add x0, sp, 0x18"
+    );
+    test_display(
+        [0xe0, 0x83, 0x00, 0x91],
+        "add x0, sp, 0x20"
+    );
+    test_display(
+        [0xe0, 0x83, 0x01, 0x91],
+        "add x0, sp, 0x60"
+    );
+    test_display(
+        [0xe0, 0xa3, 0x00, 0x91],
+        "add x0, sp, 0x28"
+    );
+    test_display(
+        [0xe0, 0xe3, 0x00, 0x91],
+        "add x0, sp, 0x38"
+    );
+    test_display(
+        [0xe0, 0xe3, 0x01, 0x91],
+        "add x0, sp, 0x78"
+    );
+    test_display(
+        [0xe1, 0x03, 0x1f, 0x32],
+        "orr w1, wzr, 0x2"
+    );
+    test_display(
+        [0xe1, 0x03, 0x40, 0xf9],
+        "ldr x1, [sp]"
+    );
+    test_display(
+        [0xe1, 0x23, 0x00, 0x91],
+        "add x1, sp, 0x8"
+    );
+    test_display(
+        [0xe1, 0x63, 0x00, 0x91],
+        "add x1, sp, 0x18"
+    );
+    test_display(
+        [0xe1, 0x83, 0x00, 0x91],
+        "add x1, sp, 0x20"
+    );
+    test_display(
+        [0xe1, 0xe3, 0x00, 0x91],
+        "add x1, sp, 0x38"
+    );
+    test_display(
+        [0xe1, 0xe3, 0x01, 0x91],
+        "add x1, sp, 0x78"
+    );
+    test_display(
+        [0xe2, 0x07, 0x1d, 0x32],
+        "orr w2, wzr, 0x18"
+    );
+    test_display(
+        [0xe2, 0x23, 0x00, 0x91],
+        "add x2, sp, 0x8"
+    );
+    test_display(
+        [0xe2, 0xe3, 0x00, 0x91],
+        "add x2, sp, 0x38"
+    );
+    test_display(
+        [0xe3, 0x03, 0x00, 0x32],
+        "orr w3, wzr, 0x1"
+    );
+    test_display(
+        [0xe3, 0x03, 0x1f, 0x32],
+        "orr w3, wzr, 0x2"
+    );
+    test_display(
+        [0xe4, 0x07, 0x00, 0x32],
+        "orr w4, wzr, 0x3"
+    );
+    test_display(
+        [0xe4, 0x0b, 0x00, 0x32],
+        "orr w4, wzr, 0x7"
+    );
+    test_display(
+        [0xe6, 0x03, 0x00, 0x91],
+        "mov x6, sp"
+    );
+    test_display(
+        [0xe8, 0x01, 0xf8, 0x37],
+        "tbnz w8, 0x1f, $+0x3003c"
+    );
+    test_display(
+        [0xe8, 0x02, 0x41, 0xb2],
+        "orr x8, x23, 0x8000000000000000"
+    );
+    test_display(
+        [0xe8, 0x03, 0x00, 0x32],
+        "orr w8, wzr, 0x1"
+    );
+    test_display(
+        [0xe8, 0x0f, 0x00, 0xf9],
+        "str x8, [sp, 0x18]"
+    );
+    test_display(
+        [0xe8, 0x1f, 0x40, 0xf9],
+        "ldr x8, [sp, 0x38]"
+    );
+    test_display(
+        [0xe8, 0x1f, 0xc1, 0x39],
+        "ldrsb w8, [sp, 0x47]"
+    );
+    test_display(
+        [0xe8, 0x23, 0x00, 0x91],
+        "add x8, sp, 0x8"
+    );
+    test_display(
+        [0xe8, 0x3f, 0x41, 0x39],
+        "ldrb w8, [sp, 0x4f]"
+    );
+    test_display(
+        [0xe8, 0x3f, 0xc1, 0x39],
+        "ldrsb w8, [sp, 0x4f]"
+    );
+    test_display(
+        [0xe8, 0x63, 0x00, 0x91],
+        "add x8, sp, 0x18"
+    );
+    test_display(
+        [0xe8, 0x7f, 0xc0, 0x39],
+        "ldrsb w8, [sp, 0x1f]"
+    );
+    test_display(
+        [0xe8, 0x7f, 0xc1, 0x39],
+        "ldrsb w8, [sp, 0x5f]"
+    );
+    test_display(
+        [0xe8, 0x83, 0x00, 0x91],
+        "add x8, sp, 0x20"
+    );
+    test_display(
+        [0xe8, 0x83, 0x01, 0x91],
+        "add x8, sp, 0x60"
+    );
+    test_display(
+        [0xe8, 0xbf, 0xc0, 0x39],
+        "ldrsb w8, [sp, 0x2f]"
+    );
+    test_display(
+        [0xe8, 0xdf, 0x41, 0x39],
+        "ldrb w8, [sp, 0x77]"
+    );
+    test_display(
+        [0xe8, 0xdf, 0xc0, 0x39],
+        "ldrsb w8, [sp, 0x37]"
+    );
+    test_display(
+        [0xe8, 0xdf, 0xc1, 0x39],
+        "ldrsb w8, [sp, 0x77]"
+    );
+    test_display(
+        [0xe8, 0xe3, 0x00, 0x91],
+        "add x8, sp, 0x38"
+    );
+    test_display(
+        [0xe8, 0xe3, 0x01, 0x91],
+        "add x8, sp, 0x78"
+    );
+    test_display(
+        [0xe9, 0x03, 0x01, 0x32],
+        "orr w9, wzr, 0x80000000"
+    );
+    test_display(
+        [0xe9, 0x07, 0x40, 0xf9],
+        "ldr x9, [sp, 0x8]"
+    );
+    test_display(
+        [0xe9, 0x13, 0x40, 0xf9],
+        "ldr x9, [sp, 0x20]"
+    );
+    test_display(
+        [0xe9, 0x1f, 0x40, 0xf9],
+        "ldr x9, [sp, 0x38]"
+    );
+    test_display(
+        [0xe9, 0x23, 0x40, 0xf9],
+        "ldr x9, [sp, 0x40]"
+    );
+    test_display(
+        [0xe9, 0x37, 0x40, 0xf9],
+        "ldr x9, [sp, 0x68]"
+    );
+    test_display(
+        [0xe9, 0xa3, 0x00, 0xb9],
+        "str w9, [sp, 0xa0]"
+    );
+    test_display(
+        [0xe9, 0xb2, 0x96, 0x9a],
+        "csel x9, x23, x22, lt"
+    );
+    test_display(
+        [0xe9, 0xdf, 0x41, 0x39],
+        "ldrb w9, [sp, 0x77]"
+    );
+    test_display(
+        [0xea, 0x37, 0x40, 0xf9],
+        "ldr x10, [sp, 0x68]"
+    );
+    test_display(
+        [0xea, 0x63, 0x00, 0x91],
+        "add x10, sp, 0x18"
+    );
+    test_display(
+        [0xf3, 0x03, 0x00, 0x91],
+        "mov x19, sp"
+    );
+    test_display(
+        [0xf3, 0x0b, 0x40, 0xf9],
+        "ldr x19, [sp, 0x10]"
+    );
+    test_display(
+        [0xf3, 0x1b, 0x00, 0xf9],
+        "str x19, [sp, 0x30]"
+    );
+    test_display(
+        [0xf3, 0x5b, 0x00, 0xf9],
+        "str x19, [sp, 0xb0]"
+    );
+    test_display(
+        [0xf3, 0x5b, 0x40, 0xf9],
+        "ldr x19, [sp, 0xb0]"
+    );
+    test_display(
+        [0xf4, 0x07, 0x9f, 0x1a],
+        "cset w20, ne"
+    );
+    test_display(
+        [0xf4, 0x0b, 0x00, 0xb9],
+        "str w20, [sp, 0x8]"
+    );
+    test_display(
+        [0xf4, 0x4f, 0x01, 0xa9],
+        "stp x20, x19, [sp, 0x10]"
+    );
+    test_display(
+        [0xf4, 0x4f, 0x02, 0xa9],
+        "stp x20, x19, [sp, 0x20]"
+    );
+    test_display(
+        [0xf4, 0x4f, 0x0c, 0xa9],
+        "stp x20, x19, [sp, 0xc0]"
+    );
+    test_display(
+        [0xf4, 0x4f, 0x10, 0xa9],
+        "stp x20, x19, [sp, 0x100]"
+    );
+    test_display(
+        [0xf4, 0x4f, 0x16, 0xa9],
+        "stp x20, x19, [sp, 0x160]"
+    );
+    test_display(
+        [0xf4, 0x4f, 0x19, 0xa9],
+        "stp x20, x19, [sp, 0x190]"
+    );
+    test_display(
+        [0xf4, 0x4f, 0x41, 0xa9],
+        "ldp x20, x19, [sp, 0x10]"
+    );
+    test_display(
+        [0xf4, 0x4f, 0x42, 0xa9],
+        "ldp x20, x19, [sp, 0x20]"
+    );
+    test_display(
+        [0xf4, 0x4f, 0x4c, 0xa9],
+        "ldp x20, x19, [sp, 0xc0]"
+    );
+    test_display(
+        [0xf4, 0x4f, 0x50, 0xa9],
+        "ldp x20, x19, [sp, 0x100]"
+    );
+    test_display(
+        [0xf4, 0x4f, 0x56, 0xa9],
+        "ldp x20, x19, [sp, 0x160]"
+    );
+    test_display(
+        [0xf4, 0x4f, 0x59, 0xa9],
+        "ldp x20, x19, [sp, 0x190]"
+    );
+    test_display(
+        [0xf4, 0x4f, 0xbe, 0xa9],
+        "stp x20, x19, [sp, -0x20]!"
+    );
+    test_display(
+        [0xf4, 0x4f, 0xc2, 0xa8],
+        "ldp x20, x19, [sp], 0x20"
+    );
+    test_display(
+        [0xf4, 0xb2, 0x96, 0x9a],
+        "csel x20, x23, x22, lt"
+    );
+    test_display(
+        [0xf4, 0xe3, 0x00, 0x91],
+        "add x20, sp, 0x38"
+    );
+    test_display(
+        [0xf5, 0x03, 0x00, 0x32],
+        "orr w21, wzr, 0x1"
+    );
+    test_display(
+        [0xf5, 0x03, 0x00, 0xf9],
+        "str x21, [sp]"
+    );
+    test_display(
+        [0xf5, 0x03, 0x1f, 0x32],
+        "orr w21, wzr, 0x2"
+    );
+    test_display(
+        [0xf5, 0x07, 0x00, 0xf9],
+        "str x21, [sp, 0x8]"
+    );
+    test_display(
+        [0xf5, 0x07, 0x43, 0xf8],
+        "ldr x21, [sp], 0x30"
+    );
+    test_display(
+        [0xf5, 0x0f, 0x1d, 0xf8],
+        "str x21, [sp, -0x30]!"
+    );
+    test_display(
+        [0xf5, 0x13, 0x00, 0xf9],
+        "str x21, [sp, 0x20]"
+    );
+    test_display(
+        [0xf5, 0x5b, 0x00, 0xf9],
+        "str x21, [sp, 0xb0]"
+    );
+    test_display(
+        [0xf5, 0x5b, 0x40, 0xf9],
+        "ldr x21, [sp, 0xb0]"
+    );
+    test_display(
+        [0xf5, 0x83, 0x00, 0x91],
+        "add x21, sp, 0x20"
+    );
+    test_display(
+        [0xf5, 0xa3, 0x00, 0x91],
+        "add x21, sp, 0x28"
+    );
+    test_display(
+        [0xf6, 0x1f, 0x00, 0xf9],
+        "str x22, [sp, 0x38]"
+    );
+    test_display(
+        [0xf6, 0x23, 0x00, 0x91],
+        "add x22, sp, 0x8"
+    );
+    test_display(
+        [0xf6, 0x57, 0x0f, 0xa9],
+        "stp x22, x21, [sp, 0xf0]"
+    );
+    test_display(
+        [0xf6, 0x57, 0x15, 0xa9],
+        "stp x22, x21, [sp, 0x150]"
+    );
+    test_display(
+        [0xf6, 0x57, 0x18, 0xa9],
+        "stp x22, x21, [sp, 0x180]"
+    );
+    test_display(
+        [0xf6, 0x57, 0x4f, 0xa9],
+        "ldp x22, x21, [sp, 0xf0]"
+    );
+    test_display(
+        [0xf6, 0x57, 0x55, 0xa9],
+        "ldp x22, x21, [sp, 0x150]"
+    );
+    test_display(
+        [0xf6, 0x57, 0x58, 0xa9],
+        "ldp x22, x21, [sp, 0x180]"
+    );
+    test_display(
+        [0xf6, 0x57, 0xbd, 0xa9],
+        "stp x22, x21, [sp, -0x30]!"
+    );
+    test_display(
+        [0xf6, 0x57, 0xc3, 0xa8],
+        "ldp x22, x21, [sp], 0x30"
+    );
+    test_display(
+        [0xf6, 0xe3, 0x00, 0x91],
+        "add x22, sp, 0x38"
+    );
+    test_display(
+        [0xf7, 0xe3, 0x00, 0x91],
+        "add x23, sp, 0x38"
+    );
+    test_display(
+        [0xf8, 0x5f, 0x14, 0xa9],
+        "stp x24, x23, [sp, 0x140]"
+    );
+    test_display(
+        [0xf8, 0x5f, 0x54, 0xa9],
+        "ldp x24, x23, [sp, 0x140]"
+    );
+    test_display(
+        [0xfc, 0x5f, 0x0e, 0xa9],
+        "stp x28, x23, [sp, 0xe0]"
+    );
+    test_display(
+        [0xfc, 0x5f, 0x17, 0xa9],
+        "stp x28, x23, [sp, 0x170]"
+    );
+    test_display(
+        [0xfc, 0x5f, 0x4e, 0xa9],
+        "ldp x28, x23, [sp, 0xe0]"
+    );
+    test_display(
+        [0xfc, 0x5f, 0x57, 0xa9],
+        "ldp x28, x23, [sp, 0x170]"
+    );
+    test_display(
+        [0xfc, 0x9b, 0x00, 0xf9],
+        "str x28, [sp, 0x130]"
+    );
+    test_display(
+        [0xfd, 0x03, 0x00, 0x91],
+        "mov x29, sp"
+    );
+    test_display(
+        [0xfd, 0x03, 0x03, 0x91],
+        "add x29, sp, 0xc0"
+    );
+    test_display(
+        [0xfd, 0x43, 0x00, 0x91],
+        "add x29, sp, 0x10"
+    );
+    test_display(
+        [0xfd, 0x43, 0x03, 0x91],
+        "add x29, sp, 0xd0"
+    );
+    test_display(
+        [0xfd, 0x43, 0x04, 0x91],
+        "add x29, sp, 0x110"
+    );
+    test_display(
+        [0xfd, 0x7b, 0x01, 0xa9],
+        "stp x29, x30, [sp, 0x10]"
+    );
+    test_display(
+        [0xfd, 0x7b, 0x02, 0xa9],
+        "stp x29, x30, [sp, 0x20]"
+    );
+    test_display(
+        [0xfd, 0x7b, 0x03, 0xa9],
+        "stp x29, x30, [sp, 0x30]"
+    );
+    test_display(
+        [0xfd, 0x7b, 0x0c, 0xa9],
+        "stp x29, x30, [sp, 0xc0]"
+    );
+    test_display(
+        [0xfd, 0x7b, 0x0d, 0xa9],
+        "stp x29, x30, [sp, 0xd0]"
+    );
+    test_display(
+        [0xfd, 0x7b, 0x11, 0xa9],
+        "stp x29, x30, [sp, 0x110]"
+    );
+    test_display(
+        [0xfd, 0x7b, 0x17, 0xa9],
+        "stp x29, x30, [sp, 0x170]"
+    );
+    test_display(
+        [0xfd, 0x7b, 0x1a, 0xa9],
+        "stp x29, x30, [sp, 0x1a0]"
+    );
+    test_display(
+        [0xfd, 0x7b, 0x41, 0xa9],
+        "ldp x29, x30, [sp, 0x10]"
+    );
+    test_display(
+        [0xfd, 0x7b, 0x42, 0xa9],
+        "ldp x29, x30, [sp, 0x20]"
+    );
+    test_display(
+        [0xfd, 0x7b, 0x43, 0xa9],
+        "ldp x29, x30, [sp, 0x30]"
+    );
+    test_display(
+        [0xfd, 0x7b, 0x4c, 0xa9],
+        "ldp x29, x30, [sp, 0xc0]"
+    );
+    test_display(
+        [0xfd, 0x7b, 0x4d, 0xa9],
+        "ldp x29, x30, [sp, 0xd0]"
+    );
+    test_display(
+        [0xfd, 0x7b, 0x51, 0xa9],
+        "ldp x29, x30, [sp, 0x110]"
+    );
+    test_display(
+        [0xfd, 0x7b, 0x57, 0xa9],
+        "ldp x29, x30, [sp, 0x170]"
+    );
+    test_display(
+        [0xfd, 0x7b, 0x5a, 0xa9],
+        "ldp x29, x30, [sp, 0x1a0]"
+    );
+    test_display(
+        [0xfd, 0x7b, 0xbe, 0xa9],
+        "stp x29, x30, [sp, -0x20]!"
+    );
+    test_display(
+        [0xfd, 0x7b, 0xbf, 0xa9],
+        "stp x29, x30, [sp, -0x10]!"
+    );
+    test_display(
+        [0xfd, 0x7b, 0xc1, 0xa8],
+        "ldp x29, x30, [sp], 0x10"
+    );
+    test_display(
+        [0xfd, 0x7b, 0xc2, 0xa8],
+        "ldp x29, x30, [sp], 0x20"
+    );
+    test_display(
+        [0xfd, 0x83, 0x00, 0x91],
+        "add x29, sp, 0x20"
+    );
+    test_display(
+        [0xfd, 0x83, 0x06, 0x91],
+        "add x29, sp, 0x1a0"
+    );
+    test_display(
+        [0xfd, 0xc3, 0x00, 0x91],
+        "add x29, sp, 0x30"
+    );
+    test_display(
+        [0xfd, 0xc3, 0x05, 0x91],
+        "add x29, sp, 0x170"
+    );
+    test_display(
+        [0xff, 0x1f, 0x00, 0xf9],
+        "str xzr, [sp, 0x38]"
+    );
+    test_display(
+        [0xe3, 0x07, 0x00, 0x32],
+        "orr w3, wzr, 0x3"
+    );
+    test_display(
+        [0xff, 0xff, 0x01, 0xa9],
+        "stp xzr, xzr, [sp, 0x18]"
+    );
+    test_display(
+        [0x7f, 0x02, 0x00, 0xb9],
+        "str wzr, [x19]"
+    );
+    test_display(
+        [0x7f, 0x36, 0x00, 0xf9],
+        "str xzr, [x19, 0x68]"
+    );
+    test_display(
+        [0x7f, 0x3a, 0x00, 0xf9],
+        "str xzr, [x19, 0x70]"
+    );
+    test_display(
+        [0x7f, 0x3e, 0x00, 0xf9],
+        "str xzr, [x19, 0x78]"
+    );
+    test_display(
+        [0x9f, 0x3e, 0x00, 0xf9],
+        "str xzr, [x20, 0x78]"
+    );
+    test_display(
+        [0x9f, 0xfe, 0x06, 0xa9],
+        "stp xzr, xzr, [x20, 0x68]"
+    );
+    test_display(
+        [0xbf, 0x03, 0x18, 0xf8],
+        "stur xzr, [x29, -0x80]"
+    );
+    test_display(
+        [0xbf, 0x42, 0x00, 0xb1],
+        "cmn x21, 0x10"
+    );
+    test_display(
+        [0xbf, 0x83, 0x19, 0xf8],
+        "stur xzr, [x29, -0x68]"
+    );
+    test_display(
+        [0xbf, 0xff, 0x38, 0xa9],
+        "stp xzr, xzr, [x29, -0x78]"
+    );
+    test_display(
+        [0xff, 0x03, 0x01, 0x91],
+        "add sp, sp, 0x40"
+    );
+    test_display(
+        [0xff, 0x03, 0x01, 0xd1],
+        "sub sp, sp, 0x40"
+    );
+    test_display(
+        [0xff, 0x03, 0x06, 0x91],
+        "add sp, sp, 0x180"
+    );
+    test_display(
+        [0xff, 0x03, 0x06, 0xd1],
+        "sub sp, sp, 0x180"
+    );
+    test_display(
+        [0xff, 0x43, 0x01, 0xd1],
+        "sub sp, sp, 0x50"
+    );
+    test_display(
+        [0xff, 0x43, 0x03, 0x91],
+        "add sp, sp, 0xd0"
+    );
+    test_display(
+        [0xff, 0x43, 0x03, 0xd1],
+        "sub sp, sp, 0xd0"
+    );
+    test_display(
+        [0xff, 0x83, 0x03, 0x91],
+        "add sp, sp, 0xe0"
+    );
+    test_display(
+        [0xff, 0x83, 0x03, 0xd1],
+        "sub sp, sp, 0xe0"
+    );
+    test_display(
+        [0xff, 0x83, 0x04, 0x91],
+        "add sp, sp, 0x120"
+    );
+    test_display(
+        [0xff, 0x83, 0x04, 0xd1],
+        "sub sp, sp, 0x120"
+    );
+    test_display(
+        [0xff, 0xc3, 0x00, 0x91],
+        "add sp, sp, 0x30"
+    );
+    test_display(
+        [0xff, 0xc3, 0x00, 0xd1],
+        "sub sp, sp, 0x30"
+    );
+    test_display(
+        [0xff, 0xc3, 0x06, 0x91],
+        "add sp, sp, 0x1b0"
+    );
+    test_display(
+        [0xff, 0xc3, 0x06, 0xd1],
+        "sub sp, sp, 0x1b0"
+    );
+    test_display(
+        [0xe0, 0x03, 0x01, 0xaa],
+        "mov x0, x1"
+    );
+    test_display(
+        [0xf4, 0x03, 0x00, 0x2a],
+        "mov w20, w0"
+    );
+    test_display(
+        [0xe1, 0x03, 0x1f, 0xaa],
+        "mov x1, xzr"
+    );
+    test_display(
+        [0xe2, 0x03, 0x1f, 0xaa],
+        "mov x2, xzr"
+    );
+    test_display(
+        [0xe3, 0x03, 0x1f, 0xaa],
+        "mov x3, xzr"
+    );
+    test_display(
+        [0xe0, 0x03, 0x13, 0x2a],
+        "mov w0, w19"
+    );
+    test_display(
+        [0xe0, 0x03, 0x13, 0xaa],
+        "mov x0, x19"
+    );
+    test_display(
+        [0xe0, 0x03, 0x14, 0x2a],
+        "mov w0, w20"
+    );
+    test_display(
+        [0xe0, 0x03, 0x14, 0xaa],
+        "mov x0, x20"
+    );
+    test_display(
+        [0xe0, 0x03, 0x15, 0xaa],
+        "mov x0, x21"
+    );
+    test_display(
+        [0xe0, 0x03, 0x16, 0xaa],
+        "mov x0, x22"
+    );
+    test_display(
+        [0xe0, 0x03, 0x17, 0xaa],
+        "mov x0, x23"
+    );
+    test_display(
+        [0xe0, 0x03, 0x1f, 0x2a],
+        "mov w0, wzr"
+    );
+    test_display(
+        [0xe1, 0x03, 0x00, 0xaa],
+        "mov x1, x0"
+    );
+    test_display(
+        [0xe1, 0x03, 0x13, 0xaa],
+        "mov x1, x19"
+    );
+    test_display(
+        [0xe1, 0x03, 0x14, 0x2a],
+        "mov w1, w20"
+    );
+    test_display(
+        [0xe1, 0x03, 0x14, 0xaa],
+        "mov x1, x20"
+    );
+    test_display(
+        [0xe1, 0x03, 0x15, 0x2a],
+        "mov w1, w21"
+    );
+    test_display(
+        [0xe1, 0x03, 0x15, 0xaa],
+        "mov x1, x21"
+    );
+    test_display(
+        [0xe1, 0x03, 0x16, 0xaa],
+        "mov x1, x22"
+    );
+    test_display(
+        [0xe2, 0x03, 0x1f, 0x2a],
+        "mov w2, wzr"
+    );
+    test_display(
+        [0xe4, 0x03, 0x00, 0x2a],
+        "mov w4, w0"
+    );
+    test_display(
+        [0xe8, 0x03, 0x1f, 0xaa],
+        "mov x8, xzr"
+    );
+    test_display(
+        [0xea, 0x03, 0x08, 0x2a],
+        "mov w10, w8"
+    );
+    test_display(
+        [0xeb, 0x03, 0x09, 0x2a],
+        "mov w11, w9"
+    );
+    test_display(
+        [0xf3, 0x03, 0x00, 0x2a],
+        "mov w19, w0"
+    );
+    test_display(
+        [0xf4, 0x03, 0x15, 0x2a],
+        "mov w20, w21"
+    );
+    test_display(
+        [0xf4, 0x03, 0x1f, 0x2a],
+        "mov w20, wzr"
+    );
+    test_display(
+        [0xf5, 0x03, 0x1f, 0x2a],
+        "mov w21, wzr"
+    );
+    test_display(
+        [0xf6, 0x03, 0x14, 0x2a],
+        "mov w22, w20"
+    );
+    test_display(
+        [0xf8, 0x03, 0x16, 0x2a],
+        "mov w24, w22"
+    );
+    test_display(
+        [0xe2, 0x03, 0x15, 0xaa],
+        "mov x2, x21"
+    );
+    test_display(
+        [0xe3, 0x03, 0x14, 0xaa],
+        "mov x3, x20"
+    );
+    test_display(
+        [0xe4, 0x03, 0x08, 0xaa],
+        "mov x4, x8"
+    );
+    test_display(
+        [0xe4, 0x03, 0x14, 0xaa],
+        "mov x4, x20"
+    );
+    test_display(
+        [0xe5, 0x03, 0x00, 0xaa],
+        "mov x5, x0"
+    );
+    test_display(
+        [0xe8, 0x03, 0x00, 0xaa],
+        "mov x8, x0"
+    );
+    test_display(
+        [0xf3, 0x03, 0x00, 0xaa],
+        "mov x19, x0"
+    );
+    test_display(
+        [0xf3, 0x03, 0x01, 0x2a],
+        "mov w19, w1"
+    );
+    test_display(
+        [0xf3, 0x03, 0x01, 0xaa],
+        "mov x19, x1"
+    );
+    test_display(
+        [0xf3, 0x03, 0x02, 0xaa],
+        "mov x19, x2"
+    );
+    test_display(
+        [0xf3, 0x0b, 0x00, 0xf9],
+        "str x19, [sp, 0x10]"
+    );
+    test_display(
+        [0xf4, 0x03, 0x00, 0xaa],
+        "mov x20, x0"
+    );
+    test_display(
+        [0xf4, 0x03, 0x01, 0xaa],
+        "mov x20, x1"
+    );
+    test_display(
+        [0xf5, 0x03, 0x00, 0xaa],
+        "mov x21, x0"
+    );
+    test_display(
+        [0xf6, 0x03, 0x00, 0xaa],
+        "mov x22, x0"
+    );
+    test_display(
+        [0xf7, 0x03, 0x00, 0xaa],
+        "mov x23, x0"
+    );
+}
+
+static instruction_bytes: [u8; 4 * 0] = [
+];
+
+#[test]
+fn test_decode_span() {
+    let mut i = 0u64;
+    while i < instruction_bytes.len() as u64 {
+        let mut instr = Instruction::blank();
+        instr.decode_into(instruction_bytes[(i as usize)..].iter().map(|x| *x));
+        println!(
+            "Decoded {:02x}{:02x}{:02x}{:02x}: {}", //{:?}\n  {}",
+            instruction_bytes[i as usize],
+            instruction_bytes[i as usize + 1],
+            instruction_bytes[i as usize + 2],
+            instruction_bytes[i as usize + 3],
+//            instr,
+            instr);
+        i += instr.len();
+    }
+}
+
+use test::Bencher;
+#[bench]
+pub fn bench_60000_instrs(b: &mut Bencher) {
+    b.iter(|| {
+        for i in (0..1000) {
+            let mut iter = instruction_bytes.iter().map(|x| *x);
+            let mut result = Instruction::blank();
+            loop {
+                match result.decode_into(&mut iter) {
+                    Some(result) => {
+                        test::black_box(&result);
+                    },
+                    None => {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+}
