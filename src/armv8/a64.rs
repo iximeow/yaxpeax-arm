@@ -5,6 +5,7 @@ use std::fmt::{Display, Formatter};
 
 use yaxpeax_arch::{Arch, Colorize, Colored, ColorSettings, Decodable, LengthedInstruction, ShowContextual, YaxColors};
 
+#[allow(non_snake_case)]
 mod docs {
     #[test]
     fn test_ones() {
@@ -25,7 +26,7 @@ mod docs {
         if len == 0 { return 0; }
         if len == 64 { return 0xffffffff_ffffffffu64; }
 
-        let mask = (0x8000_0000_0000_0000i64 >> ((64 - 1) - len)) as u64;
+        let mask = ((0x8000_0000_0000_0000u64 as i64) >> ((64 - 1) - len)) as u64;
         !mask
     }
 
@@ -526,25 +527,25 @@ impl Display for Instruction {
         };
 
         if self.operands[0] != Operand::Nothing {
-            write!(fmt, " {}", self.operands[0]);
+            write!(fmt, " {}", self.operands[0])?;
         } else {
             return Ok(());
         }
 
         if self.operands[1] != Operand::Nothing {
-            write!(fmt, ", {}", self.operands[1]);
+            write!(fmt, ", {}", self.operands[1])?;
         } else {
             return Ok(());
         }
 
         if self.operands[2] != Operand::Nothing {
-            write!(fmt, ", {}", self.operands[2]);
+            write!(fmt, ", {}", self.operands[2])?;
         } else {
             return Ok(());
         }
 
         if self.operands[3] != Operand::Nothing {
-            write!(fmt, ", {}", self.operands[3]);
+            write!(fmt, ", {}", self.operands[3])?;
         } else {
             return Ok(());
         }
