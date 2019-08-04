@@ -798,7 +798,7 @@ impl Decodable for Instruction {
                         println!("{:032b}", word);
                         println!("       {:05b}|{:04b}|{:04b}|{:04b}|1{:02b}1|{:04b}", flags, Rn, Rd, HiOffset, op, LoOffset);
                         match op {
-                            0x00 => {
+                            0b00 => {
                     // |c o n d|0 0 0 1|x x x x x x x x x x x x x x x x|1 0 0 1|x x x x|
                                 // this is swp or {ld,st}ex, conditional on bit 23
                                 match flags {
@@ -862,7 +862,7 @@ impl Decodable for Instruction {
                                     }
                                 }
                             }
-                            0x01 => {
+                            0b01 => {
                     // |c o n d|0 0 0 x|x x x x x x x x x x x x x x x x|1 0 1 1|x x x x|
                     // page A5-201
                                 self.opcode = Opcode::Incomplete(word);
@@ -895,13 +895,13 @@ impl Decodable for Instruction {
                                     }
                                 }
                             }
-                            0x10 => {
+                            0b10 => {
                     // |c o n d|0 0 0 x|x x x x x x x x x x x x x x x x|1 1 0 1|x x x x|
                     // page A5-201
                                 self.opcode = Opcode::Incomplete(word);
                                 return Some(());
                             }
-                            0x11 => {
+                            0b11 => {
                     // |c o n d|0 0 0 x|x x x x x x x x x x x x x x x x|1 1 1 1|x x x x|
                     // page A5-201
                                 self.opcode = Opcode::Incomplete(word);
