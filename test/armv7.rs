@@ -163,6 +163,15 @@ fn test_decode_mov() {
 #[test]
 fn test_decode_arithmetic() {
     test_decode(
+        [0x58, 0x37, 0x01, 0x40],
+        Instruction {
+            condition: ConditionCode::MI,
+            opcode: AND,
+            operands: Operands::ThreeOperands(3, 1, 8),
+            s: false
+        }
+    );
+    test_decode(
         [0x03, 0x30, 0x8f, 0xe0],
         Instruction {
             condition: ConditionCode::AL,
