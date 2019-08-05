@@ -86,6 +86,10 @@ fn test_decode_str_ldr() {
 #[test]
 fn test_decode_misc() {
     test_display(
+        [0x32, 0xff, 0x2f, 0xe1],
+        "blx r2"
+    );
+    test_display(
         [0x02, 0x00, 0xa0, 0xe3],
         "mov r0, 0x2"
     );
