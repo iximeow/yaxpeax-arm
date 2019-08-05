@@ -126,7 +126,7 @@ impl <T: std::fmt::Write> ShowContextual<u32, [Option<String>], T> for Instructi
                         write!(out, " {}, {}", reg_name_colorize(a, colors), reg_name_colorize(b, colors))?;
                     },
                     Operands::RegImm(a, imm) => {
-                        write!(out, " {}, {:#x}", reg_name_colorize(a, colors), imm * 4)?;
+                        write!(out, " {}, {:#x}", reg_name_colorize(a, colors), imm)?;
                     },
                     Operands::RegRegList(r, list) => {
                         write!(out, " {}, ", reg_name_colorize(r, colors))?;
