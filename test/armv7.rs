@@ -163,6 +163,21 @@ fn test_decode_mov() {
 #[test]
 fn test_decode_arithmetic() {
     test_decode(
+        [0x18, 0x1d, 0x00, 0x00],
+        Instruction {
+            condition: ConditionCode::EQ,
+            opcode: Opcode::AND,
+            operands: Operands::ThreeOperandWithShift(
+                1, 0, 8, ShiftSpec::Register(104)
+            ),
+            s: false
+        }
+    );
+    test_display(
+        [0x18, 0x1d, 0x00, 0x00],
+        "andeq r1, r0, r8, lsl sp",
+    );
+    test_decode(
         [0x03, 0x30, 0x8f, 0xe0],
         Instruction {
             condition: ConditionCode::AL,

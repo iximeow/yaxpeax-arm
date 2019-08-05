@@ -487,7 +487,7 @@ fn format_shift<T: std::fmt::Write>(f: &mut T, Rm: u8, shift: ShiftSpec, colors:
         },
         ShiftSpec::Register(v) => {
             let tpe = v & 0x3;
-            let Rs = v >> 2;
+            let Rs = v >> 3;
             write!(f, "{}, {} {}", reg_name_colorize(Rm, colors), shift_tpe_to_str(tpe), reg_name_colorize(Rs, colors))
         },
     }
