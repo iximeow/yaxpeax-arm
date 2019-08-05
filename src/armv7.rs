@@ -119,6 +119,9 @@ impl <T: std::fmt::Write> ShowContextual<u32, [Option<String>], T> for Instructi
                         write!(out, " ")?;
                         format_reg_list(out, list, colors)?;
                     },
+                    Operands::OneOperand(a) => {
+                        write!(out, " {}", reg_name_colorize(a, colors))?;
+                    },
                     Operands::TwoOperand(a, b) => {
                         write!(out, " {}, {}", reg_name_colorize(a, colors), reg_name_colorize(b, colors))?;
                     },
@@ -409,6 +412,7 @@ pub enum ShiftSpec {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Operands {
     RegisterList(u16),
+    OneOperand(u8),
     TwoOperand(u8, u8),
     RegImm(u8, u32),
     RegRegList(u8, u16),
@@ -697,7 +701,34 @@ impl Decodable for Instruction {
         if cond == 0b1111 {
             // do unconditional instruction stuff
             self.condition = ConditionCode::AL;
-            self.opcode = Opcode::Incomplete(word);
+            let op1 = (word >> 20) as u8;
+            if op1 > 0x80 {
+                match (op1 >> 5) & 0b11 {
+                    0b00 => {
+                        self.opcode = Opcode::Incomplete(word);
+                    }
+                    0b01 => {
+                        self.opcode = Opcode::BLX;
+                        let operand = ((word & 0xffffff) as i32) << 8 >> 6;
+                        self.operands = Operands::BranchOffset(
+                            operand | (
+                                ((word >> 23) & 0b10) as i32
+                            )
+                        );
+                    }
+                    0b10 => {
+                        self.opcode = Opcode::Incomplete(word);
+                    }
+                    0b11 => {
+                        self.opcode = Opcode::Incomplete(word);
+                    }
+                    _ => {
+                        unreachable!();
+                    }
+                }
+            } else {
+                self.opcode = Opcode::Incomplete(word);
+            }
             return Some(());
         } else {
             self.condition = ConditionCode::build(cond);
@@ -915,11 +946,54 @@ impl Decodable for Instruction {
                     // misc instructions in Figure A3-4
 
                     if s == false && opcode >= 0b1000 && opcode < 0b1100 {
+                        let op2 = ((word >> 4) & 0x0f) as u8;
                         // the instruction looks like
                         // |c o n d|0 0 0|1 0 x x|0|x x x x|x x x x|x x x x x|x x|x|x x x x|
-                        // misc instructions (page A5-194)
-                        self.opcode = Opcode::Incomplete(word);
-                        return Some(());
+                        if op2 & 0x08 == 0x00 {
+                            let op2 = op2 & 0x07;
+                            // |c o n d|0 0 0|1 0 x x|0|x x x x|x x x x|x x x x|0|x x|x|x x x x|
+                            // misc instructions (page A5-194)
+                            match op2 {
+                                0b000 => {
+                                    
+                                },
+                                0b001 => {
+                                    
+                                },
+                                0b010 => {
+                                    
+                                },
+                                0b011 => {
+                                    if opcode & 0b11 == 0b01 {
+                                        self.opcode = Opcode::BLX;
+                                        self.operands = Operands::OneOperand((word & 0x0f) as u8);
+                                        return Some(());
+                                    } else {
+                                        return None;
+                                    }
+                                },
+                                0b100 => {
+                                    self.opcode = Opcode::Incomplete(word);
+                                    return Some(());
+                                },
+                                0b101 => {
+
+                                }
+                                0b110 => {
+                                },
+                                0b111 => {
+
+                                },
+                                _ => {
+                                    unreachable!();
+                                }
+                            }
+                        } else {
+                            // |c o n d|0 0 0|1 0 x x|0|x x x x|x x x x|x x x x|1|x x|x|x x x x|
+                            // multiply and multiply-accumulate 
+                            self.opcode = Opcode::Incomplete(word);
+                            return Some(());
+                        }
                     } else {
                         if opcode >= 16 {
                             unreachable!();
