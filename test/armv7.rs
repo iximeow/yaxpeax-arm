@@ -339,7 +339,7 @@ fn test_decode_span() {
             instr);
         i += instr.len();
     }
-    panic!("done");
+//    panic!("done");
 }
 /*
  * from debian 5.0.10 bash 3.2-4_arm
