@@ -116,6 +116,18 @@ mod docs {
     }
 }
 
+#[allow(non_snake_case)]
+impl <T: std::fmt::Write> ShowContextual<u64, [Option<String>], T> for Instruction {
+    fn contextualize(&self, colors: Option<&ColorSettings>, address: u64, context: Option<&[Option<String>]>, out: &mut T) -> std::fmt::Result {
+        write!(out, "{}", self)
+    }
+}
+
+#[cfg(feature="use-serde")]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+pub struct ARMv8 { }
+
+#[cfg(not(feature="use-serde"))]
 #[derive(Copy, Clone, Debug)]
 pub struct ARMv8 { }
 
