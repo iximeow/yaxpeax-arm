@@ -1,9 +1,9 @@
-#[cfg(feature="use-serde")]
-use serde::{Serialize, Deserialize};
+//#[cfg(feature="use-serde")]
+//use serde::{Serialize, Deserialize};
 
 use std::fmt::{Display, Formatter};
 
-use yaxpeax_arch::{Arch, Colorize, Colored, ColorSettings, Decodable, LengthedInstruction, ShowContextual, YaxColors};
+use yaxpeax_arch::{Arch, ColorSettings, Decodable, LengthedInstruction, ShowContextual};
 
 #[allow(non_snake_case)]
 mod docs {
@@ -118,7 +118,7 @@ mod docs {
 
 #[allow(non_snake_case)]
 impl <T: std::fmt::Write> ShowContextual<u64, [Option<String>], T> for Instruction {
-    fn contextualize(&self, colors: Option<&ColorSettings>, address: u64, context: Option<&[Option<String>]>, out: &mut T) -> std::fmt::Result {
+    fn contextualize(&self, _colors: Option<&ColorSettings>, _address: u64, _context: Option<&[Option<String>]>, out: &mut T) -> std::fmt::Result {
         write!(out, "{}", self)
     }
 }
@@ -1545,7 +1545,7 @@ impl Decodable for Instruction {
                         } else {
                             self.opcode = Opcode::Invalid;
                         }
-                        unreachable!();
+                        unreachable!("decode Rd: {}, Rn: {}, imms: {}, Rm: {}, No0: {}", Rd, Rn, imms, Rm, No0);
                     }
                     _ => { unreachable!() }
                 }
@@ -1605,7 +1605,8 @@ impl Decodable for Instruction {
                             _ => {
                                 Opcode::Invalid
                             }
-                        }
+                        };
+                        unreachable!("Rt: {}, Rn: {}, Rt2: {}, Rs: {}", Rt, Rn, Rt2, Rs);
                     },
                     0b00001 => {
                         let Rt = (word & 0x1f) as u16;
@@ -1643,6 +1644,7 @@ impl Decodable for Instruction {
                             Operand::Nothing,
                             Operand::Nothing,
                         ];
+                        unreachable!("Rt: {}, Rn: {}, Rt2: {}, Rs: {}", Rt, Rn, Rt2, Rs);
                     },
                     0b01000 |
                     0b01001 => {
@@ -1687,19 +1689,19 @@ impl Decodable for Instruction {
                         let opc = (word >> 29) & 0x3;
                         let Rt = word & 0x1f;
                         let imm19 = (word >> 5) & 0x7fff;
-                        panic!("C3.3.5 V==1");
+                        panic!("C3.3.5 V==1. opc: {}, Rt: {}, imm19: {}", opc, Rt, imm19);
                     },
                     0b10000 => {
                         // load/store no-allocate pair (offset)
                         // V == 0
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        panic!("C3.3.7 V==0");
+                        panic!("C3.3.7 V==0, opc_L: {}", opc_L);
                     },
                     0b10100 => {
                         // load/store no-allocate pair (offset)
                         // V == 1
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        panic!("C3.3.7 V==1");
+                        panic!("C3.3.7 V==1, opc_L: {}", opc_L);
                     },
                     0b10001 => {
                         // load/store register pair (post-indexed)
@@ -1707,7 +1709,7 @@ impl Decodable for Instruction {
                         let Rt = (word & 0x1f) as u16;
                         let Rn = ((word >> 5) & 0x1f) as u16;
                         let Rt2 = ((word >> 10) & 0x1f) as u16;
-                        let mut imm7 = (((((word >> 15) & 0x7f) as i16) << 9) >> 9);
+                        let mut imm7 = ((((word >> 15) & 0x7f) as i16) << 9) >> 9;
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
                         let size = match opc_L {
                             0b000 => {
@@ -1757,7 +1759,7 @@ impl Decodable for Instruction {
                         // load/store register pair (post-indexed)
                         // V == 1
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        panic!("C3.3.15 V==1");
+                        panic!("C3.3.15 V==1, opc_L: {}", opc_L);
                     },
                     0b10010 => {
                         // load/store register pair (offset)
@@ -1765,7 +1767,7 @@ impl Decodable for Instruction {
                         let Rt = (word & 0x1f) as u16;
                         let Rn = ((word >> 5) & 0x1f) as u16;
                         let Rt2 = ((word >> 10) & 0x1f) as u16;
-                        let mut imm7 = (((((word >> 15) & 0x7f) as i16) << 9) >> 9);
+                        let mut imm7 = ((((word >> 15) & 0x7f) as i16) << 9) >> 9;
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
                         let size = match opc_L {
                             0b000 => {
@@ -1815,7 +1817,7 @@ impl Decodable for Instruction {
                         // load/store register pair (offset)
                         // V == 1
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        panic!("C3.3.14 V==1");
+                        panic!("C3.3.14 V==1, opc_L: {}", opc_L);
                     },
                     0b10011 => {
                         // load/store register pair (pre-indexed)
@@ -1823,7 +1825,7 @@ impl Decodable for Instruction {
                         let Rt = (word & 0x1f) as u16;
                         let Rn = ((word >> 5) & 0x1f) as u16;
                         let Rt2 = ((word >> 10) & 0x1f) as u16;
-                        let mut imm7 = (((((word >> 15) & 0x7f) as i16) << 9) >> 9);
+                        let mut imm7 = ((((word >> 15) & 0x7f) as i16) << 9) >> 9;
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
                         let size = match opc_L {
                             0b000 => {
@@ -1873,7 +1875,7 @@ impl Decodable for Instruction {
                         // load/store register pair (pre-indexed)
                         // V == 1
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        panic!("C3.3.16 V==1");
+                        panic!("C3.3.16 V==1, opc_L: {}", opc_L);
                     },
                     0b11000 |
                     0b11001 => {
