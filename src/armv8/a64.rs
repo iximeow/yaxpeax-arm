@@ -3,7 +3,7 @@
 
 use std::fmt::{Display, Formatter};
 
-use yaxpeax_arch::{Arch, ColorSettings, Decodable, LengthedInstruction, ShowContextual};
+use yaxpeax_arch::{Arch, ColorSettings, Decoder, LengthedInstruction, ShowContextual};
 
 #[allow(non_snake_case)]
 mod docs {
@@ -114,6 +114,16 @@ mod docs {
         let tmask = Replicate(telem, esize, 64);
         (wmask, tmask)
     }
+
+    pub fn DecodeShift(op: u8) -> super::ShiftStyle {
+        assert!(op <= 0b11);
+        [
+            super::ShiftStyle::LSL,
+            super::ShiftStyle::LSR,
+            super::ShiftStyle::ASR,
+            super::ShiftStyle::ROR,
+        ][op as usize]
+    }
 }
 
 #[allow(non_snake_case)]
@@ -134,13 +144,20 @@ pub struct ARMv8 { }
 impl Arch for ARMv8 {
     type Address = u64;
     type Instruction = Instruction;
+    type Decoder = InstDecoder;
     type Operand = Operand;
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
+#[repr(u8)]
 pub enum SizeCode { X, W }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
+#[repr(u8)]
+pub enum SIMDSizeCode { S, D, Q }
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+#[repr(C)]
 pub struct Instruction {
     pub opcode: Opcode,
     pub operands: [Operand; 4],
@@ -176,16 +193,38 @@ impl Display for Instruction {
             Opcode::AND => {
                 write!(fmt, "and")?;
             },
+            Opcode::BIC => {
+                write!(fmt, "bic")?;
+            },
+            Opcode::BICS => {
+                write!(fmt, "bics")?;
+            },
             Opcode::ORR => {
+                if let Operand::Register(_, 31) = self.operands[1] {
+                    if let Operand::Immediate(0) = self.operands[2] {
+                        return write!(fmt, "mov {}, {}", self.operands[0], self.operands[1]);
+                    } else if let Operand::RegShift(ShiftStyle::LSL, 0, size, r) = self.operands[2] {
+                        return write!(fmt, "mov {}, {}", self.operands[0], Operand::Register(size, r));
+                    }
+                }
                 write!(fmt, "orr")?;
+            },
+            Opcode::ORN => {
+                write!(fmt, "orn")?;
             },
             Opcode::EOR => {
                 write!(fmt, "eor")?;
+            },
+            Opcode::EON => {
+                write!(fmt, "eon")?;
             },
             Opcode::ANDS => {
                 write!(fmt, "ands")?;
             },
             Opcode::ADDS => {
+                if let Operand::Register(SizeCode::X, 31) = self.operands[0] {
+                    return write!(fmt, "cmn {}, {}", self.operands[1], self.operands[2]);
+                }
                 write!(fmt, "adds")?;
             },
             Opcode::ADD => {
@@ -536,6 +575,12 @@ impl Display for Instruction {
                 }
                 write!(fmt, "csinv")?;
             }
+            Opcode::PACIA => {
+                write!(fmt, "pacia")?;
+            }
+            Opcode::PACIZA => {
+                write!(fmt, "paciza")?;
+            }
         };
 
         if self.operands[0] != Operand::Nothing {
@@ -582,6 +627,7 @@ impl Instruction {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
+#[repr(u8)]
 pub enum Opcode {
     Invalid,
     MOVN,
@@ -593,7 +639,11 @@ pub enum Opcode {
     SBCS,
     AND,
     ORR,
+    ORN,
     EOR,
+    EON,
+    BIC,
+    BICS,
     ANDS,
     ADDS,
     ADD,
@@ -692,6 +742,8 @@ pub enum Opcode {
     CSNEG,
     CSINC,
     CSINV,
+    PACIA,
+    PACIZA,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -699,6 +751,7 @@ pub enum ShiftStyle {
     LSL,
     LSR,
     ASR,
+    ROR,
     UXTB,
     UXTH,
     UXTW,
@@ -715,6 +768,7 @@ impl Display for ShiftStyle {
             ShiftStyle::LSL => { write!(fmt, "lsl") },
             ShiftStyle::LSR => { write!(fmt, "lsr") },
             ShiftStyle::ASR => { write!(fmt, "asr") },
+            ShiftStyle::ROR => { write!(fmt, "ror") },
             ShiftStyle::UXTB => { write!(fmt, "uxtb") },
             ShiftStyle::UXTH => { write!(fmt, "uxth") },
             ShiftStyle::UXTW => { write!(fmt, "uxtw") },
@@ -728,9 +782,11 @@ impl Display for ShiftStyle {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
+#[repr(C)]
 pub enum Operand {
     Nothing,
     Register(SizeCode, u16),
+    SIMDRegister(SIMDSizeCode, u16),
     RegisterOrSP(SizeCode, u16),
     ConditionCode(u8),
     Offset(u32),
@@ -773,6 +829,13 @@ impl Display for Operand {
                     }
                 }
             },
+            Operand::SIMDRegister(size, reg) => {
+                match size {
+                    SIMDSizeCode::S => { write!(fmt, "s{}", reg) }
+                    SIMDSizeCode::D => { write!(fmt, "d{}", reg) }
+                    SIMDSizeCode::Q => { write!(fmt, "q{}", reg) }
+                }
+            }
             Operand::RegisterOrSP(size, reg) => {
                 if *reg == 31 {
                     match size {
@@ -913,16 +976,19 @@ impl Display for Operand {
     }
 }
 
+#[derive(Default, Debug)]
+pub struct InstDecoder {}
+
 #[allow(non_snake_case)]
-impl Decodable for Instruction {
-    fn decode<T: IntoIterator<Item=u8>>(bytes: T) -> Option<Self> {
+impl Decoder<Instruction> for InstDecoder {
+    fn decode<T: IntoIterator<Item=u8>>(&self, bytes: T) -> Option<Instruction> {
         let mut blank = Instruction::blank();
-        match blank.decode_into(bytes) {
+        match self.decode_into(&mut blank, bytes) {
             Some(_) => Some(blank),
             None => None
         }
     }
-    fn decode_into<T: IntoIterator<Item=u8>>(&mut self, bytes: T) -> Option<()> {
+    fn decode_into<T: IntoIterator<Item=u8>>(&self, inst: &mut Instruction, bytes: T) -> Option<()> {
         fn read_word<T: IntoIterator<Item=u8>>(bytes: T) -> Option<u32> {
             let mut iter = bytes.into_iter();
             let instr: u32 =
@@ -990,7 +1056,7 @@ impl Decodable for Instruction {
                 unreachable!();
             }
             Section::Unallocated => {
-                self.opcode = Opcode::Invalid;
+                inst.opcode = Opcode::Invalid;
             }
             Section::DataProcessingReg => {
                 /*
@@ -1003,7 +1069,6 @@ impl Decodable for Instruction {
                     // These are of the form
                     // XXX1101X_...
                     let group_bits = (word >> 22) & 0x7;
-                    println!("Group bits: {:#b}", group_bits);
                     match group_bits {
                         0b000 => {
                             // Add/subtract (with carry)
@@ -1013,49 +1078,49 @@ impl Decodable for Instruction {
                             let Rm = ((word >> 16) & 0x1f) as u16;
 
                             if opc2 == 0b000000 {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                                 return Some(());
                             }
 
                             let size_code = match word >> 29 {
                                 0b000 => {
-                                    self.opcode = Opcode::ADC;
+                                    inst.opcode = Opcode::ADC;
                                     SizeCode::W
                                 }
                                 0b001 => {
-                                    self.opcode = Opcode::ADCS;
+                                    inst.opcode = Opcode::ADCS;
                                     SizeCode::W
                                 }
                                 0b010 => {
-                                    self.opcode = Opcode::SBC;
+                                    inst.opcode = Opcode::SBC;
                                     SizeCode::W
                                 }
                                 0b011 => {
-                                    self.opcode = Opcode::SBCS;
+                                    inst.opcode = Opcode::SBCS;
                                     SizeCode::W
                                 }
                                 0b100 => {
-                                    self.opcode = Opcode::ADC;
+                                    inst.opcode = Opcode::ADC;
                                     SizeCode::X
                                 }
                                 0b101 => {
-                                    self.opcode = Opcode::ADCS;
+                                    inst.opcode = Opcode::ADCS;
                                     SizeCode::X
                                 }
                                 0b110 => {
-                                    self.opcode = Opcode::SBC;
+                                    inst.opcode = Opcode::SBC;
                                     SizeCode::X
                                 }
                                 0b111 => {
-                                    self.opcode = Opcode::SBCS;
+                                    inst.opcode = Opcode::SBCS;
                                     SizeCode::X
                                 }
                                 _ => {
-                                    unreachable!();
+                                    unreachable!("opc and size flag are three bits");
                                 }
                             };
 
-                            self.operands = [
+                            inst.operands = [
                                 Operand::Register(size_code, Rd),
                                 Operand::Register(size_code, Rn),
                                 Operand::Register(size_code, Rm),
@@ -1064,6 +1129,7 @@ impl Decodable for Instruction {
                         },
                         0b001 => {
                             // Conditional compare (register/immediate)
+                            unimplemented!();
                         },
                         0b010 => {
                             // Conditional select
@@ -1071,41 +1137,41 @@ impl Decodable for Instruction {
                             let sf_op = (word >> 28) & 0x0c;
 
                             if word & 0x20000000 != 0 {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                                 return Some(());
                             }
 
                             let size = match sf_op | op2 {
                                 0b0000 => {
-                                    self.opcode = Opcode::CSEL;
+                                    inst.opcode = Opcode::CSEL;
                                     SizeCode::W
                                 },
                                 0b0001 => {
-                                    self.opcode = Opcode::CSINC;
+                                    inst.opcode = Opcode::CSINC;
                                     SizeCode::W
                                 },
                                 0b0100 => {
-                                    self.opcode = Opcode::CSINV;
+                                    inst.opcode = Opcode::CSINV;
                                     SizeCode::W
                                 },
                                 0b0101 => {
-                                    self.opcode = Opcode::CSNEG;
+                                    inst.opcode = Opcode::CSNEG;
                                     SizeCode::W
                                 },
                                 0b1000 => {
-                                    self.opcode = Opcode::CSEL;
+                                    inst.opcode = Opcode::CSEL;
                                     SizeCode::X
                                 },
                                 0b1001 => {
-                                    self.opcode = Opcode::CSINC;
+                                    inst.opcode = Opcode::CSINC;
                                     SizeCode::X
                                 },
                                 0b1100 => {
-                                    self.opcode = Opcode::CSINV;
+                                    inst.opcode = Opcode::CSINV;
                                     SizeCode::X
                                 },
                                 0b1101 => {
-                                    self.opcode = Opcode::CSNEG;
+                                    inst.opcode = Opcode::CSNEG;
                                     SizeCode::X
                                 },
                                 0b0010 |
@@ -1116,11 +1182,11 @@ impl Decodable for Instruction {
                                 0b1011 |
                                 0b1110 |
                                 0b1111 => {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                     return Some(());
                                 },
                                 _ => {
-                                    unreachable!();
+                                    unreachable!("sf, op, op2 are four bits total");
                                 }
                             };
 
@@ -1129,7 +1195,7 @@ impl Decodable for Instruction {
                             let Rm = ((word >> 16) & 0x1f) as u16;
                             let cond = ((word >> 12) & 0x0f) as u8;
 
-                            self.operands = [
+                            inst.operands = [
                                 Operand::Register(size, Rd),
                                 Operand::Register(size, Rn),
                                 Operand::Register(size, Rm),
@@ -1138,9 +1204,64 @@ impl Decodable for Instruction {
                         },
                         0b011 => {
                             // Data processing (1 source, 2 source)
+                            if ((word >> 30) & 1) == 0 {
+                                // X0X11010_110XXXXX_XXXXXXXX_XXXXXXXX
+                                // Data-processing (2 source)
+                                unimplemented!();
+                            } else {
+                                // X1X11010_110XXXXX_XXXXXXXX_XXXXXXXX
+                                // Data-processing (1 source)
+                                let Rd = (word & 0x1f) as u16;
+                                let Rn = ((word >> 5) & 0x1f) as u16;
+                                let opcode = ((word >> 10) & 0x3f) as u8;
+                                let opcode2 = ((word >> 16) & 0x1f) as u8;
+                                // So ARMv8 ARM only says that 0b00000 has well-defined
+                                // instructions
+                                // however, PAC (added in v8.3) says otherwise.
+                                match opcode2 {
+                                    0b00000 => {
+                                        unimplemented!();
+                                    }
+                                    0b00001 => {
+                                        match opcode {
+                                            0b000000 => {
+                                                inst.opcode = Opcode::PACIA;
+                                                inst.operands = [
+                                                    Operand::Register(SizeCode::X, Rd),
+                                                    Operand::RegisterOrSP(SizeCode::X, Rn),
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                ];
+                                            }
+                                            0b001000 => {
+                                                if Rn != 31 {
+                                                    // technically this is undefined - do some
+                                                    // cores do something with this?
+                                                    inst.opcode = Opcode::Invalid;
+                                                    return None;
+                                                }
+                                                inst.opcode = Opcode::PACIZA;
+                                                inst.operands = [
+                                                    Operand::Register(SizeCode::X, Rd),
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                ];
+                                            }
+                                            _ => {
+                                                inst.opcode = Opcode::Invalid;
+                                            }
+                                        }
+                                    }
+                                    _ => {
+                                        unimplemented!();
+                                    }
+                                }
+                            }
                         },
                         _ => {
                             // Data processing (3 source)
+                            unimplemented!();
                         }
                     }
                 } else {
@@ -1153,12 +1274,37 @@ impl Decodable for Instruction {
                     if (word & 0x01000000) == 0 {
                         // Logical (shifted register)
                         // XXX01010X_...
-                        unreachable!();
+                        let sf = (word >> 31) == 1;
+                        let size = if sf { SizeCode::X } else { SizeCode::W };
+
+                        let opc = (word >> 28) & 6;
+                        let n = (word >> 21) & 1;
+                        inst.opcode = [
+                            Opcode::AND,
+                            Opcode::BIC,
+                            Opcode::ORR,
+                            Opcode::ORN,
+                            Opcode::EOR,
+                            Opcode::EON,
+                            Opcode::ANDS,
+                            Opcode::BICS,
+                        ][(opc | n) as usize];
+
+                        let shift = ((word >> 22) & 3) as u8;
+
+                        let Rd = (word & 0x1f) as u16;
+                        let Rn = ((word >> 5) & 0x1f) as u16;
+                        let imm6 = ((word >> 10) & 0x13) as u8;
+                        let Rm = ((word >> 16) & 0x1f) as u16;
+
+                        inst.operands[0] = Operand::Register(size, Rd);
+                        inst.operands[1] = Operand::Register(size, Rn);
+                        inst.operands[2] = Operand::RegShift(docs::DecodeShift(shift), imm6, size, Rm);
                     } else {
                         // Add/subtract ({shifted,extended} register)
                         // XXX11011X_...
                         // specific instruction is picked by the first two bits..
-                        self.opcode = [
+                        inst.opcode = [
                             Opcode::ADD,
                             Opcode::ADDS,
                             Opcode::SUB,
@@ -1174,7 +1320,7 @@ impl Decodable for Instruction {
                             // opt (bits 22, 23) must be 0
 
                             if (word >> 22) & 0x03 != 0 {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                                 return None;
                             }
 
@@ -1184,11 +1330,11 @@ impl Decodable for Instruction {
                             let option = (word >> 13) & 0x07;
                             let Rm = ((word >> 16) & 0x1f) as u16;
 
-                            self.operands[0] = Operand::Register(size, Rd);
-                            self.operands[1] = Operand::Register(size, Rn);
+                            inst.operands[0] = Operand::Register(size, Rd);
+                            inst.operands[1] = Operand::Register(size, Rn);
 
                             let shift = (imm3 * 16) as u8;
-                            self.operands[2] = match option {
+                            inst.operands[2] = match option {
                                 0b000 => Operand::RegShift(ShiftStyle::UXTB, shift, SizeCode::W, Rm),
                                 0b001 => Operand::RegShift(ShiftStyle::UXTH, shift, SizeCode::W, Rm),
                                 0b010 => Operand::RegShift(ShiftStyle::UXTW, shift, SizeCode::W, Rm),
@@ -1197,14 +1343,14 @@ impl Decodable for Instruction {
                                 0b101 => Operand::RegShift(ShiftStyle::SXTH, shift, SizeCode::W, Rm),
                                 0b110 => Operand::RegShift(ShiftStyle::SXTW, shift, SizeCode::W, Rm),
                                 0b111 => Operand::RegShift(ShiftStyle::SXTX, shift, SizeCode::X, Rm),
-                                _ => { unreachable!(); },
+                                _ => { unreachable!("option is three bits"); },
                             };
                        } else {
                             // shifted form
 
                             let shift = (word >> 22) & 0x03;
                             if shift == 0b11 {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                                 return None;
                             }
 
@@ -1214,18 +1360,18 @@ impl Decodable for Instruction {
                             let Rm = ((word >> 16) & 0x1f) as u16;
 
                             if size == SizeCode::W && imm6 >= 32 {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                                 return None;
                             }
 
-                            self.operands[0] = Operand::Register(size, Rd);
-                            self.operands[1] = Operand::Register(size, Rn);
+                            inst.operands[0] = Operand::Register(size, Rd);
+                            inst.operands[1] = Operand::Register(size, Rn);
 
-                            self.operands[2] = match shift {
+                            inst.operands[2] = match shift {
                                 0b00 => Operand::RegShift(ShiftStyle::LSL, imm6, size, Rm),
                                 0b01 => Operand::RegShift(ShiftStyle::LSR, imm6, size, Rm),
                                 0b10 => Operand::RegShift(ShiftStyle::ASR, imm6, size, Rm),
-                                _ => { unreachable!(); },
+                                _ => { unreachable!("shift is two bits and 0b11 has early test"); },
                             };
                         }
                     }
@@ -1242,25 +1388,24 @@ impl Decodable for Instruction {
                     0b001 => {
                         // PC-rel addressing
                         if word >= 0x80000000 {
-                            self.opcode = Opcode::ADRP;
+                            inst.opcode = Opcode::ADRP;
                             let imm = ((word >> 3) & 0x1ffffc) | ((word >> 29) & 0x3);
-                            self.operands = [
+                            inst.operands = [
                                 Operand::Register(SizeCode::X, (word & 0x1f) as u16),
                                 Operand::Immediate(imm * 0x1000),
                                 Operand::Nothing,
                                 Operand::Nothing
                             ];
                         } else {
-                            self.opcode = Opcode::ADR;
+                            inst.opcode = Opcode::ADR;
                             let imm = ((word >> 3) & 0x1ffffc) | ((word >> 29) & 0x3);
-                            self.operands = [
+                            inst.operands = [
                                 Operand::Register(SizeCode::X, (word & 0x1f) as u16),
                                 Operand::Immediate(imm),
                                 Operand::Nothing,
                                 Operand::Nothing
                             ];
                         };
-
                     }
                     0b010 |
                     0b011 => {
@@ -1271,44 +1416,48 @@ impl Decodable for Instruction {
                         let shift = (word >> 22) & 0x3;
                         let size = match word >> 29 {
                             0b000 => {
-                                self.opcode = Opcode::ADD;
+                                inst.opcode = Opcode::ADD;
                                 SizeCode::W
                             },
                             0b001 => {
-                                self.opcode = Opcode::ADDS;
+                                inst.opcode = Opcode::ADDS;
                                 SizeCode::W
                             },
                             0b010 => {
-                                self.opcode = Opcode::SUB;
+                                inst.opcode = Opcode::SUB;
                                 SizeCode::W
                             },
                             0b011 => {
-                                self.opcode = Opcode::SUBS;
+                                inst.opcode = Opcode::SUBS;
                                 SizeCode::W
                             },
                             0b100 => {
-                                self.opcode = Opcode::ADD;
+                                inst.opcode = Opcode::ADD;
                                 SizeCode::X
                             },
                             0b101 => {
-                                self.opcode = Opcode::ADDS;
+                                inst.opcode = Opcode::ADDS;
                                 SizeCode::X
                             },
                             0b110 => {
-                                self.opcode = Opcode::SUB;
+                                inst.opcode = Opcode::SUB;
                                 SizeCode::X
                             },
                             0b111 => {
-                                self.opcode = Opcode::SUBS;
+                                inst.opcode = Opcode::SUBS;
                                 SizeCode::X
                             },
                             _ => {
-                                unreachable!();
+                                unreachable!("size and opc are three bits");
                             }
                         };
-                        self.operands[0] = Operand::Register(size, Rd as u16);
-                        self.operands[1] = Operand::RegisterOrSP(size, Rn as u16);
-                        self.operands[2] = match shift {
+                        if inst.opcode == Opcode::ADD || inst.opcode == Opcode::SUB {
+                            inst.operands[0] = Operand::RegisterOrSP(size, Rd as u16);
+                        } else {
+                            inst.operands[0] = Operand::Register(size, Rd as u16);
+                        }
+                        inst.operands[1] = Operand::RegisterOrSP(size, Rn as u16);
+                        inst.operands[2] = match shift {
                             0b00 => {
                                 Operand::Immediate(imm12 as u32)
                             },
@@ -1317,12 +1466,12 @@ impl Decodable for Instruction {
                             },
                             0b10 |
                             0b11 => {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                                 return None;
                             }
-                            _ => { unreachable!(); }
+                            _ => { unreachable!("shift is two bits"); }
                         };
-                        self.operands[3] = Operand::Nothing;
+                        inst.operands[3] = Operand::Nothing;
                     }
                     0b100 => {
                         // logical (imm)
@@ -1333,43 +1482,43 @@ impl Decodable for Instruction {
                         let N = (word >> 22) & 1;
                         let size = match word >> 29 {
                             0b000 => {
-                                self.opcode = Opcode::AND;
+                                inst.opcode = Opcode::AND;
                                 SizeCode::W
                             }
                             0b001 => {
-                                self.opcode = Opcode::ORR;
+                                inst.opcode = Opcode::ORR;
                                 SizeCode::W
                             }
                             0b010 => {
-                                self.opcode = Opcode::EOR;
+                                inst.opcode = Opcode::EOR;
                                 SizeCode::W
                             }
                             0b011 => {
-                                self.opcode = Opcode::ANDS;
+                                inst.opcode = Opcode::ANDS;
                                 SizeCode::W
                             }
                             0b100 => {
-                                self.opcode = Opcode::AND;
+                                inst.opcode = Opcode::AND;
                                 SizeCode::X
                             }
                             0b101 => {
-                                self.opcode = Opcode::ORR;
+                                inst.opcode = Opcode::ORR;
                                 SizeCode::X
                             }
                             0b110 => {
-                                self.opcode = Opcode::EOR;
+                                inst.opcode = Opcode::EOR;
                                 SizeCode::X
                             }
                             0b111 => {
-                                self.opcode = Opcode::ANDS;
+                                inst.opcode = Opcode::ANDS;
                                 SizeCode::X
                             }
                             _ => {
-                                unreachable!();
+                                unreachable!("size and opc are three bits");
                             }
                         };
 
-                        self.operands = [
+                        inst.operands = [
                             Operand::Register(size, Rd),
                             Operand::Register(size, Rn),
                             match size {
@@ -1387,54 +1536,54 @@ impl Decodable for Instruction {
                         let size = match word >> 29 {
                             0b000 => {
                                 if hw >= 0x10 {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                 } else {
-                                    self.opcode = Opcode::MOVN;
+                                    inst.opcode = Opcode::MOVN;
                                 }
                                 SizeCode::W
                             },
                             0b001 => {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                                 SizeCode::W
                             }
                             0b010 => {
                                 if hw >= 0x10 {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                 } else {
-                                    self.opcode = Opcode::MOVZ;
+                                    inst.opcode = Opcode::MOVZ;
                                 }
                                 SizeCode::W
                             },
                             0b011 => {
                                 if hw >= 0x10 {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                 } else {
-                                    self.opcode = Opcode::MOVK;
+                                    inst.opcode = Opcode::MOVK;
                                 }
                                 SizeCode::W
                             },
                             0b100 => {
-                                self.opcode = Opcode::MOVN;
+                                inst.opcode = Opcode::MOVN;
                                 SizeCode::X
                             },
                             0b101 => {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                                 SizeCode::X
                             }
                             0b110 => {
-                                self.opcode = Opcode::MOVZ;
+                                inst.opcode = Opcode::MOVZ;
                                 SizeCode::X
                             },
                             0b111 => {
-                                self.opcode = Opcode::MOVK;
+                                inst.opcode = Opcode::MOVK;
                                 SizeCode::X
                             },
                             _ => {
-                                unreachable!();
+                                unreachable!("size and opc are three bits");
                             }
                         };
 
-                        self.operands = [
+                        inst.operands = [
                             Operand::Register(size, Rd as u16),
                             Operand::ImmShift(imm16 as u16, hw as u8),
                             Operand::Nothing,
@@ -1454,66 +1603,66 @@ impl Decodable for Instruction {
                         let size = match sf_opc {
                             0b000 => {
                                 if N == 0 {
-                                    self.opcode = Opcode::SBFM;
+                                    inst.opcode = Opcode::SBFM;
                                 } else {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                 }
                                 SizeCode::W
                             }
                             0b001 => {
                                 if N == 0 {
-                                    self.opcode = Opcode::BFM;
+                                    inst.opcode = Opcode::BFM;
                                 } else {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                 }
                                 SizeCode::W
                             }
                             0b010 => {
                                 if N == 0 {
-                                    self.opcode = Opcode::UBFM;
+                                    inst.opcode = Opcode::UBFM;
                                 } else {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                 }
                                 SizeCode::W
                             }
                             0b011 => {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                                 SizeCode::W
                             }
                             0b100 => {
                                 if N == 1 {
-                                    self.opcode = Opcode::SBFM;
+                                    inst.opcode = Opcode::SBFM;
                                 } else {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                 }
                                 SizeCode::X
                             }
                             0b101 => {
                                 if N == 1 {
-                                    self.opcode = Opcode::SBFM;
+                                    inst.opcode = Opcode::SBFM;
                                 } else {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                 }
                                 SizeCode::X
                             }
                             0b110 => {
                                 if N == 1 {
-                                    self.opcode = Opcode::SBFM;
+                                    inst.opcode = Opcode::SBFM;
                                 } else {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                 }
                                 SizeCode::X
                             }
                             0b111 => {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                                 SizeCode::X
                             }
                             _ => {
-                                unreachable!();
+                                unreachable!("size and opc are three bits");
                             }
                         };
 
-                        self.operands = [
+                        inst.operands = [
                             Operand::Register(size, Rd as u16),
                             Operand::Register(size, Rn as u16),
                             Operand::Immediate(immr as u32),
@@ -1532,20 +1681,20 @@ impl Decodable for Instruction {
 
                         if sf_op21 == 0b000 {
                             if No0 != 0b00 || imms >= 0x10 {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                             } else {
-                                self.opcode = Opcode::EXTR;
+                                inst.opcode = Opcode::EXTR;
                             }
                         } else if sf_op21 == 0b100 {
                             if No0 != 0b10 {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                             } else {
-                                self.opcode = Opcode::EXTR;
+                                inst.opcode = Opcode::EXTR;
                             }
                         } else {
-                            self.opcode = Opcode::Invalid;
+                            inst.opcode = Opcode::Invalid;
                         }
-                        unreachable!("decode Rd: {}, Rn: {}, imms: {}, Rm: {}, No0: {}", Rd, Rn, imms, Rm, No0);
+                        unimplemented!("decode Rd: {}, Rn: {}, imms: {}, Rm: {}, No0: {}", Rd, Rn, imms, Rm, No0);
                     }
                     _ => { unreachable!() }
                 }
@@ -1568,45 +1717,131 @@ impl Decodable for Instruction {
                 println!("Group byte: {:#b}, bits: {:#b}", group_byte, group_bits);
                 match group_bits {
                     0b00000 => {
-                        let Rt = word & 0x1f;
-                        let Rn = (word >> 5) & 0x1f;
-                        let Rt2 = (word >> 10) & 0x1f;
-                        let o0 = word & 0x0080;
-                        let Rs = (word >> 16) & 0x1f;
-                        let Lo1 = word & 0x600000;
+                        let Rt = (word & 0x1f) as u16;
+                        let Rn = ((word >> 5) & 0x1f) as u16;
+                        let Rt2 = ((word >> 10) & 0x1f) as u16;
+                        let o0 = (word & 0x0080) >> 7;
+                        let Rs = ((word >> 16) & 0x1f) as u16;
+                        let Lo1 = (word & 0x600000) >> 21;
                         let size = (word >> 29) & 0x3;
                         // load/store exclusive
                         // o2 == 0
-                        self.opcode = match (size, Lo1, o0) {
-                            (0b00, 0b00, 0b0) => Opcode::STXRB,
-                            (0b00, 0b00, 0b1) => Opcode::STLXRB,
-                            (0b00, 0b10, 0b0) => Opcode::LDXRB,
-                            (0b00, 0b10, 0b1) => Opcode::LDAXRB,
-                            (0b01, 0b00, 0b0) => Opcode::STXRH,
-                            (0b01, 0b00, 0b1) => Opcode::STLXRH,
-                            (0b01, 0b10, 0b0) => Opcode::LDXRH,
-                            (0b01, 0b10, 0b1) => Opcode::LDAXRH,
-                            (0b10, 0b00, 0b0) => Opcode::STXR, // 32-bit
-                            (0b10, 0b00, 0b1) => Opcode::STLXR, // 32-bit
-                            (0b10, 0b01, 0b0) => Opcode::STXP, // 32-bit
-                            (0b10, 0b01, 0b1) => Opcode::STLXP, // 32-bit
-                            (0b10, 0b10, 0b0) => Opcode::LDXR, // 32-bit
-                            (0b10, 0b10, 0b1) => Opcode::LDAXR, // 32-bit
-                            (0b10, 0b11, 0b0) => Opcode::LDXP, // 32-bit
-                            (0b10, 0b11, 0b1) => Opcode::LDAXP, // 32-bit
-                            (0b11, 0b00, 0b0) => Opcode::STXR, // 64-bit
-                            (0b11, 0b00, 0b1) => Opcode::STLXR, // 64-bit
-                            (0b11, 0b01, 0b0) => Opcode::STXP, // 64-bit
-                            (0b11, 0b01, 0b1) => Opcode::STLXP, // 64-bit
-                            (0b11, 0b10, 0b0) => Opcode::LDXR, // 64-bit
-                            (0b11, 0b10, 0b1) => Opcode::LDAXR, // 64-bit
-                            (0b11, 0b11, 0b0) => Opcode::LDXP, // 64-bit
-                            (0b11, 0b11, 0b1) => Opcode::LDAXP, // 64-bit
-                            _ => {
-                                Opcode::Invalid
+                        inst.opcode = match size {
+                            size @ 0b00 |
+                            size @ 0b01 => {
+                                if Lo1 == 0b00 {
+                                    // store ops
+                                    inst.operands = [
+                                        Operand::Register(SizeCode::W, Rs),
+                                        Operand::Register(SizeCode::W, Rt),
+                                        Operand::RegisterOrSP(SizeCode::X, Rn),
+                                        Operand::Nothing,
+                                    ];
+                                } else if Lo1 == 0b10 {
+                                    // load ops
+                                    inst.operands = [
+                                        Operand::Register(SizeCode::W, Rt),
+                                        Operand::RegisterOrSP(SizeCode::X, Rn),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else {
+                                    unreachable!("Lo checked for validity already");
+                                };
+                                if size == 0b00 {
+                                    match (Lo1, o0) {
+                                        (0b00, 0b0) => Opcode::STXRB,
+                                        (0b00, 0b1) => Opcode::STLXRB,
+                                        (0b10, 0b0) => Opcode::LDXRB,
+                                        (0b10, 0b1) => Opcode::LDAXRB,
+                                        _ => {
+                                            inst.opcode = Opcode::Invalid;
+                                            return None;
+                                        }
+                                    }
+                                } else if size == 0b01 {
+                                    match (Lo1, o0) {
+                                        (0b00, 0b0) => Opcode::STXRH,
+                                        (0b00, 0b1) => Opcode::STLXRH,
+                                        (0b10, 0b0) => Opcode::LDXRH,
+                                        (0b10, 0b1) => Opcode::LDAXRH,
+                                        _ => {
+                                            inst.opcode = Opcode::Invalid;
+                                            return None;
+                                        }
+                                    }
+                                } else {
+                                    unreachable!("size was checked to be 0 or 1");
+                                }
                             }
-                        };
-                        unreachable!("Rt: {}, Rn: {}, Rt2: {}, Rs: {}", Rt, Rn, Rt2, Rs);
+                            size @ 0b10 |
+                            size @ 0b11 => {
+                                let size_code = match size {
+                                    0b10 => SizeCode::W,
+                                    0b11 => SizeCode::X,
+                                    _ => { unreachable!("size is already known to be 0b10 or 0b11"); }
+                                };
+
+                                match Lo1 {
+                                    0b00 => {
+                                        inst.operands = [
+                                            Operand::Register(SizeCode::W, Rs),
+                                            Operand::Register(size_code, Rt),
+                                            Operand::RegisterOrSP(SizeCode::X, Rn), // memory operand?
+                                            Operand::Nothing,
+                                        ];
+                                        match o0 {
+                                            0b0 => Opcode::STXR,
+                                            0b1 => Opcode::STLXR,
+                                            _ => { unreachable!("o0 is one bit"); }
+                                        }
+                                    }
+                                    0b01 => {
+                                        inst.operands = [
+                                            Operand::Register(SizeCode::W, Rs),
+                                            Operand::Register(size_code, Rt),
+                                            Operand::Register(size_code, Rt2),
+                                            Operand::RegisterOrSP(SizeCode::X, Rn), // memory operand?
+                                        ];
+                                        match o0 {
+                                            0b0 => Opcode::STXP,
+                                            0b1 => Opcode::STLXP,
+                                            _ => { unreachable!("o0 is one bit"); }
+                                        }
+                                    }
+                                    0b10 => {
+                                        inst.operands = [
+                                            Operand::Register(size_code, Rt),
+                                            Operand::RegisterOrSP(SizeCode::X, Rn), // memory operand?
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                        match o0 {
+                                            0b0 => Opcode::LDXR,
+                                            0b1 => Opcode::LDAXR,
+                                            _ => { unreachable!("o0 is one bit"); }
+                                        }
+                                    }
+                                    0b11 => {
+                                        inst.operands = [
+                                            Operand::Register(size_code, Rt),
+                                            Operand::Register(size_code, Rt2),
+                                            Operand::RegisterOrSP(SizeCode::X, Rn), // memory operand?
+                                            Operand::Nothing,
+                                        ];
+                                        match o0 {
+                                            0b0 => Opcode::LDXP,
+                                            0b1 => Opcode::LDAXP,
+                                            _ => { unreachable!("o0 is one bit"); }
+                                        }
+                                    }
+                                    _ => { unreachable!("Lo1 is two bits"); }
+                                }
+                            }
+                            _ => {
+                                unreachable!("size is two bits");
+                            }
+                        }
                     },
                     0b00001 => {
                         let Rt = (word & 0x1f) as u16;
@@ -1618,8 +1853,15 @@ impl Decodable for Instruction {
                         let size = (word >> 30) & 0x3;
                         // load/store exclusive
                         // o2 == 1
-                        println!("Word: {:#b}", word);
-                        self.opcode = match (size, Lo1, o0) {
+                        // STLRB -> Wt (Rt) Xn|SP (Rn)
+                        // LDARB -> Wt (Rt) Xn|SP (Rn)
+                        // STLRH -> Wt (Rt) Xn|SP (Rn)
+                        // LDARH -> Wt (Rt) Xn|SP (Rn)
+                        // STLR -> Wt (Rt) Xn|SP (Rn)
+                        // LDAR -> Wt (Rt) Xn|SP (Rn)
+                        // STLR -> Wt (Rt) Xn|SP (Rn)
+                        // LDAR -> Wt (Rt) Xn|SP (Rn)
+                        inst.opcode = match (size, Lo1, o0) {
                             (0b00, 0b00, 0b1) => Opcode::STLRB,
                             (0b00, 0b10, 0b1) => Opcode::LDARB,
                             (0b01, 0b00, 0b1) => Opcode::STLRH,
@@ -1629,7 +1871,8 @@ impl Decodable for Instruction {
                             (0b11, 0b00, 0b1) => Opcode::STLR, // 64-bit
                             (0b11, 0b10, 0b1) => Opcode::LDAR, // 64-bit
                             _ => {
-                                Opcode::Invalid
+                                inst.opcode = Opcode::Invalid;
+                                return None;
                             }
                         };
                         let size_code = if size == 0b11 {
@@ -1638,46 +1881,45 @@ impl Decodable for Instruction {
                             SizeCode::W
                         };
 
-                        self.operands = [
+                        inst.operands = [
                             Operand::Register(size_code, Rt),
                             Operand::RegOffset(Rn, 0),
                             Operand::Nothing,
                             Operand::Nothing,
                         ];
-                        unreachable!("Rt: {}, Rn: {}, Rt2: {}, Rs: {}", Rt, Rn, Rt2, Rs);
                     },
                     0b01000 |
                     0b01001 => {
                         // load register (literal)
                         // V == 0
-                        let opc = (word >> 29) & 0x3;
+                        let opc = (word >> 30) & 0x3;
                         let Rt = (word & 0x1f) as u16;
                         let imm19 = (word >> 5) & 0x7fff;
 
                         let size = match opc {
                             0b00 => {
-                                self.opcode = Opcode::LDR;
+                                inst.opcode = Opcode::LDR;
                                 SizeCode::W
                             },
                             0b01 => {
-                                self.opcode = Opcode::LDR;
+                                inst.opcode = Opcode::LDR;
                                 SizeCode::X
                             }
                             0b10 => {
-                                self.opcode = Opcode::LDRSW;
+                                inst.opcode = Opcode::LDRSW;
                                 SizeCode::X
                             }
                             0b11 => {
-                                unreachable!("PRFM is not supported");
+                                unimplemented!("PRFM is not supported");
                             }
                             _ => {
-                                unreachable!();
+                                unreachable!("opc is two bits");
                             }
                         };
 
-                        self.operands = [
+                        inst.operands = [
                             Operand::Register(size, Rt),
-                            Operand::PCOffset(imm19),
+                            Operand::PCOffset(imm19 * 4),
                             Operand::Nothing,
                             Operand::Nothing,
                         ];
@@ -1686,22 +1928,43 @@ impl Decodable for Instruction {
                     0b01101 => {
                         // load register (literal)
                         // V == 1
-                        let opc = (word >> 29) & 0x3;
-                        let Rt = word & 0x1f;
+                        let opc = (word >> 30) & 0x3;
+                        let Rt = (word & 0x1f) as u16;
                         let imm19 = (word >> 5) & 0x7fff;
-                        panic!("C3.3.5 V==1. opc: {}, Rt: {}, imm19: {}", opc, Rt, imm19);
+
+                        let size_code = match opc {
+                            0b00 => SIMDSizeCode::S,
+                            0b01 => SIMDSizeCode::D,
+                            0b10 => SIMDSizeCode::Q,
+                            0b11 => {
+                                // 11011100_XXXXXXXX_XXXXXXXX_XXXXXXXX
+                                inst.opcode = Opcode::Invalid;
+                                return None;
+                            }
+                            _ => {
+                                unreachable!("opc is two bits");
+                            }
+                        };
+
+                        inst.opcode = Opcode::LDR;
+                        inst.operands = [
+                            Operand::SIMDRegister(size_code, Rt),
+                            Operand::PCOffset(imm19 * 4),
+                            Operand::Nothing,
+                            Operand::Nothing,
+                        ];
                     },
                     0b10000 => {
                         // load/store no-allocate pair (offset)
                         // V == 0
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        panic!("C3.3.7 V==0, opc_L: {}", opc_L);
+                        unimplemented!("C3.3.7 V==0, opc_L: {}", opc_L);
                     },
                     0b10100 => {
                         // load/store no-allocate pair (offset)
                         // V == 1
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        panic!("C3.3.7 V==1, opc_L: {}", opc_L);
+                        unimplemented!("C3.3.7 V==1, opc_L: {}", opc_L);
                     },
                     0b10001 => {
                         // load/store register pair (post-indexed)
@@ -1713,42 +1976,42 @@ impl Decodable for Instruction {
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
                         let size = match opc_L {
                             0b000 => {
-                                self.opcode = Opcode::STP;
+                                inst.opcode = Opcode::STP;
                                 imm7 <<= 2;
                                 SizeCode::W
                             },
                             0b001 => {
-                                self.opcode = Opcode::LDP;
+                                inst.opcode = Opcode::LDP;
                                 imm7 <<= 2;
                                 SizeCode::W
                             },
                             0b010 => {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                                 SizeCode::W
                             },
                             0b011 => {
-                                self.opcode = Opcode::LDPSW;
+                                inst.opcode = Opcode::LDPSW;
                                 imm7 <<= 2;
                                 SizeCode::W
                             },
                             0b100 => {
-                                self.opcode = Opcode::STP;
+                                inst.opcode = Opcode::STP;
                                 imm7 <<= 3;
                                 SizeCode::X
                             },
                             0b101 => {
-                                self.opcode = Opcode::LDP;
+                                inst.opcode = Opcode::LDP;
                                 imm7 <<= 3;
                                 SizeCode::X
                             },
                             0b110 |
                             0b111 => {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                                 SizeCode::X
                             }
-                            _ => { unreachable!(); }
+                            _ => { unreachable!("opc and L are three bits"); }
                         };
-                        self.operands = [
+                        inst.operands = [
                             Operand::Register(size, Rt),
                             Operand::Register(size, Rt2),
                             Operand::RegPostIndex(Rn, imm7),
@@ -1759,7 +2022,7 @@ impl Decodable for Instruction {
                         // load/store register pair (post-indexed)
                         // V == 1
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        panic!("C3.3.15 V==1, opc_L: {}", opc_L);
+                        unreachable!("C3.3.15 V==1, opc_L: {}", opc_L);
                     },
                     0b10010 => {
                         // load/store register pair (offset)
@@ -1771,42 +2034,42 @@ impl Decodable for Instruction {
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
                         let size = match opc_L {
                             0b000 => {
-                                self.opcode = Opcode::STP;
+                                inst.opcode = Opcode::STP;
                                 imm7 <<= 2;
                                 SizeCode::W
                             },
                             0b001 => {
-                                self.opcode = Opcode::LDP;
+                                inst.opcode = Opcode::LDP;
                                 imm7 <<= 2;
                                 SizeCode::W
                             },
                             0b010 => {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                                 SizeCode::W
                             },
                             0b011 => {
-                                self.opcode = Opcode::LDPSW;
+                                inst.opcode = Opcode::LDPSW;
                                 imm7 <<= 2;
                                 SizeCode::W
                             },
                             0b100 => {
-                                self.opcode = Opcode::STP;
+                                inst.opcode = Opcode::STP;
                                 imm7 <<= 3;
                                 SizeCode::X
                             },
                             0b101 => {
-                                self.opcode = Opcode::LDP;
+                                inst.opcode = Opcode::LDP;
                                 imm7 <<= 3;
                                 SizeCode::X
                             },
                             0b110 |
                             0b111 => {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                                 SizeCode::X
                             }
-                            _ => { unreachable!(); }
+                            _ => { unreachable!("opc and L are three bits"); }
                         };
-                        self.operands = [
+                        inst.operands = [
                             Operand::Register(size, Rt),
                             Operand::Register(size, Rt2),
                             Operand::RegOffset(Rn, imm7),
@@ -1817,7 +2080,7 @@ impl Decodable for Instruction {
                         // load/store register pair (offset)
                         // V == 1
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        panic!("C3.3.14 V==1, opc_L: {}", opc_L);
+                        unimplemented!("C3.3.14 V==1, opc_L: {}", opc_L);
                     },
                     0b10011 => {
                         // load/store register pair (pre-indexed)
@@ -1829,42 +2092,42 @@ impl Decodable for Instruction {
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
                         let size = match opc_L {
                             0b000 => {
-                                self.opcode = Opcode::STP;
+                                inst.opcode = Opcode::STP;
                                 imm7 <<= 2;
                                 SizeCode::W
                             },
                             0b001 => {
-                                self.opcode = Opcode::LDP;
+                                inst.opcode = Opcode::LDP;
                                 imm7 <<= 2;
                                 SizeCode::W
                             },
                             0b010 => {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                                 SizeCode::W
                             },
                             0b011 => {
-                                self.opcode = Opcode::LDPSW;
+                                inst.opcode = Opcode::LDPSW;
                                 imm7 <<= 2;
                                 SizeCode::W
                             },
                             0b100 => {
-                                self.opcode = Opcode::STP;
+                                inst.opcode = Opcode::STP;
                                 imm7 <<= 3;
                                 SizeCode::X
                             },
                             0b101 => {
-                                self.opcode = Opcode::LDP;
+                                inst.opcode = Opcode::LDP;
                                 imm7 <<= 3;
                                 SizeCode::X
                             },
                             0b110 |
                             0b111 => {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                                 SizeCode::X
                             }
-                            _ => { unreachable!(); }
+                            _ => { unreachable!("opc and L are three bits"); }
                         };
-                        self.operands = [
+                        inst.operands = [
                             Operand::Register(size, Rt),
                             Operand::Register(size, Rt2),
                             Operand::RegPreIndex(Rn, imm7),
@@ -1875,7 +2138,7 @@ impl Decodable for Instruction {
                         // load/store register pair (pre-indexed)
                         // V == 1
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        panic!("C3.3.16 V==1, opc_L: {}", opc_L);
+                        unimplemented!("C3.3.16 V==1, opc_L: {}", opc_L);
                     },
                     0b11000 |
                     0b11001 => {
@@ -1891,78 +2154,78 @@ impl Decodable for Instruction {
                         println!("load/store: size_opc: {:#b}, category: {:#b}", size_opc, category);
                         if word & 0x200000 != 0 {
                             if category != 0b10 {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                                 return Some(());
                             } else {
                                 // Load/store register (register offset)
                                 // C3.3.10
                                 let size = match size_opc {
                                     0b0000 => {
-                                        self.opcode = Opcode::STRB;
+                                        inst.opcode = Opcode::STRB;
                                         SizeCode::W
                                     },
                                     0b0001 => {
-                                        self.opcode = Opcode::LDRB;
+                                        inst.opcode = Opcode::LDRB;
                                         SizeCode::W
                                     },
                                     0b0010 => {
-                                        self.opcode = Opcode::LDRSB;
+                                        inst.opcode = Opcode::LDRSB;
                                         SizeCode::X
                                     },
                                     0b0011 => {
-                                        self.opcode = Opcode::LDRSB;
+                                        inst.opcode = Opcode::LDRSB;
                                         SizeCode::W
                                     },
                                     0b0100 => {
-                                        self.opcode = Opcode::STRH;
+                                        inst.opcode = Opcode::STRH;
                                         SizeCode::W
                                     },
                                     0b0101 => {
-                                        self.opcode = Opcode::LDRH;
+                                        inst.opcode = Opcode::LDRH;
                                         SizeCode::W
                                     },
                                     0b0110 => {
-                                        self.opcode = Opcode::LDRSH;
+                                        inst.opcode = Opcode::LDRSH;
                                         SizeCode::X
                                     },
                                     0b0111 => {
-                                        self.opcode = Opcode::LDRSH;
+                                        inst.opcode = Opcode::LDRSH;
                                         SizeCode::W
                                     },
                                     0b1000 => {
-                                        self.opcode = Opcode::STR;
+                                        inst.opcode = Opcode::STR;
                                         SizeCode::W
                                     },
                                     0b1001 => {
-                                        self.opcode = Opcode::LDR;
+                                        inst.opcode = Opcode::LDR;
                                         SizeCode::W
                                     },
                                     0b1010 => {
-                                        self.opcode = Opcode::LDRSW;
+                                        inst.opcode = Opcode::LDRSW;
                                         SizeCode::X
                                     },
                                     0b1011 => {
-                                        self.opcode = Opcode::Invalid;
+                                        inst.opcode = Opcode::Invalid;
                                         SizeCode::X
                                     },
                                     0b1100 => {
-                                        self.opcode = Opcode::STR;
+                                        inst.opcode = Opcode::STR;
                                         SizeCode::X
                                     },
                                     0b1101 => {
-                                        self.opcode = Opcode::LDR;
+                                        inst.opcode = Opcode::LDR;
                                         SizeCode::X
                                     },
                                     0b1110 => {
-                                        panic!("PRFM is not supported yet");
-//                                        self.opcode = Opcode::PRFM;
+                                        unimplemented!("PRFM is not supported yet");
+//                                        inst.opcode = Opcode::PRFM;
 //                                        SizeCode::X
                                     },
                                     0b1111 => {
-                                        self.opcode = Opcode::Invalid;
+                                        inst.opcode = Opcode::Invalid;
                                         SizeCode::X
                                     },
-                                    _ => { unreachable!(); }
+                                    _ => { unreachable!("size and opc are four bits"); }
                                 };
 
                                 let S = ((word >> 12) & 0x1) as u8;
@@ -1972,33 +2235,33 @@ impl Decodable for Instruction {
                                 let index_size = match option & 0x3 {
                                     0b00 |
                                     0b01 => {
-                                        self.opcode = Opcode::Invalid;
+                                        inst.opcode = Opcode::Invalid;
                                         return Some(());
                                     },
                                     0b10 => { SizeCode::W }
                                     0b11 => { SizeCode::X }
-                                    _ => { unreachable!(); }
+                                    _ => { unreachable!("option is two bits"); }
                                 };
 
                                 let shift_style = match option {
                                     0b000 |
                                     0b001 => {
-                                        self.opcode = Opcode::Invalid;
+                                        inst.opcode = Opcode::Invalid;
                                         return Some(());
                                     },
                                     0b010 => { ShiftStyle::UXTW },
                                     0b011 => { ShiftStyle::LSL },
                                     0b100 |
                                     0b101 => {
-                                        self.opcode = Opcode::Invalid;
+                                        inst.opcode = Opcode::Invalid;
                                         return Some(());
                                     },
                                     0b110 => { ShiftStyle::SXTW },
                                     0b111 => { ShiftStyle::SXTX },
-                                    _ => { unreachable!(); }
+                                    _ => { unreachable!("option is three bits"); }
                                 };
 
-                                self.operands = [
+                                inst.operands = [
                                     Operand::Register(size, Rt),
                                     Operand::RegRegOffset(Rn, index_size, Rm, shift_style, S),
                                     Operand::Nothing,
@@ -2012,74 +2275,74 @@ impl Decodable for Instruction {
                                     // Load/store register (unscaled immediate)
                                     let size = match size_opc {
                                         0b0000 => {
-                                            self.opcode = Opcode::STURB;
+                                            inst.opcode = Opcode::STURB;
                                             SizeCode::W
                                         }
                                         0b0001 => {
-                                            self.opcode = Opcode::LDURB;
+                                            inst.opcode = Opcode::LDURB;
                                             SizeCode::W
                                         }
                                         0b0010 => {
-                                            self.opcode = Opcode::LDURSB;
+                                            inst.opcode = Opcode::LDURSB;
                                             SizeCode::X
                                         }
                                         0b0011 => {
-                                            self.opcode = Opcode::LDURSB;
+                                            inst.opcode = Opcode::LDURSB;
                                             SizeCode::W
                                         }
                                         0b0100 => {
-                                            self.opcode = Opcode::STURH;
+                                            inst.opcode = Opcode::STURH;
                                             SizeCode::W
                                         }
                                         0b0101 => {
-                                            self.opcode = Opcode::LDURH;
+                                            inst.opcode = Opcode::LDURH;
                                             SizeCode::W
                                         }
                                         0b0110 => {
-                                            self.opcode = Opcode::LDURSH;
+                                            inst.opcode = Opcode::LDURSH;
                                             SizeCode::X
                                         }
                                         0b0111 => {
-                                            self.opcode = Opcode::LDURSH;
+                                            inst.opcode = Opcode::LDURSH;
                                             SizeCode::W
                                         }
                                         0b1000 => {
-                                            self.opcode = Opcode::STUR;
+                                            inst.opcode = Opcode::STUR;
                                             SizeCode::W
                                         }
                                         0b1001 => {
-                                            self.opcode = Opcode::LDUR;
+                                            inst.opcode = Opcode::LDUR;
                                             SizeCode::W
                                         }
                                         0b1010 => {
-                                            self.opcode = Opcode::LDURSW;
+                                            inst.opcode = Opcode::LDURSW;
                                             SizeCode::X
                                         }
                                         0b1011 => {
-                                            self.opcode = Opcode::Invalid;
+                                            inst.opcode = Opcode::Invalid;
                                             SizeCode::W
                                         }
                                         0b1100 => {
-                                            self.opcode = Opcode::STUR;
+                                            inst.opcode = Opcode::STUR;
                                             SizeCode::X
                                         }
                                         0b1101 => {
-                                            self.opcode = Opcode::LDUR;
+                                            inst.opcode = Opcode::LDUR;
                                             SizeCode::X
                                         }
                                         0b1110 => {
-                                            panic!("PRFUM not handled yet");
+                                            unimplemented!("PRFUM not handled yet");
                                         },
                                         0b1111 => {
-                                            self.opcode = Opcode::Invalid;
+                                            inst.opcode = Opcode::Invalid;
                                             SizeCode::W
                                         }
                                         _ => {
-                                            unreachable!();
+                                            unreachable!("size and opc are four bits");
                                         }
                                     };
 
-                                    self.operands = [
+                                    inst.operands = [
                                         Operand::Register(size, Rt),
                                         Operand::RegOffset(Rn, imm9),
                                         Operand::Nothing,
@@ -2091,72 +2354,72 @@ impl Decodable for Instruction {
 
                                     let size = match size_opc {
                                         0b0000 => {
-                                            self.opcode = Opcode::STTRB;
+                                            inst.opcode = Opcode::STTRB;
                                             SizeCode::W
                                         }
                                         0b0001 => {
-                                            self.opcode = Opcode::LDTRB;
+                                            inst.opcode = Opcode::LDTRB;
                                             SizeCode::W
                                         }
                                         0b0010 => {
-                                            self.opcode = Opcode::LDTRSB;
+                                            inst.opcode = Opcode::LDTRSB;
                                             SizeCode::X
                                         }
                                         0b0011 => {
-                                            self.opcode = Opcode::LDTRSB;
+                                            inst.opcode = Opcode::LDTRSB;
                                             SizeCode::W
                                         }
                                         0b0100 => {
-                                            self.opcode = Opcode::STTRH;
+                                            inst.opcode = Opcode::STTRH;
                                             SizeCode::W
                                         }
                                         0b0101 => {
-                                            self.opcode = Opcode::LDTRH;
+                                            inst.opcode = Opcode::LDTRH;
                                             SizeCode::W
                                         }
                                         0b0110 => {
-                                            self.opcode = Opcode::LDTRSH;
+                                            inst.opcode = Opcode::LDTRSH;
                                             SizeCode::X
                                         }
                                         0b0111 => {
-                                            self.opcode = Opcode::LDTRSH;
+                                            inst.opcode = Opcode::LDTRSH;
                                             SizeCode::W
                                         }
                                         0b1000 => {
-                                            self.opcode = Opcode::STTR;
+                                            inst.opcode = Opcode::STTR;
                                             SizeCode::W
                                         }
                                         0b1001 => {
-                                            self.opcode = Opcode::LDTR;
+                                            inst.opcode = Opcode::LDTR;
                                             SizeCode::W
                                         }
                                         0b1010 => {
-                                            self.opcode = Opcode::LDTRSW;
+                                            inst.opcode = Opcode::LDTRSW;
                                             SizeCode::X
                                         }
                                         0b1011 => {
-                                            self.opcode = Opcode::Invalid;
+                                            inst.opcode = Opcode::Invalid;
                                             SizeCode::W
                                         }
                                         0b1100 => {
-                                            self.opcode = Opcode::STTR;
+                                            inst.opcode = Opcode::STTR;
                                             SizeCode::X
                                         }
                                         0b1101 => {
-                                            self.opcode = Opcode::LDTR;
+                                            inst.opcode = Opcode::LDTR;
                                             SizeCode::X
                                         }
                                         0b1110 |
                                         0b1111 => {
-                                            self.opcode = Opcode::Invalid;
+                                            inst.opcode = Opcode::Invalid;
                                             SizeCode::W
                                         }
                                         _ => {
-                                            unreachable!();
+                                            unreachable!("size and opc are four bits");
                                         }
                                     };
 
-                                    self.operands = [
+                                    inst.operands = [
                                         Operand::Register(size, Rt),
                                         Operand::RegPreIndex(Rn, imm9),
                                         Operand::Nothing,
@@ -2167,69 +2430,69 @@ impl Decodable for Instruction {
                                 0b11 => {
                                     let size = match size_opc {
                                         0b0000 => {
-                                            self.opcode = Opcode::STRB;
+                                            inst.opcode = Opcode::STRB;
                                             SizeCode::W
                                         },
                                         0b0001 => {
-                                            self.opcode = Opcode::LDRB;
+                                            inst.opcode = Opcode::LDRB;
                                             SizeCode::W
                                         }
                                         0b0010 => {
-                                            self.opcode = Opcode::LDRSB;
+                                            inst.opcode = Opcode::LDRSB;
                                             SizeCode::X
                                         }
                                         0b0011 => {
-                                            self.opcode = Opcode::LDRSB;
+                                            inst.opcode = Opcode::LDRSB;
                                             SizeCode::W
                                         }
                                         0b0100 => {
-                                            self.opcode = Opcode::STRH;
+                                            inst.opcode = Opcode::STRH;
                                             SizeCode::W
                                         }
                                         0b0101 => {
-                                            self.opcode = Opcode::LDRH;
+                                            inst.opcode = Opcode::LDRH;
                                             SizeCode::W
                                         }
                                         0b0110 => {
-                                            self.opcode = Opcode::LDRSH;
+                                            inst.opcode = Opcode::LDRSH;
                                             SizeCode::X
                                         }
                                         0b0111 => {
-                                            self.opcode = Opcode::LDRSH;
+                                            inst.opcode = Opcode::LDRSH;
                                             SizeCode::W
                                         }
                                         0b1000 => {
-                                            self.opcode = Opcode::STR;
+                                            inst.opcode = Opcode::STR;
                                             SizeCode::W
                                         }
                                         0b1001 => {
-                                            self.opcode = Opcode::LDR;
+                                            inst.opcode = Opcode::LDR;
                                             SizeCode::W
                                         }
                                         0b1010 |
                                         0b1011 => {
-                                            self.opcode = Opcode::Invalid;
+                                            inst.opcode = Opcode::Invalid;
                                             SizeCode::W
                                         }
                                         0b1100 => {
-                                            self.opcode = Opcode::STR;
+                                            inst.opcode = Opcode::STR;
                                             SizeCode::X
                                         }
                                         0b1101 => {
-                                            self.opcode = Opcode::LDR;
+                                            inst.opcode = Opcode::LDR;
                                             SizeCode::X
                                         }
                                         0b1110 |
                                         0b1111 => {
-                                            self.opcode = Opcode::Invalid;
+                                            inst.opcode = Opcode::Invalid;
                                             SizeCode::X
                                         }
                                         _ => {
-                                            unreachable!();
+                                            unreachable!("size and opc are four bits");
                                         }
                                     };
 
-                                    self.operands = [
+                                    inst.operands = [
                                         Operand::Register(size, Rt),
                                         if category == 0b01 {
                                             Operand::RegPostIndex(Rn, imm9)
@@ -2241,7 +2504,7 @@ impl Decodable for Instruction {
                                     ];
                                 },
                                 _ => {
-                                    unreachable!();
+                                    unreachable!("category is two bits");
                                 }
                             }
                         }
@@ -2253,6 +2516,7 @@ impl Decodable for Instruction {
                          * unprivileged, immediate pre-indexd, register offset}
                          * V == 1
                          */
+                        unimplemented!("load/store register (unscaled immediate), load/store register (immediate post-indexed), V==1");
                     }
                     0b11010 |
                     0b11011 => {
@@ -2264,8 +2528,8 @@ impl Decodable for Instruction {
                         let size_opc = ((word >> 22) & 0x3) | ((word >> 28) & 0xc);
                         match size_opc {
                             0b0000 => {
-                                self.opcode = Opcode::STRB;
-                                self.operands = [
+                                inst.opcode = Opcode::STRB;
+                                inst.operands = [
                                     Operand::Register(SizeCode::W, Rt),
                                     Operand::RegOffset(Rn, imm12),
                                     Operand::Nothing,
@@ -2273,8 +2537,8 @@ impl Decodable for Instruction {
                                 ];
                             }
                             0b0001 => {
-                                self.opcode = Opcode::LDRB;
-                                self.operands = [
+                                inst.opcode = Opcode::LDRB;
+                                inst.operands = [
                                     Operand::Register(SizeCode::W, Rt),
                                     Operand::RegOffset(Rn, imm12),
                                     Operand::Nothing,
@@ -2282,8 +2546,8 @@ impl Decodable for Instruction {
                                 ];
                             }
                             0b0010 => {
-                                self.opcode = Opcode::LDRSB;
-                                self.operands = [
+                                inst.opcode = Opcode::LDRSB;
+                                inst.operands = [
                                     Operand::Register(SizeCode::X, Rt),
                                     Operand::RegOffset(Rn, imm12),
                                     Operand::Nothing,
@@ -2291,8 +2555,8 @@ impl Decodable for Instruction {
                                 ];
                             }
                             0b0011 => {
-                                self.opcode = Opcode::LDRSB;
-                                self.operands = [
+                                inst.opcode = Opcode::LDRSB;
+                                inst.operands = [
                                     Operand::Register(SizeCode::W, Rt),
                                     Operand::RegOffset(Rn, imm12),
                                     Operand::Nothing,
@@ -2300,8 +2564,8 @@ impl Decodable for Instruction {
                                 ];
                             }
                             0b0100 => {
-                                self.opcode = Opcode::STRH;
-                                self.operands = [
+                                inst.opcode = Opcode::STRH;
+                                inst.operands = [
                                     Operand::Register(SizeCode::W, Rt),
                                     Operand::RegOffset(Rn, imm12 << 1),
                                     Operand::Nothing,
@@ -2309,8 +2573,8 @@ impl Decodable for Instruction {
                                 ];
                             }
                             0b0101 => {
-                                self.opcode = Opcode::LDRH;
-                                self.operands = [
+                                inst.opcode = Opcode::LDRH;
+                                inst.operands = [
                                     Operand::Register(SizeCode::W, Rt),
                                     Operand::RegOffset(Rn, imm12 << 1),
                                     Operand::Nothing,
@@ -2318,8 +2582,8 @@ impl Decodable for Instruction {
                                 ];
                             }
                             0b0110 => {
-                                self.opcode = Opcode::LDRSH;
-                                self.operands = [
+                                inst.opcode = Opcode::LDRSH;
+                                inst.operands = [
                                     Operand::Register(SizeCode::X, Rt),
                                     Operand::RegOffset(Rn, imm12 << 1),
                                     Operand::Nothing,
@@ -2327,8 +2591,8 @@ impl Decodable for Instruction {
                                 ];
                             }
                             0b0111 => {
-                                self.opcode = Opcode::LDRSH;
-                                self.operands = [
+                                inst.opcode = Opcode::LDRSH;
+                                inst.operands = [
                                     Operand::Register(SizeCode::W, Rt),
                                     Operand::RegOffset(Rn, imm12 << 1),
                                     Operand::Nothing,
@@ -2336,8 +2600,8 @@ impl Decodable for Instruction {
                                 ];
                             }
                             0b1000 => {
-                                self.opcode = Opcode::STR;
-                                self.operands = [
+                                inst.opcode = Opcode::STR;
+                                inst.operands = [
                                     Operand::Register(SizeCode::W, Rt),
                                     Operand::RegOffset(Rn, imm12 << 2),
                                     Operand::Nothing,
@@ -2345,8 +2609,8 @@ impl Decodable for Instruction {
                                 ];
                             }
                             0b1001 => {
-                                self.opcode = Opcode::LDR;
-                                self.operands = [
+                                inst.opcode = Opcode::LDR;
+                                inst.operands = [
                                     Operand::Register(SizeCode::W, Rt),
                                     Operand::RegOffset(Rn, imm12 << 2),
                                     Operand::Nothing,
@@ -2354,18 +2618,18 @@ impl Decodable for Instruction {
                                 ];
                             }
                             0b1010 => {
-                                self.opcode = Opcode::LDRSW;
-                                self.operands = [
+                                inst.opcode = Opcode::LDRSW;
+                                inst.operands = [
                                     Operand::Register(SizeCode::X, Rt),
                                     Operand::RegOffset(Rn, imm12 << 2),
                                     Operand::Nothing,
                                     Operand::Nothing,
                                 ];
                             }
-                            0b1011 => { self.opcode = Opcode::Invalid; }
+                            0b1011 => { inst.opcode = Opcode::Invalid; }
                             0b1100 => {
-                                self.opcode = Opcode::STR;
-                                self.operands = [
+                                inst.opcode = Opcode::STR;
+                                inst.operands = [
                                     Operand::Register(SizeCode::X, Rt),
                                     Operand::RegOffset(Rn, imm12 << 3),
                                     Operand::Nothing,
@@ -2373,8 +2637,8 @@ impl Decodable for Instruction {
                                 ];
                             }
                             0b1101 => {
-                                self.opcode = Opcode::LDR;
-                                self.operands = [
+                                inst.opcode = Opcode::LDR;
+                                inst.operands = [
                                     Operand::Register(SizeCode::X, Rt),
                                     Operand::RegOffset(Rn, imm12 << 3),
                                     Operand::Nothing,
@@ -2382,31 +2646,36 @@ impl Decodable for Instruction {
                                 ];
                             }
                             0b1110 => {
-                                unreachable!("PRFM not yet supported");
+                                unimplemented!("PRFM not yet supported");
                             }
-                            0b1111 => { self.opcode = Opcode::Invalid; }
-                            _ => { unreachable!(); }
+                            0b1111 => { inst.opcode = Opcode::Invalid; }
+                            _ => { unreachable!("size and opc are four bits"); }
                         }
                     },
                     0b11110 |
                     0b11111 => {
                         // load/store register (unsigned immediate)
                         // V == 1
+                        unimplemented!("load/store register (unsigned immediate) V==1");
                     },
                     0b00100 => {
                         // AdvSIMD load/store multiple structures
+                        unimplemented!("AdvSIMD load/store multiple structures");
                     },
                     0b00101 => {
                         // AdvSIMD load/store multiple structures (post-indexed)
+                        unimplemented!("AdvSIMD load/store multiple structures (post-indexed)");
                     },
                     0b00110 => {
                         // AdvSIMD load/store single structure
+                        unimplemented!("AdvSIMD load/store single structure");
                     },
                     0b00111 => {
                         // AdvSIMD load/store single structure (post-indexed)
+                        unimplemented!("AdvSIMD load/store single structures (post-indexed)");
                     }
                     _ => {
-                        self.opcode = Opcode::Invalid;
+                        inst.opcode = Opcode::Invalid;
                     }
                 }
             },
@@ -2417,8 +2686,8 @@ impl Decodable for Instruction {
                     0b00001 |
                     0b00010 |
                     0b00011 => { // unconditional branch (imm)
-                        self.opcode = Opcode::B;
-                        self.operands = [
+                        inst.opcode = Opcode::B;
+                        inst.operands = [
                             Operand::Offset((word & 0x01ffffff) << 2),
                             Operand::Nothing,
                             Operand::Nothing,
@@ -2426,10 +2695,10 @@ impl Decodable for Instruction {
                         ];
                     },
                     0b00100 => { // compare branch (imm)
-                        self.opcode = Opcode::CBZ;
+                        inst.opcode = Opcode::CBZ;
                         let imm = (word >> 3) & 0x001ffffc;
                         let Rt = word & 0x1f;
-                        self.operands = [
+                        inst.operands = [
                             Operand::Register(SizeCode::W, Rt as u16),
                             Operand::Offset(imm),
                             Operand::Nothing,
@@ -2437,10 +2706,10 @@ impl Decodable for Instruction {
                         ];
                     },
                     0b00101 => { // compare branch (imm)
-                        self.opcode = Opcode::CBNZ;
+                        inst.opcode = Opcode::CBNZ;
                         let imm = (word >> 3) & 0x001ffffc;
                         let Rt = word & 0x1f;
-                        self.operands = [
+                        inst.operands = [
                             Operand::Register(SizeCode::W, Rt as u16),
                             Operand::Offset(imm),
                             Operand::Nothing,
@@ -2451,8 +2720,8 @@ impl Decodable for Instruction {
                         let imm = (word >> 3) & 0x0003fffc;
                         let b = (word >> 19) & 0x1f;
                         let Rt = word & 0x1f;
-                        self.opcode = Opcode::TBZ;
-                        self.operands = [
+                        inst.opcode = Opcode::TBZ;
+                        inst.operands = [
                             Operand::Register(SizeCode::W, Rt as u16),
                             Operand::Imm16(b as u16),
                             Operand::Offset(imm),
@@ -2463,8 +2732,8 @@ impl Decodable for Instruction {
                         let imm = (word >> 3) & 0x0003fffc;
                         let b = (word >> 19) & 0x1f;
                         let Rt = word & 0x1f;
-                        self.opcode = Opcode::TBNZ;
-                        self.operands = [
+                        inst.opcode = Opcode::TBNZ;
+                        inst.operands = [
                             Operand::Register(SizeCode::W, Rt as u16),
                             Operand::Imm16(b as u16),
                             Operand::Offset(imm),
@@ -2474,8 +2743,8 @@ impl Decodable for Instruction {
                     0b01000 => { // conditional branch (imm)
                         let imm = (word >> 3) & 0x001ffffc;
                         let cond = word & 0x0f;
-                        self.opcode = Opcode::Bcc(cond as u8);
-                        self.operands = [
+                        inst.opcode = Opcode::Bcc(cond as u8);
+                        inst.operands = [
                             Operand::Offset(imm),
                             Operand::Nothing,
                             Operand::Nothing,
@@ -2483,15 +2752,15 @@ impl Decodable for Instruction {
                         ];
                     }
                     0b01001 => { // conditional branch (imm)
-                        self.opcode = Opcode::Invalid;
+                        inst.opcode = Opcode::Invalid;
                     }
                     /* 0b01010 to 0b01111 seem all invalid? */
                     0b10000 |
                     0b10001 |
                     0b10010 |
                     0b10011 => { // unconditional branch (imm)
-                        self.opcode = Opcode::BL;
-                        self.operands = [
+                        inst.opcode = Opcode::BL;
+                        inst.operands = [
                             Operand::Offset((word & 0x01ffffff) << 2),
                             Operand::Nothing,
                             Operand::Nothing,
@@ -2499,10 +2768,10 @@ impl Decodable for Instruction {
                         ];
                     },
                     0b10100 => { // compare branch (imm)
-                        self.opcode = Opcode::CBZ;
+                        inst.opcode = Opcode::CBZ;
                         let imm = (word >> 3) & 0x001ffffc;
                         let Rt = word & 0x1f;
-                        self.operands = [
+                        inst.operands = [
                             Operand::Register(SizeCode::X, Rt as u16),
                             Operand::Offset(imm),
                             Operand::Nothing,
@@ -2510,10 +2779,10 @@ impl Decodable for Instruction {
                         ];
                     },
                     0b10101 => { // compare branch (imm)
-                        self.opcode = Opcode::CBNZ;
+                        inst.opcode = Opcode::CBNZ;
                         let imm = (word >> 3) & 0x001ffffc;
                         let Rt = word & 0x1f;
-                        self.operands = [
+                        inst.operands = [
                             Operand::Register(SizeCode::X, Rt as u16),
                             Operand::Offset(imm),
                             Operand::Nothing,
@@ -2524,8 +2793,8 @@ impl Decodable for Instruction {
                         let imm = (word >> 3) & 0x0003fffc;
                         let b = (word >> 19) & 0x1f;
                         let Rt = word & 0x1f;
-                        self.opcode = Opcode::TBZ;
-                        self.operands = [
+                        inst.opcode = Opcode::TBZ;
+                        inst.operands = [
                             Operand::Register(SizeCode::X, Rt as u16),
                             Operand::Imm16((b as u16) | 0x20),
                             Operand::Offset(imm),
@@ -2536,8 +2805,8 @@ impl Decodable for Instruction {
                         let imm = (word >> 3) & 0x0003fffc;
                         let b = (word >> 19) & 0x1f;
                         let Rt = word & 0x1f;
-                        self.opcode = Opcode::TBNZ;
-                        self.operands = [
+                        inst.opcode = Opcode::TBNZ;
+                        inst.operands = [
                             Operand::Register(SizeCode::X, Rt as u16),
                             Operand::Imm16((b as u16) | 0x20),
                             Operand::Offset(imm),
@@ -2550,35 +2819,35 @@ impl Decodable for Instruction {
                         let opc = (word >> 21) & 0x7;
                         match (opc, op2, ll) {
                             (0b000, 0b000, 0b01) => {
-                                self.opcode = Opcode::SVC;
+                                inst.opcode = Opcode::SVC;
                             }
                             (0b000, 0b000, 0b10) => {
-                                self.opcode = Opcode::HVC;
+                                inst.opcode = Opcode::HVC;
                             }
                             (0b000, 0b000, 0b11) => {
-                                self.opcode = Opcode::SMC;
+                                inst.opcode = Opcode::SMC;
                             }
                             (0b001, 0b000, 0b00) => {
-                                self.opcode = Opcode::BRK;
+                                inst.opcode = Opcode::BRK;
                             }
                             (0b010, 0b000, 0b00) => {
-                                self.opcode = Opcode::HLT;
+                                inst.opcode = Opcode::HLT;
                             }
                             (0b101, 0b000, 0b01) => {
-                                self.opcode = Opcode::DCPS1;
+                                inst.opcode = Opcode::DCPS1;
                             }
                             (0b101, 0b000, 0b10) => {
-                                self.opcode = Opcode::DCPS2;
+                                inst.opcode = Opcode::DCPS2;
                             }
                             (0b101, 0b000, 0b11) => {
-                                self.opcode = Opcode::DCPS3;
+                                inst.opcode = Opcode::DCPS3;
                             }
                             _ => {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                             }
                         }
                         let imm = (word >> 5) & 0xffff;
-                        self.operands = [
+                        inst.operands = [
                             Operand::Imm16(imm as u16),
                             Operand::Nothing,
                             Operand::Nothing,
@@ -2588,7 +2857,7 @@ impl Decodable for Instruction {
                     0b11001 => { // system
                         let remainder = word & 0xffffff;
                         if remainder >= 0x400000 {
-                            self.opcode = Opcode::Invalid;
+                            inst.opcode = Opcode::Invalid;
                         } else {
                             let Rt = word & 0x1f;
                             let Lop0 = ((word >> 19) & 0x7) as u8;
@@ -2603,65 +2872,65 @@ impl Decodable for Instruction {
                                         match CRn {
                                             0b0010 => {
                                                 if op1 == 0b011 {
-                                                    self.opcode = Opcode::HINT(op2 as u8);
+                                                    inst.opcode = Opcode::HINT(op2 as u8);
                                                 } else {
-                                                    self.opcode = Opcode::Invalid;
+                                                    inst.opcode = Opcode::Invalid;
                                                 }
                                             },
                                             0b0011 => {
                                                 match op2 {
                                                     0b010 => {
-                                                        self.opcode = Opcode::CLREX;
+                                                        inst.opcode = Opcode::CLREX;
                                                     },
                                                     0b100 => {
-                                                        self.opcode = Opcode::DSB;
+                                                        inst.opcode = Opcode::DSB;
                                                     },
                                                     0b101 => {
-                                                        self.opcode = Opcode::DMB;
+                                                        inst.opcode = Opcode::DMB;
                                                     },
                                                     0b110 => {
-                                                        self.opcode = Opcode::ISB;
+                                                        inst.opcode = Opcode::ISB;
                                                     }
                                                     _ => {
-                                                        self.opcode = Opcode::Invalid;
+                                                        inst.opcode = Opcode::Invalid;
                                                     }
                                                 };
                                             },
                                             0b0100 => {
-                                                self.opcode = Opcode::MSRa(op1 as u8, op2 as u8);
-                                                self.operands[0] = Operand::Imm16(
+                                                inst.opcode = Opcode::MSRa(op1 as u8, op2 as u8);
+                                                inst.operands[0] = Operand::Imm16(
                                                     ((word >> 8) & 0xf) as u16
                                                 );
                                             }
                                             _ => {
-                                                self.opcode = Opcode::Invalid;
+                                                inst.opcode = Opcode::Invalid;
                                             }
                                         }
                                     } else {
-                                        self.opcode = Opcode::Invalid;
+                                        inst.opcode = Opcode::Invalid;
                                     }
                                 }
                                 0b001 => {
-                                    self.opcode = Opcode::SYS;
+                                    inst.opcode = Opcode::SYS;
                                     panic!("TODO");
                                 }
                                 0b010 |
                                 0b011 => {
-                                    self.opcode = Opcode::MSRb(word & 0x0fffff);
+                                    inst.opcode = Opcode::MSRb(word & 0x0fffff);
                                 }
                                 0b100 => {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                 }
                                 0b101 => {
-                                    self.opcode = Opcode::SYSL;
+                                    inst.opcode = Opcode::SYSL;
                                     panic!("TODO");
                                 }
                                 0b110 |
                                 0b111 => {
-                                    self.opcode = Opcode::MRS(word & 0x0fffff);
+                                    inst.opcode = Opcode::MRS(word & 0x0fffff);
                                 }
                                 _ => {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                 }
                             }
                         }
@@ -2673,68 +2942,68 @@ impl Decodable for Instruction {
                             0b000 => {
                                 if (word & 0x1ffc1f) == 0x1f0000 {
                                     let Rn = (word >> 5) & 0x1f;
-                                    self.opcode = Opcode::BR;
-                                    self.operands = [
+                                    inst.opcode = Opcode::BR;
+                                    inst.operands = [
                                         Operand::Register(SizeCode::X, Rn as u16),
                                         Operand::Nothing,
                                         Operand::Nothing,
                                         Operand::Nothing
                                     ];
                                 } else {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                 }
                             },
                             0b001 => {
                                 if (word & 0x1ffc1f) == 0x1f0000 {
                                     let Rn = (word >> 5) & 0x1f;
-                                    self.opcode = Opcode::BLR;
-                                    self.operands = [
+                                    inst.opcode = Opcode::BLR;
+                                    inst.operands = [
                                         Operand::Register(SizeCode::X, Rn as u16),
                                         Operand::Nothing,
                                         Operand::Nothing,
                                         Operand::Nothing
                                     ];
                                 } else {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                 }
                             },
                             0b010 => {
                                 if (word & 0x1ffc1f) == 0x1f0000 {
                                     let Rn = (word >> 5) & 0x1f;
-                                    self.opcode = Opcode::RET;
-                                    self.operands = [
+                                    inst.opcode = Opcode::RET;
+                                    inst.operands = [
                                         Operand::Register(SizeCode::X, Rn as u16),
                                         Operand::Nothing,
                                         Operand::Nothing,
                                         Operand::Nothing
                                     ];
                                 } else {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                 }
                             },
                             0b100 => {
                                 if (word & 0x1fffff) == 0x1f03e0 {
-                                    self.opcode = Opcode::ERET;
+                                    inst.opcode = Opcode::ERET;
                                 } else {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                 }
                             },
                             0b101 => {
                                 if (word & 0x1fffff) == 0x1f03e0 {
-                                    self.opcode = Opcode::DRPS;
+                                    inst.opcode = Opcode::DRPS;
                                 } else {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                 }
                             },
                             _ => {
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                             }
                         }
                     }
                     0b11011 => { // unconditional branch (reg)
                         // the last 1 is bit 24, which C3.2.7 indicates are
                         // all invalid encodings (opc is b0101 or lower)
-                        self.opcode = Opcode::Invalid;
+                        inst.opcode = Opcode::Invalid;
                     }
                     _ => {
                         // TODO: invalid

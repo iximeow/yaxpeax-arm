@@ -1,9 +1,8 @@
-use yaxpeax_arch::{Decodable, LengthedInstruction};
-use yaxpeax_arm::armv8::a64::{ARMv8, Instruction, Operand, Opcode, SizeCode};
+use yaxpeax_arch::{Arch, Decoder, LengthedInstruction};
+use yaxpeax_arm::armv8::a64::{ARMv8, Instruction, Operand, Opcode, SizeCode, ShiftStyle};
 
 fn test_decode(data: [u8; 4], expected: Instruction) {
-    let mut instr = Instruction::blank();
-    instr.decode_into(data.to_vec());
+    let instr = <ARMv8 as Arch>::Decoder::default().decode(data.to_vec()).unwrap();
     assert!(
         instr == expected,
         "decode error for {:02x}{:02x}{:02x}{:02x}:\n  decoded: {:?}\n expected: {:?}\n",
@@ -13,8 +12,7 @@ fn test_decode(data: [u8; 4], expected: Instruction) {
 }
 
 fn test_display(data: [u8; 4], expected: &'static str) {
-    let mut instr = Instruction::blank();
-    instr.decode_into(data.to_vec());
+    let instr = <ARMv8 as Arch>::Decoder::default().decode(data.to_vec()).unwrap();
     let text = format!("{}", instr);
     assert!(
         text == expected,
@@ -41,19 +39,51 @@ fn test_display_misc() {
 fn test_decode_str_ldr() {
     test_decode(
         [0x31, 0x03, 0x40, 0xf9],
-        Instruction::blank()
+        Instruction {
+            opcode: Opcode::LDR,
+            operands: [
+                Operand::Register(SizeCode::X, 17),
+                Operand::RegOffset(25, 0),
+                Operand::Nothing,
+                Operand::Nothing,
+            ]
+        }
     );
     test_decode(
         [0xf5, 0x5b, 0x00, 0xf9],
-        Instruction::blank()
+        Instruction {
+            opcode: Opcode::STR,
+            operands: [
+                Operand::Register(SizeCode::X, 21),
+                Operand::RegOffset(31, 0xb0),
+                Operand::Nothing,
+                Operand::Nothing,
+            ]
+        }
     );
     test_decode(
         [0x60, 0x02, 0x0a, 0x39],
-        Instruction::blank()
+        Instruction {
+            opcode: Opcode::STRB,
+            operands: [
+                Operand::Register(SizeCode::W, 0),
+                Operand::RegOffset(19, 0x280),
+                Operand::Nothing,
+                Operand::Nothing,
+            ]
+        }
     );
     test_decode(
         [0xfd, 0x7b, 0xbe, 0xa9],
-        Instruction::blank()
+        Instruction {
+            opcode: Opcode::STP,
+            operands: [
+                Operand::Register(SizeCode::X, 29),
+                Operand::Register(SizeCode::X, 30),
+                Operand::RegPreIndex(31, -0x20),
+                Operand::Nothing,
+            ]
+        }
     );
 }
 
@@ -87,6 +117,44 @@ fn test_decode_misc() {
         [0x22, 0x39, 0x04, 0xb0],
         "adrp x2, 0x8725000"
     );
+}
+
+#[test]
+fn test_display_ldr() {
+    test_display(
+        [0xff, 0xff, 0x00, 0x1c],
+        "ldr s31, $+0x1ffc"
+    );
+    test_display(
+        [0xff, 0xff, 0x00, 0x5c],
+        "ldr d31, $+0x1ffc"
+    );
+    test_display(
+        [0xff, 0xff, 0x00, 0x9c],
+        "ldr q31, $+0x1ffc"
+    );
+    test_display(
+        [0xff, 0xff, 0x00, 0xdc],
+        "invalid"
+    );
+    test_display(
+        [0x88, 0xff, 0x00, 0x18],
+        "ldr w8, $+0x1ff0"
+    );
+    test_display(
+        [0x88, 0xff, 0x00, 0x58],
+        "ldr x8, $+0x1ff0"
+    );
+    test_display(
+        [0x88, 0xff, 0x00, 0x98],
+        "ldrsw x8, $+0x1ff0"
+    );
+    /* TODO:
+    test_display(
+        [0x88, 0xff, 0x00, 0xd8],
+        "prfm plil1keep, 0x1ff0"
+    );
+    */
 }
 
 #[test]
@@ -149,7 +217,15 @@ fn test_decode_branch() {
 fn test_decode_arithmetic() {
     test_decode(
         [0x21, 0xfc, 0x41, 0x8b],
-        Instruction::blank()
+        Instruction {
+            opcode: Opcode::ADD,
+            operands: [
+                Operand::Register(SizeCode::X, 1),
+                Operand::Register(SizeCode::X, 1),
+                Operand::RegShift(ShiftStyle::LSR, 63, SizeCode::X, 1),
+                Operand::Nothing
+            ]
+        }
     );
     test_decode(
         [0x21, 0xfc, 0x43, 0x93],
@@ -169,7 +245,7 @@ fn test_decode_arithmetic() {
             opcode: Opcode::SUBS,
             operands: [
                 Operand::Register(SizeCode::X, 31),
-                Operand::Register(SizeCode::X, 1),
+                Operand::RegisterOrSP(SizeCode::X, 1),
                 Operand::Immediate(0xe),
                 Operand::Nothing,
             ]
@@ -2168,15 +2244,75 @@ fn test_decode_chrome_entrypoint() {
     );
 }
 
-static instruction_bytes: [u8; 4 * 0] = [
+static instruction_bytes: [u8; 4 * 61] = [
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x20, 0xd4,
+    0x00, 0x00, 0x80, 0x12,
+    0x00, 0x01, 0x3f, 0xd6,
+    0x00, 0x02, 0x00, 0x36,
+    0x00, 0x03, 0x00, 0x35,
+    0x00, 0x04, 0x00, 0x36,
+    0x00, 0x04, 0x40, 0xf9,
+    0x00, 0x07, 0x00, 0x34,
+    0x00, 0x08, 0x47, 0xf9,
+    0x00, 0x0b, 0x80, 0x52,
+    0x00, 0x14, 0x42, 0xf9,
+    0x00, 0x1b, 0x80, 0x52,
+    0x00, 0x20, 0x40, 0xf9,
+    0x00, 0x24, 0x47, 0xf9,
+    0x00, 0x2b, 0x03, 0x90,
+    0x00, 0x34, 0x42, 0xf9,
+    0x00, 0x39, 0x04, 0xb0,
+    0x00, 0x3b, 0x04, 0xb0,
+    0x00, 0x3c, 0x43, 0xf9,
+    0x00, 0x44, 0x44, 0xf9,
+    0x00, 0x50, 0x14, 0x91,
+    0x00, 0x54, 0x44, 0xf9,
+    0x00, 0x58, 0x42, 0xf9,
+    0x00, 0x5c, 0x44, 0xf9,
+    0x00, 0x60, 0x1e, 0x91,
+    0x00, 0x70, 0x47, 0xf9,
+    0x00, 0x80, 0x1e, 0x91,
+    0x00, 0x80, 0x44, 0xf9,
+    0x00, 0x84, 0x47, 0xf9,
+    0x00, 0xac, 0x40, 0xf9,
+    0x00, 0xc0, 0x09, 0x91,
+    0x00, 0xc4, 0x45, 0xf9,
+    0x00, 0xcc, 0x41, 0xf9,
+    0x00, 0xdc, 0x35, 0x91,
+    0x00, 0xf4, 0x47, 0xf9,
+    0x01, 0x00, 0x00, 0x14,
+    0x01, 0x00, 0x40, 0xf9,
+    0x01, 0x05, 0x40, 0xf9,
+    0x01, 0xfb, 0x4b, 0x95,
+    0x02, 0x00, 0x00, 0x14,
+    0x02, 0x00, 0x00, 0x90,
+    0x02, 0x00, 0x80, 0x92,
+    0x02, 0x04, 0xf8, 0x97,
+    0x02, 0x2c, 0x80, 0x52,
+    0x08, 0x00, 0x40, 0xf9,
+    0x08, 0x01, 0x40, 0xf9,
+    0x08, 0x05, 0x40, 0xf9,
+    0x08, 0x06, 0xf8, 0x97,
+    0x08, 0x09, 0x40, 0xf9,
+    0x08, 0x1d, 0x40, 0x92,
+    0x08, 0x1f, 0x00, 0x13,
+    0x08, 0x21, 0x0a, 0x91,
+    0x08, 0x41, 0x00, 0x91,
+    0x08, 0x41, 0x40, 0xf9,
+    0x08, 0x81, 0x0a, 0x91,
+    0x08, 0xa1, 0x11, 0x91,
+    0x08, 0xc1, 0x1e, 0x91,
+    0x08, 0xdd, 0x46, 0xf9,
+    0x08, 0xe1, 0x0e, 0x91,
+    0x08, 0xf2, 0xff, 0x36,
 ];
 
 #[test]
 fn test_decode_span() {
     let mut i = 0u64;
     while i < instruction_bytes.len() as u64 {
-        let mut instr = Instruction::blank();
-        instr.decode_into(instruction_bytes[(i as usize)..].iter().map(|x| *x));
+        let instr = <ARMv8 as Arch>::Decoder::default().decode(instruction_bytes[(i as usize)..].iter().cloned()).unwrap();
         println!(
             "Decoded {:02x}{:02x}{:02x}{:02x}: {}", //{:?}\n  {}",
             instruction_bytes[i as usize],
@@ -2195,9 +2331,10 @@ pub fn bench_60000_instrs(b: &mut Bencher) {
     b.iter(|| {
         for i in (0..1000) {
             let mut iter = instruction_bytes.iter().map(|x| *x);
+            let decoder = <ARMv8 as Arch>::Decoder::default();
             let mut result = Instruction::blank();
             loop {
-                match result.decode_into(&mut iter) {
+                match decoder.decode_into(&mut result, &mut iter) {
                     Some(result) => {
                         test::black_box(&result);
                     },

@@ -3,7 +3,7 @@
 
 use std::fmt::{Display, Formatter};
 
-use yaxpeax_arch::{Arch, Colorize, Colored, ColorSettings, Decodable, LengthedInstruction, ShowContextual, YaxColors};
+use yaxpeax_arch::{Arch, Colorize, Colored, ColorSettings, Decoder, LengthedInstruction, ShowContextual, YaxColors};
 
 struct ConditionedOpcode(pub Opcode, pub ConditionCode);
 
@@ -668,16 +668,19 @@ impl ConditionCode {
     }
 }
 
+#[derive(Default, Debug)]
+pub struct InstDecoder {}
+
 #[allow(non_snake_case)]
-impl Decodable for Instruction {
-    fn decode<T: IntoIterator<Item=u8>>(bytes: T) -> Option<Self> {
+impl Decoder<Instruction> for InstDecoder {
+    fn decode<T: IntoIterator<Item=u8>>(&self, bytes: T) -> Option<Instruction> {
         let mut blank = Instruction::blank();
-        match blank.decode_into(bytes) {
+        match self.decode_into(&mut blank, bytes) {
             Some(_) => Some(blank),
             None => None
         }
     }
-    fn decode_into<T: IntoIterator<Item=u8>>(&mut self, bytes: T) -> Option<()> {
+    fn decode_into<T: IntoIterator<Item=u8>>(&self, inst: &mut Instruction, bytes: T) -> Option<()> {
         fn read_word<T: IntoIterator<Item=u8>>(bytes: T) -> Option<u32> {
             let mut iter = bytes.into_iter();
             let instr: u32 =
@@ -704,38 +707,38 @@ impl Decodable for Instruction {
 
         if cond == 0b1111 {
             // do unconditional instruction stuff
-            self.condition = ConditionCode::AL;
+            inst.condition = ConditionCode::AL;
             let op1 = (word >> 20) as u8;
             if op1 > 0x80 {
                 match (op1 >> 5) & 0b11 {
                     0b00 => {
-                        self.opcode = Opcode::Incomplete(word);
+                        inst.opcode = Opcode::Incomplete(word);
                     }
                     0b01 => {
-                        self.opcode = Opcode::BLX;
+                        inst.opcode = Opcode::BLX;
                         let operand = ((word & 0xffffff) as i32) << 8 >> 6;
-                        self.operands = Operands::BranchOffset(
+                        inst.operands = Operands::BranchOffset(
                             operand | (
                                 ((word >> 23) & 0b10) as i32
                             )
                         );
                     }
                     0b10 => {
-                        self.opcode = Opcode::Incomplete(word);
+                        inst.opcode = Opcode::Incomplete(word);
                     }
                     0b11 => {
-                        self.opcode = Opcode::Incomplete(word);
+                        inst.opcode = Opcode::Incomplete(word);
                     }
                     _ => {
                         unreachable!();
                     }
                 }
             } else {
-                self.opcode = Opcode::Incomplete(word);
+                inst.opcode = Opcode::Incomplete(word);
             }
             return Some(());
         } else {
-            self.condition = ConditionCode::build(cond);
+            inst.condition = ConditionCode::build(cond);
         }
 
         // distinction at this point is on page A5-192
@@ -768,47 +771,47 @@ impl Decodable for Instruction {
                             ((word >> 12) & 0x0f) as u8,
                             ((word >> 16) & 0x0f) as u8
                         ];
-                        self.set_S(s);
+                        inst.set_S(s);
                         match op {
                             0b000 => {
-                                self.opcode = Opcode::MUL;
-                                self.operands = Operands::MulThreeRegs(R[3], R[0], R[1]);
+                                inst.opcode = Opcode::MUL;
+                                inst.operands = Operands::MulThreeRegs(R[3], R[0], R[1]);
                             },
                             0b001 => {
-                                self.opcode = Opcode::MLA;
-                                self.operands = Operands::MulFourRegs(R[3], R[0], R[1], R[2]);
+                                inst.opcode = Opcode::MLA;
+                                inst.operands = Operands::MulFourRegs(R[3], R[0], R[1], R[2]);
                             },
                             0b010 => {
                                 if s {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                     return None;
                                 }
-                                self.opcode = Opcode::UMAAL;
-                                self.operands = Operands::MulFourRegs(R[2], R[3], R[0], R[1]);
+                                inst.opcode = Opcode::UMAAL;
+                                inst.operands = Operands::MulFourRegs(R[2], R[3], R[0], R[1]);
                             },
                             0b011 => {
                                 if s {
-                                    self.opcode = Opcode::Invalid;
+                                    inst.opcode = Opcode::Invalid;
                                     return None;
                                 }
-                                self.opcode = Opcode::MLS;
-                                self.operands = Operands::MulFourRegs(R[3], R[0], R[1], R[2]);
+                                inst.opcode = Opcode::MLS;
+                                inst.operands = Operands::MulFourRegs(R[3], R[0], R[1], R[2]);
                             }
                             0b100 => {
-                                self.opcode = Opcode::UMULL;
-                                self.operands = Operands::MulFourRegs(R[2], R[3], R[0], R[1]);
+                                inst.opcode = Opcode::UMULL;
+                                inst.operands = Operands::MulFourRegs(R[2], R[3], R[0], R[1]);
                             }
                             0b101 => {
-                                self.opcode = Opcode::UMLAL;
-                                self.operands = Operands::MulFourRegs(R[2], R[3], R[0], R[1]);
+                                inst.opcode = Opcode::UMLAL;
+                                inst.operands = Operands::MulFourRegs(R[2], R[3], R[0], R[1]);
                             }
                             0b110 => {
-                                self.opcode = Opcode::SMULL;
-                                self.operands = Operands::MulFourRegs(R[2], R[3], R[0], R[1]);
+                                inst.opcode = Opcode::SMULL;
+                                inst.operands = Operands::MulFourRegs(R[2], R[3], R[0], R[1]);
                             }
                             0b111 => {
-                                self.opcode = Opcode::SMLAL;
-                                self.operands = Operands::MulFourRegs(R[2], R[3], R[0], R[1]);
+                                inst.opcode = Opcode::SMLAL;
+                                inst.operands = Operands::MulFourRegs(R[2], R[3], R[0], R[1]);
                             }
                             _ => { unreachable!(format!("mul upcode: {:x}", op)) }
                         }
@@ -838,52 +841,52 @@ impl Decodable for Instruction {
                                 // this is swp or {ld,st}ex, conditional on bit 23
                                 match flags {
                                     0b10000 => {
-                                        self.opcode = Opcode::SWP;
-                                        self.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
+                                        inst.opcode = Opcode::SWP;
+                                        inst.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
                                     },
                                     0b10001 | 0b10010 | 0b10011 => {
-                                        self.opcode = Opcode::Invalid;
+                                        inst.opcode = Opcode::Invalid;
                                         return None;
                                     }
                                     0b10100 => {
-                                        self.opcode = Opcode::SWPB;
-                                        self.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
+                                        inst.opcode = Opcode::SWPB;
+                                        inst.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
                                     },
                                     0b10101 | 0b10110 | 0b10111 => {
-                                        self.opcode = Opcode::Invalid;
+                                        inst.opcode = Opcode::Invalid;
                                         return None;
                                     }
                                     0b11000 => {
-                                        self.opcode = Opcode::STREX;
-                                        self.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
+                                        inst.opcode = Opcode::STREX;
+                                        inst.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
                                     }
                                     0b11001 => {
-                                        self.opcode = Opcode::LDREX;
-                                        self.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
+                                        inst.opcode = Opcode::LDREX;
+                                        inst.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
                                     }
                                     0b11010 => {
-                                        self.opcode = Opcode::STREXD;
-                                        self.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
+                                        inst.opcode = Opcode::STREXD;
+                                        inst.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
                                     }
                                     0b11011 => {
-                                        self.opcode = Opcode::LDREXD;
-                                        self.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
+                                        inst.opcode = Opcode::LDREXD;
+                                        inst.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
                                     }
                                     0b11100 => {
-                                        self.opcode = Opcode::STREXB;
-                                        self.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
+                                        inst.opcode = Opcode::STREXB;
+                                        inst.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
                                     }
                                     0b11101 => {
-                                        self.opcode = Opcode::LDREXB;
-                                        self.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
+                                        inst.opcode = Opcode::LDREXB;
+                                        inst.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
                                     }
                                     0b11110 => {
-                                        self.opcode = Opcode::STREXH;
-                                        self.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
+                                        inst.opcode = Opcode::STREXH;
+                                        inst.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
                                     }
                                     0b11111 => {
-                                        self.opcode = Opcode::LDREXH;
-                                        self.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
+                                        inst.opcode = Opcode::LDREXH;
+                                        inst.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
                                     }
                                     _ => {
                                         /*
@@ -900,30 +903,30 @@ impl Decodable for Instruction {
                             0b01 => {
                     // |c o n d|0 0 0 x|x x x x x x x x x x x x x x x x|1 0 1 1|x x x x|
                     // page A5-201
-                                self.opcode = Opcode::Incomplete(word);
+                                inst.opcode = Opcode::Incomplete(word);
                                 // return Some(());
                                 match flags {
                                     0b00010 => {
-                                        // self.opcode = Opcode::STRHT_sub;
-                                        self.opcode = Opcode::Incomplete(word);
-                                        self.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
+                                        // inst.opcode = Opcode::STRHT_sub;
+                                        inst.opcode = Opcode::Incomplete(word);
+                                        inst.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
                                     }
                                     0b01010 => {
-                                        // self.opcode = Opcode::STRHT_add;
-                                        self.opcode = Opcode::Incomplete(word);
-                                        self.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
+                                        // inst.opcode = Opcode::STRHT_add;
+                                        inst.opcode = Opcode::Incomplete(word);
+                                        inst.operands = Operands::ThreeOperand(Rn, Rd, LoOffset);
                                     }
                                     0b00110 => {
-                                        // self.opcode = Opcode::STRHT_sub;
-                                        self.opcode = Opcode::Incomplete(word);
+                                        // inst.opcode = Opcode::STRHT_sub;
+                                        inst.opcode = Opcode::Incomplete(word);
                                         let imm = (HiOffset << 4) as u16 | LoOffset as u16;
-                                        self.operands = Operands::ThreeOperandImm(Rn, Rd, imm);
+                                        inst.operands = Operands::ThreeOperandImm(Rn, Rd, imm);
                                     }
                                     0b01110 => {
-                                        // self.opcode = Opcode::STRHT_add;
-                                        self.opcode = Opcode::Incomplete(word);
+                                        // inst.opcode = Opcode::STRHT_add;
+                                        inst.opcode = Opcode::Incomplete(word);
                                         let imm = (HiOffset << 4) as u16 | LoOffset as u16;
-                                        self.operands = Operands::ThreeOperandImm(Rn, Rd, imm);
+                                        inst.operands = Operands::ThreeOperandImm(Rn, Rd, imm);
                                     }
                                     _ => {
                                         unreachable!();
@@ -934,13 +937,13 @@ impl Decodable for Instruction {
                             0b10 => {
                     // |c o n d|0 0 0 x|x x x x x x x x x x x x x x x x|1 1 0 1|x x x x|
                     // page A5-201
-                                self.opcode = Opcode::Incomplete(word);
+                                inst.opcode = Opcode::Incomplete(word);
                                 return Some(());
                             }
                             0b11 => {
                     // |c o n d|0 0 0 x|x x x x x x x x x x x x x x x x|1 1 1 1|x x x x|
                     // page A5-201
-                                self.opcode = Opcode::Incomplete(word);
+                                inst.opcode = Opcode::Incomplete(word);
                                 return Some(());
                             }
                             _ => { unreachable!(); }
@@ -970,15 +973,15 @@ impl Decodable for Instruction {
                                 },
                                 0b011 => {
                                     if opcode & 0b11 == 0b01 {
-                                        self.opcode = Opcode::BLX;
-                                        self.operands = Operands::OneOperand((word & 0x0f) as u8);
+                                        inst.opcode = Opcode::BLX;
+                                        inst.operands = Operands::OneOperand((word & 0x0f) as u8);
                                         return Some(());
                                     } else {
                                         return None;
                                     }
                                 },
                                 0b100 => {
-                                    self.opcode = Opcode::Incomplete(word);
+                                    inst.opcode = Opcode::Incomplete(word);
                                     return Some(());
                                 },
                                 0b101 => {
@@ -996,15 +999,15 @@ impl Decodable for Instruction {
                         } else {
                             // |c o n d|0 0 0|1 0 x x|0|x x x x|x x x x|x x x x|1|x x|x|x x x x|
                             // multiply and multiply-accumulate 
-                            self.opcode = Opcode::Incomplete(word);
+                            inst.opcode = Opcode::Incomplete(word);
                             return Some(());
                         }
                     } else {
                         if opcode >= 16 {
                             unreachable!();
                         }
-                        self.opcode = DATA_PROCESSING_OPCODES[opcode as usize];
-                        self.set_S(s);
+                        inst.opcode = DATA_PROCESSING_OPCODES[opcode as usize];
+                        inst.set_S(s);
 
                         // at this point we know this is a data processing instruction
                         // either immediate shift or register shift
@@ -1025,15 +1028,15 @@ impl Decodable for Instruction {
                             if shift_spec == 0 {
                                 if (0b1101 & opcode) == 0b1101 {
                                     // MOV or MVN
-                                    self.operands = Operands::TwoOperand(Rd, Rm);
+                                    inst.operands = Operands::TwoOperand(Rd, Rm);
                                 } else {
-                                    self.operands = Operands::ThreeOperand(Rd, Rn, Rm);
+                                    inst.operands = Operands::ThreeOperand(Rd, Rn, Rm);
                                 }
                             } else {
                                 /*
                                  * TODO: look at how this interacts with mov and mvn
                                  */
-                                self.operands = Operands::ThreeOperandWithShift(Rd, Rn, Rm, ShiftSpec::Immediate(shift_spec));
+                                inst.operands = Operands::ThreeOperandWithShift(Rd, Rn, Rm, ShiftSpec::Immediate(shift_spec));
                             }
                         } else {
                     //    known 0 because it and bit 5 are not both 1 --v
@@ -1053,10 +1056,10 @@ impl Decodable for Instruction {
                             // here?
                             if (0b1101 & opcode) == 0b1101 {
                                 // these are all invalid
-                                self.opcode = Opcode::Invalid;
+                                inst.opcode = Opcode::Invalid;
                                 return None;
                             } else {
-                                self.operands = Operands::ThreeOperandWithShift(Rd, Rn, Rm, ShiftSpec::Register(shift_spec));
+                                inst.operands = Operands::ThreeOperandWithShift(Rd, Rn, Rm, ShiftSpec::Register(shift_spec));
                             }
                         }
                     }
@@ -1077,14 +1080,14 @@ impl Decodable for Instruction {
                 // the instruction looks like
                 // |c o n d|0 0 0|1 0 x x|0|x x x x|x x x x|x x x x x|x x|x|x x x x|
                 // misc instructions (page A5-194)
-                    self.opcode = Opcode::Incomplete(word);
+                    inst.opcode = Opcode::Incomplete(word);
                     return Some(());
                 } else {
                     if opcode >= 16 {
                         unreachable!();
                     }
-                    self.opcode = DATA_PROCESSING_OPCODES[opcode as usize];
-                    self.set_S(s);
+                    inst.opcode = DATA_PROCESSING_OPCODES[opcode as usize];
+                    inst.set_S(s);
 
                     let (Rn, imm) = {
                         let imm = word & 0x0000ffff;
@@ -1092,17 +1095,17 @@ impl Decodable for Instruction {
                         ((word & 0x0f) as u8, imm)
                     };
                     if (opcode == 0b0010 || opcode == 0b0100) && Rn == 0b1111 {
-                        self.opcode = Opcode::ADR;
+                        inst.opcode = Opcode::ADR;
                     }
                     match opcode {
                         0b1101 => {
-                            self.operands = Operands::RegImm(
+                            inst.operands = Operands::RegImm(
                                 ((word >> 12) & 0xf) as u8,
                                 (word & 0x0fff) as u32
                             );
                         }
                         _ => {
-                            self.operands = Operands::RegImm(Rn, imm);
+                            inst.operands = Operands::RegImm(Rn, imm);
                         }
                     }
 
@@ -1125,7 +1128,7 @@ impl Decodable for Instruction {
                     0x110 -> STRBT
                     0x111 -> LDRBT
                     */
-                    self.opcode = match op {
+                    inst.opcode = match op {
                         0b010 => Opcode::STRT(add),
                         0b011 => Opcode::LDRT(add),
                         0b110 => Opcode::STRBT(add),
@@ -1142,12 +1145,12 @@ impl Decodable for Instruction {
                     let pre = (op & 0b10000) != 0;
                     let wback = (op & 0b00010) != 0;
                     let op = op & 0b00101;
-                    self.opcode = match op {
+                    inst.opcode = match op {
                         0b000 => Opcode::STR(add, pre, wback),
                         0b001 => {
                             if Rn == 0b1111 {
-                                self.operands = Operands::RegImm(Rt, imm.into());
-                                self.opcode = Opcode::LDR(add, pre, wback);
+                                inst.operands = Operands::RegImm(Rt, imm.into());
+                                inst.opcode = Opcode::LDR(add, pre, wback);
                                 return Some(());
                             }
                             Opcode::LDR(add, pre, wback)
@@ -1155,8 +1158,8 @@ impl Decodable for Instruction {
                         0b100 => Opcode::STRB(add, pre, wback),
                         0b101 => {
                             if Rn == 0b1111 {
-                                self.operands = Operands::RegImm(Rt, imm.into());
-                                self.opcode = Opcode::LDRB(add, pre, wback);
+                                inst.operands = Operands::RegImm(Rt, imm.into());
+                                inst.opcode = Opcode::LDRB(add, pre, wback);
                                 return Some(());
                             }
                             Opcode::LDRB(add, pre, wback)
@@ -1164,7 +1167,7 @@ impl Decodable for Instruction {
                         _ => { unreachable!(); }
                     };
                 }
-                self.operands = Operands::TwoRegImm(Rn, Rt, imm.into());
+                inst.operands = Operands::TwoRegImm(Rn, Rt, imm.into());
             },
             0b011 => {
                 // page A5-192 to distinguish the following:
@@ -1199,7 +1202,7 @@ impl Decodable for Instruction {
                         0x110 -> STRBT
                         0x111 -> LDRBT
                         */
-                        self.opcode = match op {
+                        inst.opcode = match op {
                             0b010 => Opcode::STRT(add),
                             0b011 => Opcode::LDRT(add),
                             0b110 => Opcode::STRBT(add),
@@ -1216,7 +1219,7 @@ impl Decodable for Instruction {
                         let pre = (op & 0b10000) != 0;
                         let wback = (op & 0b00010) != 0;
                         let op = op & 0b00101;
-                        self.opcode = match op {
+                        inst.opcode = match op {
                             0b000 => Opcode::STR(add, pre, wback),
                             0b001 => Opcode::LDR(add, pre, wback),
                             0b100 => Opcode::STRB(add, pre, wback),
@@ -1232,7 +1235,7 @@ impl Decodable for Instruction {
                         let Rt = (word & 0xf) as u8;
                         (Rt, Rm, shift)
                     };
-                    self.operands = Operands::ThreeOperandWithShift(Rn, Rt, Rm, ShiftSpec::Immediate(shift));
+                    inst.operands = Operands::ThreeOperandWithShift(Rn, Rt, Rm, ShiftSpec::Immediate(shift));
                 }
                 return Some(());
             },
@@ -1245,31 +1248,31 @@ impl Decodable for Instruction {
                     let add = (op & 0b001000) != 0;
                     let pre = (op & 0b010000) != 0;
                     let usermode = (op & 0b000100) != 0;
-                    self.opcode = if (op & 1) == 0 {
+                    inst.opcode = if (op & 1) == 0 {
                             Opcode::STM(add, pre, wback, usermode)
                         } else {
                             Opcode::LDM(add, pre, wback, usermode)
                         };
-                    self.operands = Operands::RegRegList(
+                    inst.operands = Operands::RegRegList(
                         ((word >> 16) & 0xf) as u8,
                         (word & 0xffff) as u16
                     );
                 } else if op < 0b110000 {
                     // 10xxxx
                     // the + 1 is to compensate for an architecturally-defined initial offset
-                    self.opcode = Opcode::B;
-                    self.operands = Operands::BranchOffset(((word & 0x00ffff) + 1) as i16 as i32);
+                    inst.opcode = Opcode::B;
+                    inst.operands = Operands::BranchOffset(((word & 0x00ffff) + 1) as i16 as i32);
                 } else {
                     // 11xxxx
                     // the + 1 is to compensate for an architecturally-defined initial offset
-                    self.opcode = Opcode::BL;
-                    self.operands = Operands::BranchOffset(((word & 0x00ffff) + 1) as i16 as i32);
+                    inst.opcode = Opcode::BL;
+                    inst.operands = Operands::BranchOffset(((word & 0x00ffff) + 1) as i16 as i32);
                 }
             },
             0b110 | 0b111 => {
                 // coprocessor instructions and supervisor call
                 // page A5-213
-                self.opcode = Opcode::Incomplete(word);
+                inst.opcode = Opcode::Incomplete(word);
                 return Some(());
             },
             _ => { unreachable!(); }
@@ -1289,6 +1292,7 @@ pub struct ARMv7;
 impl Arch for ARMv7 {
     type Address = u32;
     type Instruction = Instruction;
+    type Decoder = InstDecoder;
     type Operand = Operands;
 }
 

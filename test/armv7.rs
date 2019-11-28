@@ -1,9 +1,8 @@
-use yaxpeax_arch::{Decodable, LengthedInstruction};
+use yaxpeax_arch::{Arch, Decoder, LengthedInstruction};
 use yaxpeax_arm::armv7::{ARMv7, Instruction, ConditionCode, Operands, Opcode, ShiftSpec};
 
 fn test_decode(data: [u8; 4], expected: Instruction) {
-    let mut instr = Instruction::blank();
-    instr.decode_into(data.to_vec());
+    let instr = <ARMv7 as Arch>::Decoder::default().decode(data.to_vec()).unwrap();
     assert!(
         instr == expected,
         "decode error for {:02x}{:02x}{:02x}{:02x}:\n  decoded: {:?}\n expected: {:?}\n",
@@ -13,8 +12,7 @@ fn test_decode(data: [u8; 4], expected: Instruction) {
 }
 
 fn test_display(data: [u8; 4], expected: &'static str) {
-    let mut instr = Instruction::blank();
-    instr.decode_into(data.to_vec());
+    let instr = <ARMv7 as Arch>::Decoder::default().decode(data.to_vec()).unwrap();
     let text = format!("{}", instr);
     assert!(
         text == expected,
@@ -318,8 +316,7 @@ static instruction_bytes: [u8; 4 * 60] = [
 fn test_decode_span() {
     let mut i = 0u32;
     while i < instruction_bytes.len() as u32 {
-        let mut instr = Instruction::blank();
-        instr.decode_into(instruction_bytes[(i as usize)..].iter().map(|x| *x));
+        let instr = <ARMv7 as Arch>::Decoder::default().decode(instruction_bytes[(i as usize)..].iter().cloned()).unwrap();
         println!(
             "Decoded {:02x}{:02x}{:02x}{:02x}: {}", //{:?}\n  {}",
             instruction_bytes[i as usize],
@@ -402,9 +399,10 @@ pub fn bench_60000_instrs(b: &mut Bencher) {
     b.iter(|| {
         for i in (0..1000) {
             let mut iter = instruction_bytes.iter().map(|x| *x);
+            let decoder = <ARMv7 as Arch>::Decoder::default();
             let mut result = Instruction::blank();
             loop {
-                match result.decode_into(&mut iter) {
+                match decoder.decode_into(&mut result, &mut iter) {
                     Some(result) => {
                         test::black_box(&result);
                     },
