@@ -1,7 +1,7 @@
 //#[cfg(feature="use-serde")]
 //use serde::{Serialize, Deserialize};
 
-use std::fmt::{Display, Formatter};
+use std::fmt::{self, Display, Formatter};
 
 use yaxpeax_arch::{Arch, ColorSettings, Decoder, LengthedInstruction, ShowContextual};
 
@@ -126,6 +126,34 @@ mod docs {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub enum DecodeError {
+    ExhaustedInput,
+    InvalidOpcode,
+    InvalidOperand,
+}
+
+impl fmt::Display for DecodeError {
+    fn fmt(&self, f:  &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            DecodeError::ExhaustedInput => write!(f, "exhausted input"),
+            DecodeError::InvalidOpcode => write!(f, "invalid opcode"),
+            DecodeError::InvalidOperand => write!(f, "invalid operand"),
+        }
+    }
+}
+
+impl yaxpeax_arch::DecodeError for DecodeError {
+    fn data_exhausted(&self) -> bool { self == &DecodeError::ExhaustedInput }
+    fn bad_opcode(&self) -> bool { self == &DecodeError::InvalidOpcode }
+    fn bad_operand(&self) -> bool { self == &DecodeError::InvalidOperand }
+}
+
+impl yaxpeax_arch::Instruction for Instruction {
+    // TODO: this is wrong!!
+    fn well_defined(&self) -> bool { true }
+}
+
 #[allow(non_snake_case)]
 impl <T: std::fmt::Write> ShowContextual<u64, [Option<String>], T> for Instruction {
     fn contextualize(&self, _colors: Option<&ColorSettings>, _address: u64, _context: Option<&[Option<String>]>, out: &mut T) -> std::fmt::Result {
@@ -144,6 +172,7 @@ pub struct ARMv8 { }
 impl Arch for ARMv8 {
     type Address = u64;
     type Instruction = Instruction;
+    type DecodeError = DecodeError;
     type Decoder = InstDecoder;
     type Operand = Operand;
 }
@@ -981,29 +1010,25 @@ pub struct InstDecoder {}
 
 #[allow(non_snake_case)]
 impl Decoder<Instruction> for InstDecoder {
-    fn decode<T: IntoIterator<Item=u8>>(&self, bytes: T) -> Option<Instruction> {
+    type Error = DecodeError;
+
+    fn decode<T: IntoIterator<Item=u8>>(&self, bytes: T) -> Result<Instruction, Self::Error> {
         let mut blank = Instruction::blank();
-        match self.decode_into(&mut blank, bytes) {
-            Some(_) => Some(blank),
-            None => None
-        }
+        self.decode_into(&mut blank, bytes).map(|_: ()| blank)
     }
-    fn decode_into<T: IntoIterator<Item=u8>>(&self, inst: &mut Instruction, bytes: T) -> Option<()> {
-        fn read_word<T: IntoIterator<Item=u8>>(bytes: T) -> Option<u32> {
+    fn decode_into<T: IntoIterator<Item=u8>>(&self, inst: &mut Instruction, bytes: T) -> Result<(), Self::Error> {
+        fn read_word<T: IntoIterator<Item=u8>>(bytes: T) -> Result<u32, DecodeError> {
             let mut iter = bytes.into_iter();
             let instr: u32 =
-                ((iter.next()? as u32)      ) |
-                ((iter.next()? as u32) << 8 ) |
-                ((iter.next()? as u32) << 16) |
-                ((iter.next()? as u32) << 24);
+                ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u32)      ) |
+                ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u32) << 8 ) |
+                ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u32) << 16) |
+                ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u32) << 24);
 
-            Some(instr)
+            Ok(instr)
         }
 
-        let word = match read_word(bytes) {
-            Some(word) => word,
-            None => { return None; }
-        };
+        let word = read_word(bytes)?;
 
         #[derive(Copy, Clone, Debug)]
         enum Section {
@@ -1079,7 +1104,7 @@ impl Decoder<Instruction> for InstDecoder {
 
                             if opc2 == 0b000000 {
                                 inst.opcode = Opcode::Invalid;
-                                return Some(());
+                                return Err(DecodeError::InvalidOperand);
                             }
 
                             let size_code = match word >> 29 {
@@ -1138,7 +1163,7 @@ impl Decoder<Instruction> for InstDecoder {
 
                             if word & 0x20000000 != 0 {
                                 inst.opcode = Opcode::Invalid;
-                                return Some(());
+                                return Err(DecodeError::InvalidOperand);
                             }
 
                             let size = match sf_op | op2 {
@@ -1183,7 +1208,7 @@ impl Decoder<Instruction> for InstDecoder {
                                 0b1110 |
                                 0b1111 => {
                                     inst.opcode = Opcode::Invalid;
-                                    return Some(());
+                                    return Err(DecodeError::InvalidOpcode);
                                 },
                                 _ => {
                                     unreachable!("sf, op, op2 are four bits total");
@@ -1238,7 +1263,7 @@ impl Decoder<Instruction> for InstDecoder {
                                                     // technically this is undefined - do some
                                                     // cores do something with this?
                                                     inst.opcode = Opcode::Invalid;
-                                                    return None;
+                                                    return Err(DecodeError::InvalidOperand);
                                                 }
                                                 inst.opcode = Opcode::PACIZA;
                                                 inst.operands = [
@@ -1321,7 +1346,7 @@ impl Decoder<Instruction> for InstDecoder {
 
                             if (word >> 22) & 0x03 != 0 {
                                 inst.opcode = Opcode::Invalid;
-                                return None;
+                                return Err(DecodeError::InvalidOperand);
                             }
 
                             let Rd = (word & 0x1f) as u16;
@@ -1351,7 +1376,7 @@ impl Decoder<Instruction> for InstDecoder {
                             let shift = (word >> 22) & 0x03;
                             if shift == 0b11 {
                                 inst.opcode = Opcode::Invalid;
-                                return None;
+                                return Err(DecodeError::InvalidOperand);
                             }
 
                             let Rd = (word & 0x1f) as u16;
@@ -1361,7 +1386,7 @@ impl Decoder<Instruction> for InstDecoder {
 
                             if size == SizeCode::W && imm6 >= 32 {
                                 inst.opcode = Opcode::Invalid;
-                                return None;
+                                return Err(DecodeError::InvalidOperand);
                             }
 
                             inst.operands[0] = Operand::Register(size, Rd);
@@ -1467,7 +1492,7 @@ impl Decoder<Instruction> for InstDecoder {
                             0b10 |
                             0b11 => {
                                 inst.opcode = Opcode::Invalid;
-                                return None;
+                                return Err(DecodeError::InvalidOperand);
                             }
                             _ => { unreachable!("shift is two bits"); }
                         };
@@ -1756,7 +1781,7 @@ impl Decoder<Instruction> for InstDecoder {
                                         (0b10, 0b1) => Opcode::LDAXRB,
                                         _ => {
                                             inst.opcode = Opcode::Invalid;
-                                            return None;
+                                            return Err(DecodeError::InvalidOpcode);
                                         }
                                     }
                                 } else if size == 0b01 {
@@ -1767,7 +1792,7 @@ impl Decoder<Instruction> for InstDecoder {
                                         (0b10, 0b1) => Opcode::LDAXRH,
                                         _ => {
                                             inst.opcode = Opcode::Invalid;
-                                            return None;
+                                            return Err(DecodeError::InvalidOpcode);
                                         }
                                     }
                                 } else {
@@ -1872,7 +1897,7 @@ impl Decoder<Instruction> for InstDecoder {
                             (0b11, 0b10, 0b1) => Opcode::LDAR, // 64-bit
                             _ => {
                                 inst.opcode = Opcode::Invalid;
-                                return None;
+                                return Err(DecodeError::InvalidOpcode);
                             }
                         };
                         let size_code = if size == 0b11 {
@@ -1939,7 +1964,7 @@ impl Decoder<Instruction> for InstDecoder {
                             0b11 => {
                                 // 11011100_XXXXXXXX_XXXXXXXX_XXXXXXXX
                                 inst.opcode = Opcode::Invalid;
-                                return None;
+                                return Err(DecodeError::InvalidOpcode);
                             }
                             _ => {
                                 unreachable!("opc is two bits");
@@ -2155,7 +2180,7 @@ impl Decoder<Instruction> for InstDecoder {
                         if word & 0x200000 != 0 {
                             if category != 0b10 {
                                 inst.opcode = Opcode::Invalid;
-                                return Some(());
+                                return Err(DecodeError::InvalidOpcode);
                             } else {
                                 // Load/store register (register offset)
                                 // C3.3.10
@@ -2236,7 +2261,7 @@ impl Decoder<Instruction> for InstDecoder {
                                     0b00 |
                                     0b01 => {
                                         inst.opcode = Opcode::Invalid;
-                                        return Some(());
+                                        return Err(DecodeError::InvalidOpcode);
                                     },
                                     0b10 => { SizeCode::W }
                                     0b11 => { SizeCode::X }
@@ -2247,14 +2272,14 @@ impl Decoder<Instruction> for InstDecoder {
                                     0b000 |
                                     0b001 => {
                                         inst.opcode = Opcode::Invalid;
-                                        return Some(());
+                                        return Err(DecodeError::InvalidOpcode);
                                     },
                                     0b010 => { ShiftStyle::UXTW },
                                     0b011 => { ShiftStyle::LSL },
                                     0b100 |
                                     0b101 => {
                                         inst.opcode = Opcode::Invalid;
-                                        return Some(());
+                                        return Err(DecodeError::InvalidOpcode);
                                     },
                                     0b110 => { ShiftStyle::SXTW },
                                     0b111 => { ShiftStyle::SXTX },
@@ -3013,6 +3038,6 @@ impl Decoder<Instruction> for InstDecoder {
             },
         };
 
-        Some(())
+        Ok(())
     }
 }

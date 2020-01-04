@@ -1,7 +1,7 @@
 //#[cfg(feature="use-serde")]
 //use serde::{Serialize, Deserialize};
 
-use std::fmt::{Display, Formatter};
+use std::fmt::{self, Display, Formatter};
 
 use yaxpeax_arch::{Arch, Colorize, Colored, ColorSettings, Decoder, LengthedInstruction, ShowContextual, YaxColors};
 
@@ -437,6 +437,34 @@ pub struct Instruction {
     pub s: bool
 }
 
+#[derive(Debug, PartialEq)]
+pub enum DecodeError {
+    ExhaustedInput,
+    InvalidOpcode,
+    InvalidOperand,
+}
+
+impl fmt::Display for DecodeError {
+    fn fmt(&self, f:  &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            DecodeError::ExhaustedInput => write!(f, "exhausted input"),
+            DecodeError::InvalidOpcode => write!(f, "invalid opcode"),
+            DecodeError::InvalidOperand => write!(f, "invalid operand"),
+        }
+    }
+}
+
+impl yaxpeax_arch::DecodeError for DecodeError {
+    fn data_exhausted(&self) -> bool { self == &DecodeError::ExhaustedInput }
+    fn bad_opcode(&self) -> bool { self == &DecodeError::InvalidOpcode }
+    fn bad_operand(&self) -> bool { self == &DecodeError::InvalidOperand }
+}
+
+impl yaxpeax_arch::Instruction for Instruction {
+    // TODO: this is wrong!!
+    fn well_defined(&self) -> bool { true }
+}
+
 #[allow(non_snake_case)]
 impl Instruction {
     pub fn blank() -> Instruction {
@@ -673,29 +701,25 @@ pub struct InstDecoder {}
 
 #[allow(non_snake_case)]
 impl Decoder<Instruction> for InstDecoder {
-    fn decode<T: IntoIterator<Item=u8>>(&self, bytes: T) -> Option<Instruction> {
+    type Error = DecodeError;
+
+    fn decode<T: IntoIterator<Item=u8>>(&self, bytes: T) -> Result<Instruction, Self::Error> {
         let mut blank = Instruction::blank();
-        match self.decode_into(&mut blank, bytes) {
-            Some(_) => Some(blank),
-            None => None
-        }
+        self.decode_into(&mut blank, bytes).map(|_: ()| blank)
     }
-    fn decode_into<T: IntoIterator<Item=u8>>(&self, inst: &mut Instruction, bytes: T) -> Option<()> {
-        fn read_word<T: IntoIterator<Item=u8>>(bytes: T) -> Option<u32> {
+    fn decode_into<T: IntoIterator<Item=u8>>(&self, inst: &mut Instruction, bytes: T) -> Result<(), Self::Error> {
+        fn read_word<T: IntoIterator<Item=u8>>(bytes: T) -> Result<u32, DecodeError> {
             let mut iter = bytes.into_iter();
             let instr: u32 =
-                ((iter.next()? as u32)      ) |
-                ((iter.next()? as u32) << 8 ) |
-                ((iter.next()? as u32) << 16) |
-                ((iter.next()? as u32) << 24);
+                ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u32)      ) |
+                ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u32) << 8 ) |
+                ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u32) << 16) |
+                ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u32) << 24);
 
-            Some(instr)
+            Ok(instr)
         }
 
-        let word = match read_word(bytes) {
-            Some(word) => word,
-            None => { return None; }
-        };
+        let word = read_word(bytes)?;
 
         let (cond, opc_upper) = {
             let top_byte = word >> 24;
@@ -736,7 +760,7 @@ impl Decoder<Instruction> for InstDecoder {
             } else {
                 inst.opcode = Opcode::Incomplete(word);
             }
-            return Some(());
+            return Ok(());
         } else {
             inst.condition = ConditionCode::build(cond);
         }
@@ -784,7 +808,7 @@ impl Decoder<Instruction> for InstDecoder {
                             0b010 => {
                                 if s {
                                     inst.opcode = Opcode::Invalid;
-                                    return None;
+                                    return Err(DecodeError::InvalidOpcode);
                                 }
                                 inst.opcode = Opcode::UMAAL;
                                 inst.operands = Operands::MulFourRegs(R[2], R[3], R[0], R[1]);
@@ -792,7 +816,7 @@ impl Decoder<Instruction> for InstDecoder {
                             0b011 => {
                                 if s {
                                     inst.opcode = Opcode::Invalid;
-                                    return None;
+                                    return Err(DecodeError::InvalidOpcode);
                                 }
                                 inst.opcode = Opcode::MLS;
                                 inst.operands = Operands::MulFourRegs(R[3], R[0], R[1], R[2]);
@@ -846,7 +870,7 @@ impl Decoder<Instruction> for InstDecoder {
                                     },
                                     0b10001 | 0b10010 | 0b10011 => {
                                         inst.opcode = Opcode::Invalid;
-                                        return None;
+                                        return Err(DecodeError::InvalidOpcode);
                                     }
                                     0b10100 => {
                                         inst.opcode = Opcode::SWPB;
@@ -854,7 +878,7 @@ impl Decoder<Instruction> for InstDecoder {
                                     },
                                     0b10101 | 0b10110 | 0b10111 => {
                                         inst.opcode = Opcode::Invalid;
-                                        return None;
+                                        return Err(DecodeError::InvalidOpcode);
                                     }
                                     0b11000 => {
                                         inst.opcode = Opcode::STREX;
@@ -938,13 +962,13 @@ impl Decoder<Instruction> for InstDecoder {
                     // |c o n d|0 0 0 x|x x x x x x x x x x x x x x x x|1 1 0 1|x x x x|
                     // page A5-201
                                 inst.opcode = Opcode::Incomplete(word);
-                                return Some(());
+                                return Ok(());
                             }
                             0b11 => {
                     // |c o n d|0 0 0 x|x x x x x x x x x x x x x x x x|1 1 1 1|x x x x|
                     // page A5-201
                                 inst.opcode = Opcode::Incomplete(word);
-                                return Some(());
+                                return Ok(());
                             }
                             _ => { unreachable!(); }
                         }
@@ -975,14 +999,14 @@ impl Decoder<Instruction> for InstDecoder {
                                     if opcode & 0b11 == 0b01 {
                                         inst.opcode = Opcode::BLX;
                                         inst.operands = Operands::OneOperand((word & 0x0f) as u8);
-                                        return Some(());
+                                        return Ok(());
                                     } else {
-                                        return None;
+                                        return Err(DecodeError::InvalidOpcode);
                                     }
                                 },
                                 0b100 => {
                                     inst.opcode = Opcode::Incomplete(word);
-                                    return Some(());
+                                    return Ok(());
                                 },
                                 0b101 => {
 
@@ -1000,7 +1024,7 @@ impl Decoder<Instruction> for InstDecoder {
                             // |c o n d|0 0 0|1 0 x x|0|x x x x|x x x x|x x x x|1|x x|x|x x x x|
                             // multiply and multiply-accumulate 
                             inst.opcode = Opcode::Incomplete(word);
-                            return Some(());
+                            return Ok(());
                         }
                     } else {
                         if opcode >= 16 {
@@ -1057,7 +1081,7 @@ impl Decoder<Instruction> for InstDecoder {
                             if (0b1101 & opcode) == 0b1101 {
                                 // these are all invalid
                                 inst.opcode = Opcode::Invalid;
-                                return None;
+                                return Err(DecodeError::InvalidOpcode);
                             } else {
                                 inst.operands = Operands::ThreeOperandWithShift(Rd, Rn, Rm, ShiftSpec::Register(shift_spec));
                             }
@@ -1081,7 +1105,7 @@ impl Decoder<Instruction> for InstDecoder {
                 // |c o n d|0 0 0|1 0 x x|0|x x x x|x x x x|x x x x x|x x|x|x x x x|
                 // misc instructions (page A5-194)
                     inst.opcode = Opcode::Incomplete(word);
-                    return Some(());
+                    return Ok(());
                 } else {
                     if opcode >= 16 {
                         unreachable!();
@@ -1151,7 +1175,7 @@ impl Decoder<Instruction> for InstDecoder {
                             if Rn == 0b1111 {
                                 inst.operands = Operands::RegImm(Rt, imm.into());
                                 inst.opcode = Opcode::LDR(add, pre, wback);
-                                return Some(());
+                                return Ok(());
                             }
                             Opcode::LDR(add, pre, wback)
                         },
@@ -1160,7 +1184,7 @@ impl Decoder<Instruction> for InstDecoder {
                             if Rn == 0b1111 {
                                 inst.operands = Operands::RegImm(Rt, imm.into());
                                 inst.opcode = Opcode::LDRB(add, pre, wback);
-                                return Some(());
+                                return Ok(());
                             }
                             Opcode::LDRB(add, pre, wback)
                         },
@@ -1237,7 +1261,7 @@ impl Decoder<Instruction> for InstDecoder {
                     };
                     inst.operands = Operands::ThreeOperandWithShift(Rn, Rt, Rm, ShiftSpec::Immediate(shift));
                 }
-                return Some(());
+                return Ok(());
             },
             0b100 | 0b101 => {
                 // branch, branch with link, and block data transfer
@@ -1273,11 +1297,11 @@ impl Decoder<Instruction> for InstDecoder {
                 // coprocessor instructions and supervisor call
                 // page A5-213
                 inst.opcode = Opcode::Incomplete(word);
-                return Some(());
+                return Ok(());
             },
             _ => { unreachable!(); }
         }
-        Some(())
+        Ok(())
     }
 }
 
@@ -1292,6 +1316,7 @@ pub struct ARMv7;
 impl Arch for ARMv7 {
     type Address = u32;
     type Instruction = Instruction;
+    type DecodeError = DecodeError;
     type Decoder = InstDecoder;
     type Operand = Operands;
 }

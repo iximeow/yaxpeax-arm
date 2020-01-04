@@ -403,10 +403,10 @@ pub fn bench_60000_instrs(b: &mut Bencher) {
             let mut result = Instruction::blank();
             loop {
                 match decoder.decode_into(&mut result, &mut iter) {
-                    Some(result) => {
+                    Ok(result) => {
                         test::black_box(&result);
                     },
-                    None => {
+                    Err(_) => {
                         break;
                     }
                 }
