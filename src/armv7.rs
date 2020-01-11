@@ -5,7 +5,7 @@ use std::fmt::{self, Display, Formatter};
 
 use yaxpeax_arch::{Arch, Colorize, Colored, ColorSettings, Decoder, LengthedInstruction, ShowContextual, YaxColors};
 
-struct ConditionedOpcode(pub Opcode, pub ConditionCode);
+pub struct ConditionedOpcode(pub Opcode, pub ConditionCode);
 
 impl Display for ConditionedOpcode {
     fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
@@ -413,7 +413,7 @@ pub enum ShiftSpec {
     Register(u8)
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Operands {
     RegisterList(u16),
     OneOperand(u8),
@@ -442,6 +442,7 @@ pub enum DecodeError {
     ExhaustedInput,
     InvalidOpcode,
     InvalidOperand,
+    Incomplete,
 }
 
 impl fmt::Display for DecodeError {
@@ -450,6 +451,7 @@ impl fmt::Display for DecodeError {
             DecodeError::ExhaustedInput => write!(f, "exhausted input"),
             DecodeError::InvalidOpcode => write!(f, "invalid opcode"),
             DecodeError::InvalidOperand => write!(f, "invalid operand"),
+            DecodeError::Incomplete => write!(f, "incomplete decoder"),
         }
     }
 }
@@ -953,10 +955,12 @@ impl Decoder<Instruction> for InstDecoder {
                                         inst.operands = Operands::ThreeOperandImm(Rn, Rd, imm);
                                     }
                                     _ => {
-                                        unreachable!();
+                                        return Err(DecodeError::Incomplete);
+//                                        unreachable!();
                                     }
                                 }
-                                panic!("page a5-201");
+                                return Err(DecodeError::Incomplete);
+//                                panic!("page a5-201");
                             }
                             0b10 => {
                     // |c o n d|0 0 0 x|x x x x x x x x x x x x x x x x|1 1 0 1|x x x x|
