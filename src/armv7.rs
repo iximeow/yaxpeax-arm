@@ -1,5 +1,5 @@
-#[cfg(feature="use-serde")]
-use serde::{Serialize, Deserialize};
+//#[cfg(feature="use-serde")]
+//use serde::{Serialize, Deserialize};
 
 use std::fmt::{Display, Formatter};
 
@@ -15,7 +15,7 @@ impl Display for ConditionedOpcode {
 
 #[allow(non_snake_case)]
 impl <T: std::fmt::Write> ShowContextual<u32, [Option<String>], T> for Instruction {
-    fn contextualize(&self, colors: Option<&ColorSettings>, address: u32, context: Option<&[Option<String>]>, out: &mut T) -> std::fmt::Result {
+    fn contextualize(&self, colors: Option<&ColorSettings>, _address: u32, _context: Option<&[Option<String>]>, out: &mut T) -> std::fmt::Result {
         match self.opcode {
             Opcode::LDR(true, false, false) => {
                 match self.operands {
@@ -94,8 +94,9 @@ impl <T: std::fmt::Write> ShowContextual<u32, [Option<String>], T> for Instructi
                     _ => { unreachable!(); }
                 }
             }
-            Opcode::STM(add, pre, wback, usermode) |
-            Opcode::LDM(add, pre, wback, usermode) => {
+            // TODO: [add, pre, usermode]
+            Opcode::STM(_add, _pre, wback, _usermode) |
+            Opcode::LDM(_add, _pre, wback, _usermode) => {
                 match self.operands {
                     Operands::RegRegList(Rr, list) => {
                         ConditionedOpcode(self.opcode, self.condition).colorize(colors, out)?;
@@ -132,13 +133,15 @@ impl <T: std::fmt::Write> ShowContextual<u32, [Option<String>], T> for Instructi
                         write!(out, " {}, ", reg_name_colorize(r, colors))?;
                         format_reg_list(out, list, colors)?;
                     },
-                    Operands::TwoRegImm(a, b, imm) => {
+                    Operands::TwoRegImm(_a, _b, _imm) => {
+                        // TODO:
                         write!(out, " <unimplemented>")?;
                     },
                     Operands::ThreeOperand(a, b, c) => {
                         write!(out, " {}, {}, {}", reg_name_colorize(a, colors), reg_name_colorize(b, colors), reg_name_colorize(c, colors))?;
                     },
-                    Operands::ThreeOperandImm(a, b, imm) => {
+                    Operands::ThreeOperandImm(_a, _b, _imm) => {
+                        // TODO:
                         write!(out, " <unimplemented>")?;
                     },
                     Operands::ThreeOperandWithShift(a, b, c, shift) => {
@@ -148,7 +151,8 @@ impl <T: std::fmt::Write> ShowContextual<u32, [Option<String>], T> for Instructi
                     Operands::MulThreeRegs(a, b, c) => {
                         write!(out, " {}, {}, {}", reg_name_colorize(a, colors), reg_name_colorize(b, colors), reg_name_colorize(c, colors))?;
                     },
-                    Operands::MulFourRegs(a, b, c, d) => {
+                    Operands::MulFourRegs(_a, _b, _c, _d) => {
+                        // TODO:
                         write!(out, " <unimplemented>")?;
                     },
                     Operands::BranchOffset(imm) => {
@@ -655,7 +659,7 @@ impl ConditionCode {
             0b1100 => ConditionCode::GT,
             0b1101 => ConditionCode::LE,
             0b1110 => ConditionCode::AL,
-            _ => unsafe {
+            _ => {
                 // this means the argument `value` must never be outside [0,15]
                 // which itself means this function shouldn't be public
                 unreachable!();
@@ -897,7 +901,7 @@ impl Decodable for Instruction {
                     // |c o n d|0 0 0 x|x x x x x x x x x x x x x x x x|1 0 1 1|x x x x|
                     // page A5-201
                                 self.opcode = Opcode::Incomplete(word);
-                                return Some(());
+                                // return Some(());
                                 match flags {
                                     0b00010 => {
                                         // self.opcode = Opcode::STRHT_sub;
@@ -925,6 +929,7 @@ impl Decodable for Instruction {
                                         unreachable!();
                                     }
                                 }
+                                panic!("page a5-201");
                             }
                             0b10 => {
                     // |c o n d|0 0 0 x|x x x x x x x x x x x x x x x x|1 1 0 1|x x x x|
