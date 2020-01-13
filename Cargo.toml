@@ -4,10 +4,8 @@ name = "yaxpeax-arm"
 version = "0.0.1"
 authors = [ "iximeow <me@iximeow.net>" ]
 license = "0BSD"
-repository = ""
-description = """
-A rust arm decoder
-"""
+repository = "http://git.iximeow.net/yaxpeax-arm/"
+description = "arm decoders for the yaxpeax project"
 
 [dependencies]
 yaxpeax-arch = { path = "../../yaxpeax-arch" }
