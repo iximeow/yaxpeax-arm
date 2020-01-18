@@ -3,19 +3,21 @@
 
 use std::fmt::{self, Display, Formatter};
 
-use yaxpeax_arch::{Arch, Colorize, Colored, ColorSettings, Decoder, LengthedInstruction, ShowContextual, YaxColors};
+use yaxpeax_arch::{Arch, Colorize, Decoder, LengthedInstruction, NoColors, ShowContextual, YaxColors};
 
 pub struct ConditionedOpcode(pub Opcode, pub ConditionCode);
 
 impl Display for ConditionedOpcode {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         write!(f, "{}{}", self.0, self.1)
     }
 }
 
+pub struct NoContext;
+
 #[allow(non_snake_case)]
-impl <T: std::fmt::Write> ShowContextual<u32, [Option<String>], T> for Instruction {
-    fn contextualize(&self, colors: Option<&ColorSettings>, _address: u32, _context: Option<&[Option<String>]>, out: &mut T) -> std::fmt::Result {
+impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u32, NoContext, Color, T, Y> for Instruction {
+    fn contextualize(&self, colors: &Y, _address: u32, _context: Option<&NoContext>, out: &mut T) -> fmt::Result {
         match self.opcode {
             Opcode::LDR(true, false, false) => {
                 match self.operands {
@@ -169,8 +171,8 @@ impl <T: std::fmt::Write> ShowContextual<u32, [Option<String>], T> for Instructi
     }
 }
 
-impl <T: std::fmt::Write> Colorize<T> for ConditionedOpcode {
-    fn colorize(&self, colors: Option<&ColorSettings>, out: &mut T) -> std::fmt::Result {
+impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color, Y> for ConditionedOpcode {
+    fn colorize(&self, colors: &Y, out: &mut T) -> fmt::Result {
         match self.0 {
             Opcode::Incomplete(_) |
             Opcode::Invalid => { write!(out, "{}", colors.invalid_op(self)) },
@@ -248,7 +250,7 @@ impl <T: std::fmt::Write> Colorize<T> for ConditionedOpcode {
 }
 
 impl Display for Opcode {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         match self {
             Opcode::Incomplete(word) => { write!(f, "incomplete: {:#x}", word) },
             Opcode::Invalid => { write!(f, "invalid") },
@@ -467,9 +469,8 @@ impl yaxpeax_arch::Instruction for Instruction {
     fn well_defined(&self) -> bool { true }
 }
 
-#[allow(non_snake_case)]
-impl Instruction {
-    pub fn blank() -> Instruction {
+impl Default for Instruction {
+    fn default() -> Self {
         Instruction {
             condition: ConditionCode::AL,
             opcode: Opcode::Invalid,
@@ -477,13 +478,16 @@ impl Instruction {
             s: false
         }
     }
-    pub fn set_S(&mut self, value: bool) {
-        self.s = value;
-    }
-    pub fn S(&self) -> bool { self.s }
 }
 
-fn format_reg_list<T: std::fmt::Write>(f: &mut T, mut list: u16, colors: Option<&ColorSettings>) -> Result<(), std::fmt::Error> {
+impl Instruction {
+    fn set_s(&mut self, value: bool) {
+        self.s = value;
+    }
+    pub fn s(&self) -> bool { self.s }
+}
+
+fn format_reg_list<T: fmt::Write, C: fmt::Display, Y: YaxColors<C>>(f: &mut T, mut list: u16, colors: &Y) -> Result<(), fmt::Error> {
     write!(f, "{{")?;
     let mut i = 0;
     let mut tail = false;
@@ -504,7 +508,7 @@ fn format_reg_list<T: std::fmt::Write>(f: &mut T, mut list: u16, colors: Option<
 }
 
 #[allow(non_snake_case)]
-fn format_shift<T: std::fmt::Write>(f: &mut T, Rm: u8, shift: ShiftSpec, colors: Option<&ColorSettings>) -> Result<(), std::fmt::Error> {
+fn format_shift<T: fmt::Write, C: fmt::Display, Y: YaxColors<C>>(f: &mut T, Rm: u8, shift: ShiftSpec, colors: &Y) -> Result<(), fmt::Error> {
     fn shift_tpe_to_str(tpe: u8) -> &'static str {
         match tpe {
             0b00 => "lsl",
@@ -532,7 +536,7 @@ fn format_shift<T: std::fmt::Write>(f: &mut T, Rm: u8, shift: ShiftSpec, colors:
 }
 
 #[allow(non_snake_case)]
-fn format_reg_shift_mem<T: std::fmt::Write>(f: &mut T, Rd: u8, Rm: u8, shift: ShiftSpec, add: bool, pre: bool, wback: bool, colors: Option<&ColorSettings>) -> Result<(), std::fmt::Error> {
+fn format_reg_shift_mem<T: fmt::Write, C: fmt::Display, Y: YaxColors<C>>(f: &mut T, Rd: u8, Rm: u8, shift: ShiftSpec, add: bool, pre: bool, wback: bool, colors: &Y) -> Result<(), fmt::Error> {
     let op = if add { "" } else { "-" };
 
     match (pre, wback) {
@@ -557,7 +561,7 @@ fn format_reg_shift_mem<T: std::fmt::Write>(f: &mut T, Rd: u8, Rm: u8, shift: Sh
 }
 
 #[allow(non_snake_case)]
-fn format_reg_imm_mem<T: std::fmt::Write>(f: &mut T, Rn: u8, imm: u32, add: bool, pre: bool, wback: bool, colors: Option<&ColorSettings>) -> Result<(), std::fmt::Error> {
+fn format_reg_imm_mem<T: fmt::Write, C: fmt::Display, Y: YaxColors<C>>(f: &mut T, Rn: u8, imm: u32, add: bool, pre: bool, wback: bool, colors: &Y) -> Result<(), fmt::Error> {
     if imm != 0 {
         let op = if add { "" } else { "-" };
 
@@ -592,7 +596,7 @@ fn format_reg_imm_mem<T: std::fmt::Write>(f: &mut T, Rn: u8, imm: u32, add: bool
         }
     }
 }
-fn reg_name_colorize(num: u8, colors: Option<&ColorSettings>) -> Colored<&'static str> {
+fn reg_name_colorize<C: fmt::Display, Y: YaxColors<C>>(num: u8, colors: &Y) -> impl fmt::Display {
     match num {
         0 => colors.register("r0"),
         1 => colors.register("r1"),
@@ -615,8 +619,8 @@ fn reg_name_colorize(num: u8, colors: Option<&ColorSettings>) -> Colored<&'stati
 }
 
 impl Display for Instruction {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
-        self.contextualize(None, 0, None, f)
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
+        self.contextualize(&NoColors, 0, Some(&NoContext), f)
     }
 }
 
@@ -650,7 +654,7 @@ pub enum ConditionCode {
 }
 
 impl Display for ConditionCode {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         match self {
             ConditionCode::EQ => write!(f, "eq"),
             ConditionCode::NE => write!(f, "ne"),
@@ -705,10 +709,6 @@ pub struct InstDecoder {}
 impl Decoder<Instruction> for InstDecoder {
     type Error = DecodeError;
 
-    fn decode<T: IntoIterator<Item=u8>>(&self, bytes: T) -> Result<Instruction, Self::Error> {
-        let mut blank = Instruction::blank();
-        self.decode_into(&mut blank, bytes).map(|_: ()| blank)
-    }
     fn decode_into<T: IntoIterator<Item=u8>>(&self, inst: &mut Instruction, bytes: T) -> Result<(), Self::Error> {
         fn read_word<T: IntoIterator<Item=u8>>(bytes: T) -> Result<u32, DecodeError> {
             let mut iter = bytes.into_iter();
@@ -797,7 +797,7 @@ impl Decoder<Instruction> for InstDecoder {
                             ((word >> 12) & 0x0f) as u8,
                             ((word >> 16) & 0x0f) as u8
                         ];
-                        inst.set_S(s);
+                        inst.set_s(s);
                         match op {
                             0b000 => {
                                 inst.opcode = Opcode::MUL;
@@ -1035,7 +1035,7 @@ impl Decoder<Instruction> for InstDecoder {
                             unreachable!();
                         }
                         inst.opcode = DATA_PROCESSING_OPCODES[opcode as usize];
-                        inst.set_S(s);
+                        inst.set_s(s);
 
                         // at this point we know this is a data processing instruction
                         // either immediate shift or register shift
@@ -1115,7 +1115,7 @@ impl Decoder<Instruction> for InstDecoder {
                         unreachable!();
                     }
                     inst.opcode = DATA_PROCESSING_OPCODES[opcode as usize];
-                    inst.set_S(s);
+                    inst.set_s(s);
 
                     let (Rn, imm) = {
                         let imm = word & 0x0000ffff;

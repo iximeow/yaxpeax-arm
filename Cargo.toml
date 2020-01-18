@@ -8,7 +8,7 @@ repository = "http://git.iximeow.net/yaxpeax-arm/"
 description = "arm decoders for the yaxpeax project"
 
 [dependencies]
-yaxpeax-arch = { path = "../../yaxpeax-arch" }
+yaxpeax-arch = { version = "0.0.2", default-features = false, features = [] }
 "serde" = "*"
 "serde_derive" = "*"
 

@@ -3,7 +3,7 @@
 
 use std::fmt::{self, Display, Formatter};
 
-use yaxpeax_arch::{Arch, ColorSettings, Decoder, LengthedInstruction, ShowContextual};
+use yaxpeax_arch::{Arch, Decoder, LengthedInstruction, ShowContextual, YaxColors};
 
 #[allow(non_snake_case)]
 mod docs {
@@ -154,9 +154,10 @@ impl yaxpeax_arch::Instruction for Instruction {
     fn well_defined(&self) -> bool { true }
 }
 
-#[allow(non_snake_case)]
-impl <T: std::fmt::Write> ShowContextual<u64, [Option<String>], T> for Instruction {
-    fn contextualize(&self, _colors: Option<&ColorSettings>, _address: u64, _context: Option<&[Option<String>]>, out: &mut T) -> std::fmt::Result {
+struct NoContext;
+
+impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u64, NoContext, Color, T, Y> for Instruction {
+    fn contextualize(&self, _colors: &Y, _address: u64, _context: Option<&NoContext>, out: &mut T) -> fmt::Result {
         write!(out, "{}", self)
     }
 }
@@ -193,7 +194,7 @@ pub struct Instruction {
 }
 
 impl Display for Instruction {
-    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         match self.opcode {
             Opcode::Invalid => {
                 write!(fmt, "invalid")?;
@@ -646,8 +647,8 @@ impl LengthedInstruction for Instruction {
     fn min_size() -> Self::Unit { 4 }
 }
 
-impl Instruction {
-    pub fn blank() -> Self {
+impl Default for Instruction {
+    fn default() -> Self {
         Instruction {
             opcode: Opcode::Invalid,
             operands: [Operand::Nothing, Operand::Nothing, Operand::Nothing, Operand::Nothing]
@@ -792,7 +793,7 @@ pub enum ShiftStyle {
 }
 
 impl Display for ShiftStyle {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match self {
             ShiftStyle::LSL => { write!(fmt, "lsl") },
             ShiftStyle::LSR => { write!(fmt, "lsr") },
@@ -832,7 +833,7 @@ pub enum Operand {
 }
 
 impl Display for Operand {
-    fn fmt(&self, fmt: &mut Formatter) -> std::fmt::Result {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         match self {
             Operand::Nothing => {
                 unreachable!();
@@ -1012,10 +1013,6 @@ pub struct InstDecoder {}
 impl Decoder<Instruction> for InstDecoder {
     type Error = DecodeError;
 
-    fn decode<T: IntoIterator<Item=u8>>(&self, bytes: T) -> Result<Instruction, Self::Error> {
-        let mut blank = Instruction::blank();
-        self.decode_into(&mut blank, bytes).map(|_: ()| blank)
-    }
     fn decode_into<T: IntoIterator<Item=u8>>(&self, inst: &mut Instruction, bytes: T) -> Result<(), Self::Error> {
         fn read_word<T: IntoIterator<Item=u8>>(bytes: T) -> Result<u32, DecodeError> {
             let mut iter = bytes.into_iter();
@@ -1871,9 +1868,9 @@ impl Decoder<Instruction> for InstDecoder {
                     0b00001 => {
                         let Rt = (word & 0x1f) as u16;
                         let Rn = ((word >> 5) & 0x1f) as u16;
-                        let Rt2 = ((word >> 10) & 0x1f) as u16;
+                        let _Rt2 = ((word >> 10) & 0x1f) as u16;
                         let o0 = (word >> 15) & 1;
-                        let Rs = (word >> 16) & 0x1f;
+                        let _Rs = (word >> 16) & 0x1f;
                         let Lo1 = (word >> 21) & 0x3;
                         let size = (word >> 30) & 0x3;
                         // load/store exclusive

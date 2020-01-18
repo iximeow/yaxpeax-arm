@@ -400,7 +400,7 @@ pub fn bench_60000_instrs(b: &mut Bencher) {
         for i in (0..1000) {
             let mut iter = instruction_bytes.iter().map(|x| *x);
             let decoder = <ARMv7 as Arch>::Decoder::default();
-            let mut result = Instruction::blank();
+            let mut result = Instruction::default();
             loop {
                 match decoder.decode_into(&mut result, &mut iter) {
                     Ok(result) => {
