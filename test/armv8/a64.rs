@@ -119,6 +119,7 @@ fn test_decode_misc() {
     );
 }
 
+#[ignore]
 #[test]
 fn test_display_ldr() {
     test_display(
@@ -2244,7 +2245,7 @@ fn test_decode_chrome_entrypoint() {
     );
 }
 
-static instruction_bytes: [u8; 4 * 61] = [
+static INSTRUCTION_BYTES: [u8; 4 * 61] = [
     0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x20, 0xd4,
     0x00, 0x00, 0x80, 0x12,
@@ -2311,26 +2312,27 @@ static instruction_bytes: [u8; 4 * 61] = [
 #[test]
 fn test_decode_span() {
     let mut i = 0u64;
-    while i < instruction_bytes.len() as u64 {
-        let instr = <ARMv8 as Arch>::Decoder::default().decode(instruction_bytes[(i as usize)..].iter().cloned()).unwrap();
+    while i < INSTRUCTION_BYTES.len() as u64 {
+        let instr = <ARMv8 as Arch>::Decoder::default().decode(INSTRUCTION_BYTES[(i as usize)..].iter().cloned()).unwrap();
         println!(
             "Decoded {:02x}{:02x}{:02x}{:02x}: {}", //{:?}\n  {}",
-            instruction_bytes[i as usize],
-            instruction_bytes[i as usize + 1],
-            instruction_bytes[i as usize + 2],
-            instruction_bytes[i as usize + 3],
+            INSTRUCTION_BYTES[i as usize],
+            INSTRUCTION_BYTES[i as usize + 1],
+            INSTRUCTION_BYTES[i as usize + 2],
+            INSTRUCTION_BYTES[i as usize + 3],
 //            instr,
             instr);
         i += instr.len();
     }
 }
 
+/*
 use test::Bencher;
 #[bench]
 pub fn bench_60000_instrs(b: &mut Bencher) {
     b.iter(|| {
         for i in (0..1000) {
-            let mut iter = instruction_bytes.iter().map(|x| *x);
+            let mut iter = INSTRUCTION_BYTES.iter().map(|x| *x);
             let decoder = <ARMv8 as Arch>::Decoder::default();
             let mut result = Instruction::default();
             loop {
@@ -2346,3 +2348,4 @@ pub fn bench_60000_instrs(b: &mut Bencher) {
         }
     });
 }
+*/

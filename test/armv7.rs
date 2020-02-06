@@ -248,7 +248,7 @@ fn test_decode_mul() {
     );
 }
 
-static instruction_bytes: [u8; 4 * 60] = [
+static INSTRUCTION_BYTES: [u8; 4 * 60] = [
         0x24, 0xc0, 0x9f, 0xe5,
         0x00, 0xb0, 0xa0, 0xe3,
         0x04, 0x10, 0x9d, 0xe4,
@@ -315,14 +315,14 @@ static instruction_bytes: [u8; 4 * 60] = [
 #[test]
 fn test_decode_span() {
     let mut i = 0u32;
-    while i < instruction_bytes.len() as u32 {
-        let instr = <ARMv7 as Arch>::Decoder::default().decode(instruction_bytes[(i as usize)..].iter().cloned()).unwrap();
+    while i < INSTRUCTION_BYTES.len() as u32 {
+        let instr = <ARMv7 as Arch>::Decoder::default().decode(INSTRUCTION_BYTES[(i as usize)..].iter().cloned()).unwrap();
         println!(
             "Decoded {:02x}{:02x}{:02x}{:02x}: {}", //{:?}\n  {}",
-            instruction_bytes[i as usize],
-            instruction_bytes[i as usize + 1],
-            instruction_bytes[i as usize + 2],
-            instruction_bytes[i as usize + 3],
+            INSTRUCTION_BYTES[i as usize],
+            INSTRUCTION_BYTES[i as usize + 1],
+            INSTRUCTION_BYTES[i as usize + 2],
+            INSTRUCTION_BYTES[i as usize + 3],
 //            instr,
             instr);
         i += instr.len();
@@ -393,12 +393,13 @@ fn test_decode_span() {
  *   0x0001bfd0      000053e3       cmp r3, 0
  */
 
+/*
 use test::Bencher;
 #[bench]
 pub fn bench_60000_instrs(b: &mut Bencher) {
     b.iter(|| {
         for i in (0..1000) {
-            let mut iter = instruction_bytes.iter().map(|x| *x);
+            let mut iter = INSTRUCTION_BYTES.iter().map(|x| *x);
             let decoder = <ARMv7 as Arch>::Decoder::default();
             let mut result = Instruction::default();
             loop {
@@ -414,3 +415,4 @@ pub fn bench_60000_instrs(b: &mut Bencher) {
         }
     });
 }
+*/
