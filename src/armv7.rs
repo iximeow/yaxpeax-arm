@@ -47,7 +47,7 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
         match self.opcode {
             Opcode::LDR(true, false, false) => {
                 match self.operands {
-                    [Operand::Reg(Rt), Operand::RegDisp(Reg { bits: 13 }, 4), Operand::Nothing, Operand::Nothing] => {
+                    [Operand::Reg(Rt), Operand::RegDerefPostindexOffset(Reg { bits: 13 }, 4, true), Operand::Nothing, Operand::Nothing] => {
                         ConditionedOpcode(Opcode::POP, self.s, self.condition).colorize(colors, out)?;
                         return write!(out, " {{{}}}", reg_name_colorize(Rt, colors));
                     },
@@ -56,7 +56,7 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
             },
             Opcode::STR(false, true, true) => {
                 match self.operands {
-                    [Operand::Reg(Rt), Operand::RegDisp(Reg { bits: 13 }, 4), Operand::Nothing, Operand::Nothing] => {
+                    [Operand::Reg(Rt), Operand::RegDerefPostindexOffset(Reg { bits: 13 }, 4, fale), Operand::Nothing, Operand::Nothing] => {
                         ConditionedOpcode(Opcode::PUSH, self.s, self.condition).colorize(colors, out)?;
                         return write!(out, " {{{}}}", reg_name_colorize(Rt, colors));
                     },
@@ -132,13 +132,13 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
                         )?;
                         return format_reg_shift_mem(out, *Rd, *shift, add, pre, wback, colors);
                     }
-                    [Operand::Reg(Rt), Operand::RegDerefPostindexOffset(Rn, offset), Operand::Nothing, Operand::Nothing] => {
+                    [Operand::Reg(Rt), Operand::RegDerefPostindexOffset(Rn, offset, add), Operand::Nothing, Operand::Nothing] => {
                         ConditionedOpcode(self.opcode, self.s, self.condition).colorize(colors, out)?;
                         write!(
                             out, " {}, ",
                             reg_name_colorize(*Rt, colors)
                         )?;
-                        return format_reg_imm_mem(out, *Rt, *offset, true, false, true, colors);
+                        return format_reg_imm_mem(out, *Rt, *offset, *add, false, true, colors);
                     }
                     o => { println!("other str/ldr operands: {:?}", o); unreachable!(); }
                 }
@@ -257,10 +257,14 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
             Opcode::STM(true, true, _, _) |
             Opcode::LDR(_, _, _) |
             Opcode::STR(_, _, _) |
+            Opcode::LDRH(_, _, _) |
+            Opcode::STRH(_, _, _) |
             Opcode::LDRB(_, _, _) |
             Opcode::STRB(_, _, _) |
             Opcode::LDRT(_) |
             Opcode::STRT(_) |
+            Opcode::LDRHT(_) |
+            Opcode::STRHT(_) |
             Opcode::LDRBT(_) |
             Opcode::STRBT(_) |
             Opcode::SWP |
@@ -328,10 +332,14 @@ impl Display for Opcode {
             Opcode::STM(true, true, _, _) => { write!(f, "stmia") },
             Opcode::LDR(_, _, _) => { write!(f, "ldr") },
             Opcode::STR(_, _, _) => { write!(f, "str") },
+            Opcode::LDRH(_, _, _) => { write!(f, "ldrh") },
+            Opcode::STRH(_, _, _) => { write!(f, "strh") },
             Opcode::LDRB(_, _, _) => { write!(f, "ldrb") },
             Opcode::STRB(_, _, _) => { write!(f, "strb") },
             Opcode::LDRT(_) => { write!(f, "ldrt") },
             Opcode::STRT(_) => { write!(f, "strt") },
+            Opcode::LDRHT(_) => { write!(f, "ldrht") },
+            Opcode::STRHT(_) => { write!(f, "strht") },
             Opcode::LDRBT(_) => { write!(f, "ldrbt") },
             Opcode::STRBT(_) => { write!(f, "strbt") },
             Opcode::SWP => { write!(f, "swp") },
@@ -417,10 +425,14 @@ pub enum Opcode {
     STM(bool, bool, bool, bool),
     LDR(bool, bool, bool),
     STR(bool, bool, bool),
+    LDRH(bool, bool, bool),
+    STRH(bool, bool, bool),
     LDRB(bool, bool, bool),
     STRB(bool, bool, bool),
     LDRT(bool),
     STRT(bool),
+    LDRHT(bool),
+    STRHT(bool),
     LDRBT(bool),
     STRBT(bool),
     SWP,
@@ -566,8 +578,10 @@ pub enum Operand {
     RegDisp(Reg, i16),
     RegShift(RegShift),
     RegDerefRegShift(RegShift),
-    RegDerefPostindexOffset(Reg, u16),
-    RegDerefPostindexReg(Reg, Reg),
+    RegDerefPostindexOffset(Reg, u16, bool), // add/sub
+    RegDerefPreindexOffset(Reg, u16, bool), // add/sub
+    RegDerefPostindexReg(Reg, Reg, bool),
+    RegDerefPreindexReg(Reg, Reg, bool),
     Imm12(u16),
     Imm32(u32),
     BranchOffset(i32),
@@ -600,11 +614,17 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
                 format_shift(f, *shift, colors)?;
                 write!(f, "]")
             }
-            Operand::RegDerefPostindexOffset(reg, offs) => {
-                write!(f, "[{}, {:#x}]", reg_name_colorize(*reg, colors), offs)
+            Operand::RegDerefPostindexOffset(reg, offs, add) => {
+                write!(f, "[{}, {}{:#x}]", reg_name_colorize(*reg, colors), if *add { "" } else { "-" }, offs)
             }
-            Operand::RegDerefPostindexReg(reg, offsreg) => {
-                write!(f, "[{}, {}]", reg_name_colorize(*reg, colors), reg_name_colorize(*offsreg, colors))
+            Operand::RegDerefPreindexOffset(reg, offs, add) => {
+                write!(f, "[{}], {}{:#x}", reg_name_colorize(*reg, colors), if *add { "" } else { "-" }, offs)
+            }
+            Operand::RegDerefPostindexReg(reg, offsreg, add) => {
+                write!(f, "[{}, {}{}]", reg_name_colorize(*reg, colors), if *add { "" } else { "-" }, reg_name_colorize(*offsreg, colors))
+            }
+            Operand::RegDerefPreindexReg(reg, offsreg, add) => {
+                write!(f, "[{}], {}{}", reg_name_colorize(*reg, colors), if *add { "" } else { "-" }, reg_name_colorize(*offsreg, colors))
             }
             Operand::Imm12(imm) => {
                 write!(f, "{:#x}", imm)
@@ -1132,7 +1152,6 @@ impl Decoder<Instruction> for InstDecoder {
                                     0b11010 => {
                                         inst.opcode = Opcode::STREXD;
                                         if LoOffset == 0b1110 || (LoOffset & 1 == 1) || Rd == 15 || Rn == 15 {
-                                            // TODO: "unpredictable"
                                             return Err(DecodeError::InvalidOperand);
                                         }
                                         inst.operands = [
@@ -1144,13 +1163,12 @@ impl Decoder<Instruction> for InstDecoder {
                                     }
                                     0b11011 => {
                                         inst.opcode = Opcode::LDREXD;
-                                        if LoOffset == 0b1110 || (LoOffset & 1 == 1) || Rn == 15 {
-                                            // TODO: "unpredictable"
+                                        if Rd == 0b1110 || (Rd & 1 == 1) || Rn == 15 {
                                             return Err(DecodeError::InvalidOperand);
                                         }
                                         inst.operands = [
-                                            Operand::Reg(Reg::from_u8(LoOffset)),
-                                            Operand::Reg(Reg::from_u8(LoOffset + 1)),
+                                            Operand::Reg(Reg::from_u8(Rd)),
+                                            Operand::Reg(Reg::from_u8(Rd + 1)),
                                             Operand::RegDeref(Reg::from_u8(Rn)),
                                             Operand::Nothing,
                                         ];
@@ -1167,7 +1185,7 @@ impl Decoder<Instruction> for InstDecoder {
                                     0b11101 => {
                                         inst.opcode = Opcode::LDREXB;
                                         inst.operands = [
-                                            Operand::Reg(Reg::from_u8(LoOffset)),
+                                            Operand::Reg(Reg::from_u8(Rd)),
                                             Operand::RegDeref(Reg::from_u8(Rn)),
                                             Operand::Nothing,
                                             Operand::Nothing,
@@ -1185,7 +1203,7 @@ impl Decoder<Instruction> for InstDecoder {
                                     0b11111 => {
                                         inst.opcode = Opcode::LDREXH;
                                         inst.operands = [
-                                            Operand::Reg(Reg::from_u8(LoOffset)),
+                                            Operand::Reg(Reg::from_u8(Rd)),
                                             Operand::RegDeref(Reg::from_u8(Rn)),
                                             Operand::Nothing,
                                             Operand::Nothing,
@@ -1206,58 +1224,90 @@ impl Decoder<Instruction> for InstDecoder {
                             0b01 => {
                     // |c o n d|0 0 0 x|x x x x x x x x x x x x x x x x|1 0 1 1|x x x x|
                     // page A5-201
-                                inst.opcode = Opcode::Incomplete(word);
-                                // return Some(());
-                                match flags {
-                                    0b00010 => {
-                                        // inst.opcode = Opcode::STRHT_sub;
-                                        inst.opcode = Opcode::Incomplete(word);
+                                let P = flags & 0b10000 != 0;
+                                let U = flags & 0b01000 != 0;
+                                let W = flags & 0b00010 != 0;
+
+                                match flags & 0b00101 {
+                                    0b00000 => {
+                                        // STRHT or STRH
+                                        if !P && W { // flags == 0b0x010
+                                            inst.opcode = Opcode::STRHT(U);
+                                        } else {
+                                            inst.opcode = Opcode::STRH(U, P, W);
+                                        }
                                         inst.operands = [
                                             Operand::Reg(Reg::from_u8(Rd)),
-                                            Operand::RegDerefPostindexReg(Reg::from_u8(Rd), Reg::from_u8(LoOffset)),
+                                            if P {
+                                                Operand::RegDerefPostindexReg(Reg::from_u8(Rn), Reg::from_u8(LoOffset), U)
+                                            } else {
+                                                Operand::RegDerefPreindexReg(Reg::from_u8(Rn), Reg::from_u8(LoOffset), U)
+                                            },
                                             Operand::Nothing,
                                             Operand::Nothing,
                                         ];
                                     }
-                                    0b01010 => {
-                                        // inst.opcode = Opcode::STRHT_add;
-                                        inst.opcode = Opcode::Incomplete(word);
+                                    0b00001 => {
+                                        // LDRHT or LDRH
+                                        if !P && W { // flags == 0b0x011
+                                            inst.opcode = Opcode::LDRHT(U);
+                                        } else {
+                                            inst.opcode = Opcode::LDRH(U, P, W);
+                                        }
                                         inst.operands = [
                                             Operand::Reg(Reg::from_u8(Rd)),
-                                            Operand::RegDerefPostindexReg(Reg::from_u8(Rd), Reg::from_u8(LoOffset)),
+                                            if P {
+                                                Operand::RegDerefPostindexReg(Reg::from_u8(Rn), Reg::from_u8(LoOffset), U)
+                                            } else {
+                                                Operand::RegDerefPreindexReg(Reg::from_u8(Rn), Reg::from_u8(LoOffset), U)
+                                            },
                                             Operand::Nothing,
                                             Operand::Nothing,
                                         ];
                                     }
-                                    0b00110 => {
-                                        // inst.opcode = Opcode::STRHT_sub;
-                                        inst.opcode = Opcode::Incomplete(word);
+                                    0b00100 => {
+                                        // STRHT or STRH
+                                        if !P && W { // flags == 0b0x110
+                                            inst.opcode = Opcode::STRHT(U);
+                                        } else {
+                                            inst.opcode = Opcode::STRH(U, P, W);
+                                        }
                                         let imm = (HiOffset << 4) as u16 | LoOffset as u16;
                                         inst.operands = [
                                             Operand::Reg(Reg::from_u8(Rd)),
-                                            Operand::RegDerefPostindexOffset(Reg::from_u8(Rd), imm),
+                                            if P {
+                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U)
+                                            } else {
+                                                Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm, U)
+                                            },
                                             Operand::Nothing,
                                             Operand::Nothing,
                                         ];
                                     }
-                                    0b01110 => {
-                                        // inst.opcode = Opcode::STRHT_add;
-                                        inst.opcode = Opcode::Incomplete(word);
+                                    0b00101 => {
+                                        // LDRHT or LDRH
+                                        if !P && W { // flags == 0b0x111
+                                            inst.opcode = Opcode::LDRHT(U);
+                                        } else {
+                                            inst.opcode = Opcode::LDRH(U, P, W);
+                                        }
                                         let imm = (HiOffset << 4) as u16 | LoOffset as u16;
                                         inst.operands = [
                                             Operand::Reg(Reg::from_u8(Rd)),
-                                            Operand::RegDerefPostindexOffset(Reg::from_u8(Rd), imm),
+                                            if P {
+                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U)
+                                            } else {
+                                                Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm, U)
+                                            },
                                             Operand::Nothing,
                                             Operand::Nothing,
                                         ];
                                     }
-                                    _ => {
-                                        return Err(DecodeError::Incomplete);
-//                                        unreachable!();
+                                    o => {
+                                        unreachable!("all of op2=01 in table A5-10 should be handled, got unexpected pattern {:b}", o);
                                     }
                                 }
-                                return Err(DecodeError::Incomplete);
-//                                panic!("page a5-201");
+                                return Ok(());
                             }
                             0b10 => {
                     // |c o n d|0 0 0 x|x x x x x x x x x x x x x x x x|1 1 0 1|x x x x|
@@ -1723,7 +1773,7 @@ impl Decoder<Instruction> for InstDecoder {
                 }
                 inst.operands = [
                     Operand::Reg(Reg::from_u8(Rt)),
-                    Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm as u16),
+                    Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm as u16, add),
                     Operand::Nothing,
                     Operand::Nothing,
                 ];

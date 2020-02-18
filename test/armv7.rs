@@ -60,7 +60,7 @@ fn test_decode_str_ldr() {
             opcode: Opcode::STR(false, true, true),
             operands: [
                 Operand::Reg(Reg::from_u8(2)),
-                Operand::RegDerefPostindexOffset(Reg::from_u8(13), 4),
+                Operand::RegDerefPostindexOffset(Reg::from_u8(13), 4, false),
                 Operand::Nothing,
                 Operand::Nothing,
             ],
@@ -74,7 +74,7 @@ fn test_decode_str_ldr() {
             opcode: Opcode::STR(false, true, true),
             operands: [
                 Operand::Reg(Reg::from_u8(0)),
-                Operand::RegDerefPostindexOffset(Reg::from_u8(13), 4),
+                Operand::RegDerefPostindexOffset(Reg::from_u8(13), 4, false),
                 Operand::Nothing,
                 Operand::Nothing,
             ],
@@ -135,7 +135,7 @@ fn test_synchronization() {
     );
     test_display(
         [0x9f, 0x2f, 0xd4, 0xe1],
-        "ldreb r2, [r4]"
+        "ldrexb r2, [r4]"
     );
     test_display(
         [0x9f, 0x2f, 0xe4, 0xe1],
@@ -200,7 +200,7 @@ fn test_decode_pop() {
             opcode: Opcode::LDR(true, false, false),
             operands: [
                 Operand::Reg(Reg::from_u8(1)),
-                Operand::RegDerefPostindexOffset(Reg::from_u8(13), 0x4),
+                Operand::RegDerefPostindexOffset(Reg::from_u8(13), 0x4, true),
                 Operand::Nothing,
                 Operand::Nothing,
             ],
