@@ -113,7 +113,7 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
                         } else {
                             (true, *offset as u16)
                         };
-                        return format_reg_imm_mem(out, *Rt, offset, add, true, false, colors);
+                        return format_reg_imm_mem(out, *Rt, offset, add, pre, wback, colors);
                     }
                     // TODO: this might not be necessary
                     [Operand::Reg(Rt), Operand::Imm12(imm), Operand::Nothing, Operand::Nothing] => {
@@ -124,7 +124,7 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
                         )?;
                         return format_reg_imm_mem(out, Reg::from_u8(15), *imm, add, pre, wback, colors);
                     },
-                    [Operand::Reg(Rd), Operand::Reg(Rn), Operand::RegShift(shift), Operand::Nothing] => {
+                    [Operand::Reg(Rn), Operand::Reg(Rd), Operand::RegShift(shift), Operand::Nothing] => {
                         ConditionedOpcode(self.opcode, self.s, self.condition).colorize(colors, out)?;
                         write!(
                             out, " {}, ",
@@ -132,13 +132,24 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
                         )?;
                         return format_reg_shift_mem(out, *Rd, *shift, add, pre, wback, colors);
                     }
+                    [Operand::Reg(Rn), Operand::RegDerefRegShift(shift), Operand::Nothing, Operand::Nothing] => {
+                        ConditionedOpcode(self.opcode, self.s, self.condition).colorize(colors, out)?;
+                        write!(
+                            out, " {}, ",
+                            reg_name_colorize(*Rn, colors)
+                        )?;
+                        write!(out, "[")?;
+                        format_shift(out, *shift, colors);
+                        write!(out, "]")?;
+                        return Ok(());
+                    }
                     [Operand::Reg(Rt), Operand::RegDerefPostindexOffset(Rn, offset, add), Operand::Nothing, Operand::Nothing] => {
                         ConditionedOpcode(self.opcode, self.s, self.condition).colorize(colors, out)?;
                         write!(
                             out, " {}, ",
                             reg_name_colorize(*Rt, colors)
                         )?;
-                        return format_reg_imm_mem(out, *Rt, *offset, *add, false, true, colors);
+                        return format_reg_imm_mem(out, *Rt, *offset, *add, pre, wback, colors);
                     }
                     o => { println!("other str/ldr operands: {:?}", o); unreachable!(); }
                 }
@@ -1739,36 +1750,48 @@ impl Decoder<Instruction> for InstDecoder {
                     let pre = (op & 0b10000) != 0;
                     let wback = (op & 0b00010) != 0;
                     let op = op & 0b00101;
-                    inst.opcode = match op {
-                        0b000 => Opcode::STR(add, pre, wback),
-                        0b001 => {
-                            if Rn == 0b1111 {
-                                inst.operands = [
-                                    Operand::Reg(Reg::from_u8(Rt)),
-                                    Operand::RegDisp(Reg::from_u8(Rn), imm as u16 as i16),
-                                    Operand::Nothing,
-                                    Operand::Nothing,
-                                ];
-                                inst.opcode = Opcode::LDR(add, pre, wback);
-                                return Ok(());
-                            }
-                            Opcode::LDR(add, pre, wback)
-                        },
-                        0b100 => Opcode::STRB(add, pre, wback),
-                        0b101 => {
-                            if Rn == 0b1111 {
-                                inst.operands = [
-                                    Operand::Reg(Reg::from_u8(Rt)),
-                                    Operand::RegDisp(Reg::from_u8(Rn), imm as u16 as i16),
-                                    Operand::Nothing,
-                                    Operand::Nothing,
-                                ];
-                                inst.opcode = Opcode::LDRB(add, pre, wback);
-                                return Ok(());
-                            }
-                            Opcode::LDRB(add, pre, wback)
-                        },
-                        _ => { unreachable!(); }
+                    inst.opcode = if !pre && wback {
+                        // Table A5-15
+                        // strt, ldrt, strbt, ldrbt
+                        match op {
+                            0b000 => Opcode::STRT(add),
+                            0b001 => Opcode::LDRT(add),
+                            0b100 => Opcode::STRBT(add),
+                            0b101 => Opcode::LDRBT(add),
+                            _ => { unreachable!("bad bit pattern, table A5-15"); }
+                        }
+                    } else {
+                        match op {
+                            0b000 => Opcode::STR(add, pre, wback),
+                            0b001 => {
+                                if Rn == 0b1111 {
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(Rt)),
+                                        Operand::RegDisp(Reg::from_u8(Rn), imm as u16 as i16),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                    inst.opcode = Opcode::LDR(add, pre, wback);
+                                    return Ok(());
+                                }
+                                Opcode::LDR(add, pre, wback)
+                            },
+                            0b100 => Opcode::STRB(add, pre, wback),
+                            0b101 => {
+                                if Rn == 0b1111 {
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(Rt)),
+                                        Operand::RegDisp(Reg::from_u8(Rn), imm as u16 as i16),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                    inst.opcode = Opcode::LDRB(add, pre, wback);
+                                    return Ok(());
+                                }
+                                Opcode::LDRB(add, pre, wback)
+                            },
+                            _ => { unreachable!(); }
+                        }
                     };
                 }
                 inst.operands = [
