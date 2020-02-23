@@ -497,7 +497,7 @@ impl RegShift {
         }
     }
 
-    fn from(data: u16) -> Self {
+    pub fn from_raw(data: u16) -> Self {
         RegShift { data }
     }
 }
@@ -1620,7 +1620,7 @@ impl Decoder<Instruction> for InstDecoder {
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(Rd)),
                                     Operand::Reg(Reg::from_u8(Rn)),
-                                    Operand::RegShift(RegShift::from(shift_spec)),
+                                    Operand::RegShift(RegShift::from_raw(shift_spec)),
                                     Operand::Nothing
                                 ];
                             }
@@ -1647,7 +1647,7 @@ impl Decoder<Instruction> for InstDecoder {
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(Rd)),
                                     Operand::Reg(Reg::from_u8(Rn)),
-                                    Operand::RegShift(RegShift::from(shift_spec)),
+                                    Operand::RegShift(RegShift::from_raw(shift_spec)),
                                     Operand::Nothing,
                                 ];
                             }
@@ -1867,7 +1867,7 @@ impl Decoder<Instruction> for InstDecoder {
                     };
                     inst.operands = [
                         Operand::Reg(Reg::from_u8(Rt)),
-                        Operand::RegDerefRegShift(RegShift::from(shift)),
+                        Operand::RegDerefRegShift(RegShift::from_raw(shift)),
                         Operand::Nothing,
                         Operand::Nothing,
                     ];

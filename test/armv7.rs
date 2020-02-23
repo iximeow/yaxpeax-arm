@@ -1,5 +1,5 @@
 use yaxpeax_arch::{Arch, Decoder, LengthedInstruction};
-use yaxpeax_arm::armv7::{ARMv7, Instruction, ConditionCode, Operand, Opcode, Reg};
+use yaxpeax_arm::armv7::{ARMv7, Instruction, ConditionCode, Operand, Opcode, Reg, RegShift};
 
 fn test_decode(data: [u8; 4], expected: Instruction) {
     let instr = <ARMv7 as Arch>::Decoder::default().decode(data.to_vec()).unwrap();
@@ -283,30 +283,25 @@ fn test_decode_mov() {
 
 #[test]
 fn test_decode_arithmetic() {
-    /*
     test_decode(
         [0x18, 0x1d, 0x00, 0x00],
         Instruction {
             condition: ConditionCode::EQ,
             opcode: Opcode::AND,
-            operands: Operands::ThreeOperandWithShift(
-                1, 0, 8, ShiftSpec::Register(104)
-            ),
+            operands: [Operand::Reg(Reg::from_u8(1)), Operand::Reg(Reg::from_u8(0)), Operand::RegShift(RegShift::from_raw(0xd18)), Operand::Nothing],
             s: false
         }
     );
-    */
     test_display(
         [0x18, 0x1d, 0x00, 0x00],
         "andeq r1, r0, r8, lsl sp",
     );
-    /*
     test_decode(
         [0x03, 0x30, 0x8f, 0xe0],
         Instruction {
             condition: ConditionCode::AL,
             opcode: Opcode::ADD,
-            operands: Operands::ThreeOperand(3, 15, 3),
+            operands: [Operand::Reg(Reg::from_u8(3)), Operand::Reg(Reg::from_u8(15)), Operand::Reg(Reg::from_u8(3)), Operand::Nothing],
             s: false
         }
     );
@@ -315,7 +310,7 @@ fn test_decode_arithmetic() {
         Instruction {
             condition: ConditionCode::AL,
             opcode: Opcode::RSB,
-            operands: Operands::ThreeOperand(3, 6, 3),
+            operands: [Operand::Reg(Reg::from_u8(3)), Operand::Reg(Reg::from_u8(6)), Operand::Reg(Reg::from_u8(3)), Operand::Nothing],
             s: false
         }
     );
@@ -324,7 +319,7 @@ fn test_decode_arithmetic() {
         Instruction {
             condition: ConditionCode::AL,
             opcode: Opcode::MOV,
-            operands: Operands::ThreeOperandWithShift(3, 0, 3, ShiftSpec::Immediate(10)),
+            operands: [Operand::Reg(Reg::from_u8(3)), Operand::Reg(Reg::from_u8(0)), Operand::RegShift(RegShift::from_raw(0x143)), Operand::Nothing],
             s: false
         }
     );
@@ -333,11 +328,10 @@ fn test_decode_arithmetic() {
         Instruction {
             condition: ConditionCode::AL,
             opcode: Opcode::SUB,
-            operands: Operands::RegImm(3, 20481),
+            operands: [Operand::Reg(Reg::from_u8(5)), Operand::Reg(Reg::from_u8(3)), Operand::Imm32(1), Operand::Nothing],
             s: false
         }
     );
-    */
 }
 
 #[test]
