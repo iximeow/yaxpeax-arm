@@ -1,4 +1,9 @@
-## ARM arch notes:
+## yaxpeax-arm
+
+### ! user beware !
+* armv7 NEON support is still nonexistent
+
+## arch notes:
 
 ### Register Names
 Reproduced from [infocenter.arm.com](http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.dui0473c/CJAJBFHC.html):
