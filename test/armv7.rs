@@ -1,8 +1,34 @@
 use yaxpeax_arch::{Arch, Decoder, LengthedInstruction};
-use yaxpeax_arm::armv7::{ARMv7, Instruction, ConditionCode, Operand, Opcode, Reg, RegShift};
+use yaxpeax_arm::armv7::{ARMv7, Instruction, ConditionCode, DecodeError, Operand, Opcode, Reg, RegShift};
+
+type InstDecoder = <ARMv7 as Arch>::Decoder;
+
+fn test_invalid_under(decoder: &InstDecoder, data: [u8; 4]) {
+    match decoder.decode(data.to_vec()) {
+        Err(_) => { },
+        Ok(inst) => {
+            panic!(
+                "unexpected successful decode for {:02x}{:02x}{:02x}{:02x}\ngot: {}",
+                data[0], data[1], data[2], data[3],
+                inst
+            );
+        }
+    }
+}
+
+fn test_display_under(decoder: &InstDecoder, data: [u8; 4], expected: &'static str) {
+    let instr = decoder.decode(data.to_vec()).unwrap_or_else(|_| panic!("failed to decode {:02x}{:02x}{:02x}{:02x}", data[0], data[1], data[2], data[3]));
+    let displayed = format!("{}", instr);
+    assert!(
+        displayed == expected,
+        "decode error for {:02x}{:02x}{:02x}{:02x}:\n displayed: {}\n expected:  {}\n",
+        data[0], data[1], data[2], data[3],
+        displayed, expected
+    );
+}
 
 fn test_decode(data: [u8; 4], expected: Instruction) {
-    let instr = <ARMv7 as Arch>::Decoder::default().decode(data.to_vec()).unwrap();
+    let instr = InstDecoder::default().decode(data.to_vec()).unwrap();
     assert!(
         instr == expected,
         "decode error for {:02x}{:02x}{:02x}{:02x}:\n  decoded: {:?}\n expected: {:?}\n",
@@ -11,8 +37,52 @@ fn test_decode(data: [u8; 4], expected: Instruction) {
     );
 }
 
+fn test_invalid(data: [u8; 4]) {
+   test_invalid_under(&InstDecoder::default(), data);
+}
+
+fn test_all(data: [u8; 4], expected: &'static str) {
+   test_display_under(&InstDecoder::armv4(), data, expected);
+   test_display_under(&InstDecoder::armv5(), data, expected);
+   test_display_under(&InstDecoder::armv6(), data, expected);
+   test_display_under(&InstDecoder::armv7(), data, expected);
+}
+fn test_armv5(data: [u8; 4], expected: &'static str) {
+   test_display_under(&InstDecoder::armv5(), data, expected);
+//   test_invalid_under(&InstDecoder::armv4(), data);
+}
+fn test_armv6(data: [u8; 4], expected: &'static str) {
+   test_display_under(&InstDecoder::armv6(), data, expected);
+//   test_invalid_under(&InstDecoder::armv5(), data);
+}
+fn test_armv6t2(data: [u8; 4], expected: &'static str) {
+   test_display_under(&InstDecoder::armv6t2(), data, expected);
+//   test_invalid_under(&InstDecoder::armv6(), data);
+}
+#[allow(dead_code)]
+fn test_armv7(data: [u8; 4], expected: &'static str) {
+   test_display_under(&InstDecoder::armv7(), data, expected);
+//   test_invalid_under(&InstDecoder::armv6(), data);
+}
+fn test_armv7ve(data: [u8; 4], expected: &'static str) {
+   test_display_under(&InstDecoder::armv7ve(), data, expected);
+//   test_invalid_under(&InstDecoder::armv7(), data, expected);
+}
+fn test_arm_security_extensions(data: [u8; 4], expected: &'static str) {
+   test_display_under(&InstDecoder::armv7vese(), data, expected);
+//   test_invalid_under(&InstDecoder::armv7ve(), data, expected);
+}
+
+fn test_nonconformant(data: [u8; 4]) {
+    let result = InstDecoder::default().decode(data.to_vec());
+    assert!(
+        result == Err(DecodeError::Nonconforming),
+        "got bad result: {:?} from {:#x?}", result, data
+    );
+}
+
 fn test_display(data: [u8; 4], expected: &'static str) {
-    let instr = <ARMv7 as Arch>::Decoder::default().decode(data.to_vec()).unwrap();
+    let instr = InstDecoder::default().decode(data.to_vec()).unwrap();
     let text = format!("{}", instr);
     assert!(
         text == expected,
@@ -29,10 +99,10 @@ fn test_decode_str_ldr() {
         [0x24, 0xc0, 0x9f, 0xe5],
         Instruction {
             condition: ConditionCode::AL,
-            opcode: Opcode::LDR(true, true, false),
+            opcode: Opcode::LDR,
             operands: [
                 Operand::Reg(Reg::from_u8(12)),
-                Operand::RegDisp(Reg::from_u8(15), 0x24),
+                Operand::RegDerefPreindexOffset(Reg::from_u8(15), 0x24, true, false),
                 Operand::Nothing,
                 Operand::Nothing,
             ],
@@ -43,10 +113,10 @@ fn test_decode_str_ldr() {
         [0x10, 0x00, 0x9f, 0xe5],
         Instruction {
             condition: ConditionCode::AL,
-            opcode: Opcode::LDR(true, true, false),
+            opcode: Opcode::LDR,
             operands: [
                 Operand::Reg(Reg::from_u8(0)),
-                Operand::RegDisp(Reg::from_u8(15), 0x10),
+                Operand::RegDerefPreindexOffset(Reg::from_u8(15), 0x10, true, false),
                 Operand::Nothing,
                 Operand::Nothing,
             ],
@@ -57,10 +127,10 @@ fn test_decode_str_ldr() {
         [0x04, 0x20, 0x2d, 0xe5],
         Instruction {
             condition: ConditionCode::AL,
-            opcode: Opcode::STR(false, true, true),
+            opcode: Opcode::STR,
             operands: [
                 Operand::Reg(Reg::from_u8(2)),
-                Operand::RegDerefPostindexOffset(Reg::from_u8(13), 4, false),
+                Operand::RegDerefPreindexOffset(Reg::from_u8(13), 4, false, true),
                 Operand::Nothing,
                 Operand::Nothing,
             ],
@@ -71,10 +141,10 @@ fn test_decode_str_ldr() {
         [0x04, 0x00, 0x2d, 0xe5],
         Instruction {
             condition: ConditionCode::AL,
-            opcode: Opcode::STR(false, true, true),
+            opcode: Opcode::STR,
             operands: [
                 Operand::Reg(Reg::from_u8(0)),
-                Operand::RegDerefPostindexOffset(Reg::from_u8(13), 4, false),
+                Operand::RegDerefPreindexOffset(Reg::from_u8(13), 4, false, true),
                 Operand::Nothing,
                 Operand::Nothing,
             ],
@@ -85,10 +155,10 @@ fn test_decode_str_ldr() {
         [0x14, 0x30, 0x9f, 0xe5],
         Instruction {
             condition: ConditionCode::AL,
-            opcode: Opcode::LDR(true, true, false),
+            opcode: Opcode::LDR,
             operands: [
                 Operand::Reg(Reg::from_u8(3)),
-                Operand::RegDisp(Reg::from_u8(15), 0x14),
+                Operand::RegDerefPreindexOffset(Reg::from_u8(15), 0x14, true, false),
                 Operand::Nothing,
                 Operand::Nothing,
             ],
@@ -99,16 +169,40 @@ fn test_decode_str_ldr() {
         [0x14, 0x20, 0x9f, 0xe5],
         Instruction {
             condition: ConditionCode::AL,
-            opcode: Opcode::LDR(true, true, false),
+            opcode: Opcode::LDR,
             operands: [
                 Operand::Reg(Reg::from_u8(2)),
-                Operand::RegDisp(Reg::from_u8(15), 0x14),
+                Operand::RegDerefPreindexOffset(Reg::from_u8(15), 0x14, true, false),
                 Operand::Nothing,
                 Operand::Nothing,
             ],
             s: false
         }
     );
+    test_all([0x10, 0x00, 0x7f, 0xe5], "ldrb r0, [pc, -0x10]!");
+    test_all([0x10, 0x00, 0x3f, 0xe5], "ldr r0, [pc, -0x10]!");
+    test_all([0x10, 0x00, 0x7f, 0xe4], "ldrbt r0, [pc], -0x10");
+    test_all([0x10, 0x00, 0x3f, 0xe4], "ldrt r0, [pc], -0x10");
+    test_all([0x10, 0x00, 0x4f, 0xe4], "strb r0, [pc], -0x10");
+    // Extra load/store instructions A5.2.8, page A5-201
+    test_all([0xbb, 0x38, 0xa5, 0xe1], "strh r3, [r5, fp]!");
+    test_all([0xbb, 0x38, 0xb5, 0xe1], "ldrh r3, [r5, fp]!");
+    test_all([0xbb, 0x38, 0xe5, 0xe1], "strh r3, [r5, 0x8b]!");
+    test_all([0xbb, 0x38, 0xf5, 0xe1], "ldrh r3, [r5, 0x8b]!");
+    test_armv5([0xdb, 0x48, 0xa6, 0xe1], "ldrd r4, r5, [r6, fp]!");
+    test_invalid([0xdb, 0x38, 0xa5, 0xe1]);
+    test_all([0xdb, 0x38, 0xb5, 0xe1], "ldrsb r3, [r5, fp]!");
+    test_armv5([0xdb, 0x48, 0xe6, 0xe1], "ldrd r4, r5, [r6, 0x8b]!");
+    test_invalid([0xdb, 0x38, 0xe5, 0xe1]);
+    test_all([0xdb, 0x38, 0xf5, 0xe1], "ldrsb r3, [r5, 0x8b]!");
+    test_invalid([0xfb, 0x38, 0xa5, 0xe1]);
+    test_all([0xfb, 0x48, 0xa6, 0xe1], "strd r4, r5, [r6, fp]!");
+    test_all([0xfb, 0x38, 0xb5, 0xe1], "ldrsh r3, [r5, fp]!");
+    test_invalid([0xfb, 0x38, 0xe5, 0xe1]);
+    test_all([0xfb, 0x48, 0xe6, 0xe1], "strd r4, r5, [r6, 0x8b]!");
+    test_all([0xfb, 0x38, 0xf5, 0xe1], "ldrsh r3, [r5, 0x8b]!");
+    test_all([0xfb, 0x38, 0xff, 0xe1], "ldrsh r3, [pc, 0x8b]!");
+
 }
 
 #[test]
@@ -169,6 +263,7 @@ fn test_data_imm() {
 
 #[test]
 fn test_decode_misc() {
+    test_armv5([0x32, 0xff, 0x2f, 0xe1], "blx r2");
     test_display(
         [0x13, 0x5f, 0x6f, 0xe1],
         "clz r5, r3"
@@ -187,8 +282,49 @@ fn test_decode_misc() {
     );
     test_display(
         [0xe8, 0x10, 0x9f, 0xe5],
-        "ldr r1, [pc, #0x3a0]"
+        "ldr r1, [pc, 0xe8]"
     );
+    // https://www.raspberrypi.org/forums/viewtopic.php?p=967759&sid=25fa58d95208c0c76b579012ca693380#p967759
+    // it looks like gcc toolchains older than 6.1(?) don't support -march=armv7e
+    test_armv7ve([0x6e, 0x00, 0x60, 0xe1], "eret");
+    test_armv5([0x76, 0x00, 0x23, 0xe1], "bkpt 0x3006");
+    // ARMv7VE only, capstone (not-next) doesn't have this, no secondary confirmation yet
+    test_armv7ve([0x76, 0x00, 0x43, 0xe1], "hvc 0x3006");
+    test_arm_security_extensions([0x76, 0x00, 0x63, 0xe1], "smc 0x3006");
+    test_all([0x6e, 0xf0, 0x28, 0xe3], "msr apsr_nzcvq, 0x6e");
+    test_all([0x6e, 0xf0, 0x24, 0xe3], "msr apsr_g, 0x6e");
+    test_all([0x6e, 0xf0, 0x2c, 0xe3], "msr apsr_nzcvqg, 0x6e");
+
+    test_all([0x6e, 0xf0, 0x21, 0xe3], "msr cpsr_c, 0x6e");
+    test_all([0x6e, 0xf0, 0x22, 0xe3], "msr cpsr_x, 0x6e");
+    test_all([0x6e, 0xf0, 0x23, 0xe3], "msr cpsr_xc, 0x6e");
+    test_all([0x6e, 0xf0, 0x25, 0xe3], "msr cpsr_sc, 0x6e");
+    test_all([0x6e, 0xf0, 0x26, 0xe3], "msr cpsr_sx, 0x6e");
+    test_all([0x6e, 0xf0, 0x27, 0xe3], "msr cpsr_sxc, 0x6e");
+    test_all([0x6e, 0xf0, 0x29, 0xe3], "msr cpsr_fc, 0x6e");
+    test_all([0x6e, 0xf0, 0x2a, 0xe3], "msr cpsr_fx, 0x6e");
+    test_all([0x6e, 0xf0, 0x2b, 0xe3], "msr cpsr_fxc, 0x6e");
+    test_all([0x6e, 0xf0, 0x2d, 0xe3], "msr cpsr_fsc, 0x6e");
+    test_all([0x6e, 0xf0, 0x2e, 0xe3], "msr cpsr_fsx, 0x6e");
+    test_all([0x6e, 0xf0, 0x2f, 0xe3], "msr cpsr_fsxc, 0x6e");
+    test_all([0x6e, 0xf0, 0x60, 0xe3], "msr spsr, 0x6e");
+    test_all([0x6e, 0xf0, 0x61, 0xe3], "msr spsr_c, 0x6e");
+    test_all([0x6e, 0xf0, 0x62, 0xe3], "msr spsr_x, 0x6e");
+    test_all([0x6e, 0xf0, 0x63, 0xe3], "msr spsr_xc, 0x6e");
+    test_all([0x6e, 0xf0, 0x64, 0xe3], "msr spsr_s, 0x6e");
+    test_all([0x6e, 0xf0, 0x65, 0xe3], "msr spsr_sc, 0x6e");
+    test_all([0x6e, 0xf0, 0x66, 0xe3], "msr spsr_sx, 0x6e");
+    test_all([0x6e, 0xf0, 0x67, 0xe3], "msr spsr_sxc, 0x6e");
+    test_all([0x6e, 0xf0, 0x68, 0xe3], "msr spsr_f, 0x6e");
+    test_all([0x6e, 0xf0, 0x69, 0xe3], "msr spsr_fc, 0x6e");
+    test_all([0x6e, 0xf0, 0x6a, 0xe3], "msr spsr_fx, 0x6e");
+    test_all([0x6e, 0xf0, 0x6b, 0xe3], "msr spsr_fxc, 0x6e");
+    test_all([0x6e, 0xf0, 0x6c, 0xe3], "msr spsr_fs, 0x6e");
+    test_all([0x6e, 0xf0, 0x6d, 0xe3], "msr spsr_fsc, 0x6e");
+    test_all([0x6e, 0xf0, 0x6e, 0xe3], "msr spsr_fsx, 0x6e");
+    test_all([0x6e, 0xf0, 0x6f, 0xe3], "msr spsr_fsxc, 0x6e");
+    test_armv6t2([0x45, 0x67, 0x01, 0xe3], "mov r6, 0x1745");
+    test_armv6t2([0x45, 0x67, 0x41, 0xe3], "movt r6, 0x1745");
 }
 
 #[test]
@@ -197,10 +333,10 @@ fn test_decode_pop() {
         [0x04, 0x10, 0x9d, 0xe4],
         Instruction {
             condition: ConditionCode::AL,
-            opcode: Opcode::LDR(true, false, false),
+            opcode: Opcode::LDR,
             operands: [
                 Operand::Reg(Reg::from_u8(1)),
-                Operand::RegDerefPostindexOffset(Reg::from_u8(13), 0x4, true),
+                Operand::RegDerefPostindexOffset(Reg::from_u8(13), 0x4, true, false),
                 Operand::Nothing,
                 Operand::Nothing,
             ],
@@ -265,6 +401,8 @@ fn test_decode_mov() {
             s: false
         }
     );
+    test_display([0x0d, 0x20, 0xa0, 0xe1], "mov r2, sp");
+    test_nonconformant([0x0d, 0x20, 0xa1, 0xe1]);
     test_decode(
         [0x00, 0xb0, 0xa0, 0xe3],
         Instruction {
@@ -332,6 +470,54 @@ fn test_decode_arithmetic() {
             s: false
         }
     );
+}
+
+#[test]
+fn test_unconditional() {
+    test_armv6([0x00, 0x0a, 0x15, 0xf8], "rfeda r5");
+    test_nonconformant([0x10, 0x0a, 0x15, 0xf8]);
+    test_armv6([0x00, 0x0a, 0x1f, 0xf8], "rfeda pc");
+    test_armv6([0x00, 0x0a, 0xb5, 0xf8], "rfeia r5!");
+    test_armv6([0x00, 0x0a, 0xb5, 0xf9], "rfeib r5!");
+    test_armv6([0x0f, 0x05, 0x4d, 0xf8], "srsda sp, 0xf");
+    test_nonconformant([0xff, 0x05, 0xed, 0xf8]);
+    test_armv6([0x0f, 0x05, 0x4d, 0xf8], "srsda sp, 0xf");
+    test_armv6([0x0f, 0x05, 0xed, 0xf9], "srsib sp!, 0xf");
+    test_armv6([0x0f, 0x05, 0xed, 0xf8], "srsia sp!, 0xf");
+    test_armv5([0x01, 0x02, 0x03, 0xfb], "blx $+0xc0806");
+    test_armv5([0x01, 0x02, 0x03, 0xfa], "blx $+0xc0804");
+    test_armv5([0x12, 0x34, 0xcf, 0xfc], "stc2l p4, c3, [pc], {0x12}");
+    test_armv5([0x12, 0x34, 0xdf, 0xfc], "ldc2l p4, c3, [pc], {0x12}");
+    test_armv5([0x34, 0x78, 0xff, 0xfc], "ldc2l p8, c7, [pc], 0xd0");
+    test_invalid([0x34, 0x78, 0x1f, 0xfc]);
+    test_armv5([0x34, 0x78, 0x9f, 0xfc], "ldc2 p8, c7, [pc], {0x34}");
+    test_armv5([0x34, 0x78, 0xbf, 0xfc], "ldc2 p8, c7, [pc], 0xd0");
+    test_armv5([0x34, 0x78, 0xbf, 0xfd], "ldc2 p8, c7, [pc, 0xd0]!");
+    test_armv5([0x34, 0x78, 0x9f, 0xfd], "ldc2 p8, c7, [pc, 0xd0]");
+    test_armv5([0x34, 0x78, 0x1f, 0xfd], "ldc2 p8, c7, [pc, -0xd0]");
+    test_armv5([0x34, 0x78, 0xdf, 0xfc], "ldc2l p8, c7, [pc], {0x34}");
+    test_armv6([0x34, 0x78, 0x5a, 0xfc], "mrrc2 p8, 3, r7, r10, c4");
+    // Rt/Rt2 may not be r15
+    test_invalid([0x34, 0x78, 0x5f, 0xfc]);
+    test_armv6([0x34, 0x78, 0x4a, 0xfc], "mcrr2 p8, 3, r7, r10, c4");
+    // Rt/Rt2 may not be r15
+    test_invalid([0x34, 0x78, 0x4f, 0xfc]);
+    test_armv5([0x34, 0x78, 0x4f, 0xfe], "mcr2 p8, 2, r7, c15, c4, 1");
+    test_armv5([0x34, 0x78, 0x5f, 0xfe], "mrc2 p8, 2, r7, c15, c4, 1");
+    test_armv5([0x24, 0x78, 0x5f, 0xfe], "cdp2 p8, 5, c7, c15, c4, 1");
+    test_armv5([0x24, 0x78, 0x4f, 0xfe], "cdp2 p8, 4, c7, c15, c4, 1");
+}
+
+#[test]
+fn test_saturating_addsub() {
+    test_armv5([0x50, 0x10, 0x64, 0xe1], "qdsub r1, r0, r4");
+    test_nonconformant([0x50, 0x14, 0x64, 0xe1]);
+    test_armv5([0x50, 0x10, 0x44, 0xe1], "qdadd r1, r0, r4");
+    test_nonconformant([0x50, 0x14, 0x44, 0xe1]);
+    test_armv5([0x50, 0x10, 0x24, 0xe1], "qsub r1, r0, r4");
+    test_nonconformant([0x50, 0x14, 0x24, 0xe1]);
+    test_armv5([0x50, 0x10, 0x04, 0xe1], "qadd r1, r0, r4");
+    test_nonconformant([0x50, 0x14, 0x04, 0xe1]);
 }
 
 #[test]
@@ -448,7 +634,7 @@ static INSTRUCTION_BYTES: [u8; 4 * 60] = [
 fn test_decode_span() {
     let mut i = 0u32;
     while i < INSTRUCTION_BYTES.len() as u32 {
-        let instr = <ARMv7 as Arch>::Decoder::default().decode(INSTRUCTION_BYTES[(i as usize)..].iter().cloned()).unwrap();
+        let instr = InstDecoder::default().decode(INSTRUCTION_BYTES[(i as usize)..].iter().cloned()).unwrap();
         println!(
             "Decoded {:02x}{:02x}{:02x}{:02x}: {}", //{:?}\n  {}",
             INSTRUCTION_BYTES[i as usize],
@@ -532,7 +718,7 @@ pub fn bench_60000_instrs(b: &mut Bencher) {
     b.iter(|| {
         for i in (0..1000) {
             let mut iter = INSTRUCTION_BYTES.iter().map(|x| *x);
-            let decoder = <ARMv7 as Arch>::Decoder::default();
+            let decoder = InstDecoder::default();
             let mut result = Instruction::default();
             loop {
                 match decoder.decode_into(&mut result, &mut iter) {

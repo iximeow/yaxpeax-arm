@@ -45,18 +45,20 @@ fn reg_name_colorize<C: fmt::Display, Y: YaxColors<C>>(reg: Reg, colors: &Y) -> 
 impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u32, NoContext, Color, T, Y> for Instruction {
     fn contextualize(&self, colors: &Y, _address: u32, _context: Option<&NoContext>, out: &mut T) -> fmt::Result {
         match self.opcode {
-            Opcode::LDR(true, false, false) => {
+            Opcode::LDR => {
                 match self.operands {
-                    [Operand::Reg(Rt), Operand::RegDerefPostindexOffset(Reg { bits: 13 }, 4, true), Operand::Nothing, Operand::Nothing] => {
+                    // TODO: should this be PostindexOffset?
+                    [Operand::Reg(Rt), Operand::RegDerefPostindexOffset(Reg { bits: 13 }, 4, true, false), Operand::Nothing, Operand::Nothing] => {
                         ConditionedOpcode(Opcode::POP, self.s, self.condition).colorize(colors, out)?;
                         return write!(out, " {{{}}}", reg_name_colorize(Rt, colors));
                     },
                     _ => {}
                 }
             },
-            Opcode::STR(false, true, true) => {
+            Opcode::STR => {
                 match self.operands {
-                    [Operand::Reg(Rt), Operand::RegDerefPostindexOffset(Reg { bits: 13 }, 4, fale), Operand::Nothing, Operand::Nothing] => {
+                    // TODO: should this be PreindexOffset?
+                    [Operand::Reg(Rt), Operand::RegDerefPreindexOffset(Reg { bits: 13 }, 4, false, true), Operand::Nothing, Operand::Nothing] => {
                         ConditionedOpcode(Opcode::PUSH, self.s, self.condition).colorize(colors, out)?;
                         return write!(out, " {{{}}}", reg_name_colorize(Rt, colors));
                     },
@@ -89,71 +91,6 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
         }
 
         match self.opcode {
-            Opcode::LDR(add, pre, wback) |
-            Opcode::STR(add, pre, wback) |
-            Opcode::STRB(add, pre, wback) |
-            Opcode::LDRB(add, pre, wback) => {
-                match &self.operands {
-                    [Operand::Reg(Rn), Operand::Reg(Rt), Operand::Imm12(imm), Operand::Nothing] => {
-                        ConditionedOpcode(self.opcode, self.s, self.condition).colorize(colors, out)?;
-                        write!(
-                            out, " {}, ",
-                            reg_name_colorize(*Rt, colors),
-                        )?;
-                        return format_reg_imm_mem(out, *Rn, *imm, add, pre, wback, colors);
-                    }
-                    [Operand::Reg(Rn), Operand::RegDisp(Rt, offset), Operand::Nothing, Operand::Nothing] => {
-                        ConditionedOpcode(self.opcode, self.s, self.condition).colorize(colors, out)?;
-                        write!(
-                            out, " {}, ",
-                            reg_name_colorize(*Rn, colors),
-                        )?;
-                        let (add, offset) = if *offset < 0 {
-                            (false, -*offset as u16)
-                        } else {
-                            (true, *offset as u16)
-                        };
-                        return format_reg_imm_mem(out, *Rt, offset, add, pre, wback, colors);
-                    }
-                    // TODO: this might not be necessary
-                    [Operand::Reg(Rt), Operand::Imm12(imm), Operand::Nothing, Operand::Nothing] => {
-                        ConditionedOpcode(self.opcode, self.s, self.condition).colorize(colors, out)?;
-                        write!(
-                            out, " {}, ",
-                            reg_name_colorize(*Rt, colors)
-                        )?;
-                        return format_reg_imm_mem(out, Reg::from_u8(15), *imm, add, pre, wback, colors);
-                    },
-                    [Operand::Reg(Rn), Operand::Reg(Rd), Operand::RegShift(shift), Operand::Nothing] => {
-                        ConditionedOpcode(self.opcode, self.s, self.condition).colorize(colors, out)?;
-                        write!(
-                            out, " {}, ",
-                            reg_name_colorize(*Rn, colors)
-                        )?;
-                        return format_reg_shift_mem(out, *Rd, *shift, add, pre, wback, colors);
-                    }
-                    [Operand::Reg(Rn), Operand::RegDerefRegShift(shift), Operand::Nothing, Operand::Nothing] => {
-                        ConditionedOpcode(self.opcode, self.s, self.condition).colorize(colors, out)?;
-                        write!(
-                            out, " {}, ",
-                            reg_name_colorize(*Rn, colors)
-                        )?;
-                        write!(out, "[")?;
-                        format_shift(out, *shift, colors);
-                        write!(out, "]")?;
-                        return Ok(());
-                    }
-                    [Operand::Reg(Rt), Operand::RegDerefPostindexOffset(Rn, offset, add), Operand::Nothing, Operand::Nothing] => {
-                        ConditionedOpcode(self.opcode, self.s, self.condition).colorize(colors, out)?;
-                        write!(
-                            out, " {}, ",
-                            reg_name_colorize(*Rt, colors)
-                        )?;
-                        return format_reg_imm_mem(out, *Rt, *offset, *add, pre, wback, colors);
-                    }
-                    o => { println!("other str/ldr operands: {:?}", o); unreachable!(); }
-                }
-            }
             // TODO: [add, pre, usermode]
             Opcode::STM(_add, _pre, wback, _usermode) |
             Opcode::LDM(_add, _pre, wback, _usermode) => {
@@ -173,10 +110,136 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
             Opcode::Incomplete(word) => {
                 write!(out, "incomplete: {:#x}", word)
             },
+            Opcode::STC2L(coproc) => {
+                write!(out, "stc2l p{}", coproc)?;
+                let ops = self.operands.iter();
+                for op in ops {
+                    if let Operand::Nothing = op {
+                        break;
+                    }
+                    write!(out, ", ")?;
+                    op.colorize(colors, out)?;
+                }
+
+                Ok(())
+            }
+            Opcode::STC2(coproc) => {
+                write!(out, "stc2 p{}", coproc)?;
+                let ops = self.operands.iter();
+                for op in ops {
+                    if let Operand::Nothing = op {
+                        break;
+                    }
+                    write!(out, ", ")?;
+                    op.colorize(colors, out)?;
+                }
+
+                Ok(())
+            }
+            Opcode::LDC2(coproc) => {
+                write!(out, "ldc2 p{}", coproc)?;
+                let ops = self.operands.iter();
+                for op in ops {
+                    if let Operand::Nothing = op {
+                        break;
+                    }
+                    write!(out, ", ")?;
+                    op.colorize(colors, out)?;
+                }
+
+                Ok(())
+            }
+            Opcode::LDC2L(coproc) => {
+                write!(out, "ldc2l p{}", coproc)?;
+                let ops = self.operands.iter();
+                for op in ops {
+                    if let Operand::Nothing = op {
+                        break;
+                    }
+                    write!(out, ", ")?;
+                    op.colorize(colors, out)?;
+                }
+
+                Ok(())
+            }
+            Opcode::MRRC2(coproc, opc) => {
+                write!(out, "mrrc2 p{}, {}", coproc, opc)?;
+                let ops = self.operands.iter();
+                for op in ops {
+                    if let Operand::Nothing = op {
+                        break;
+                    }
+                    write!(out, ", ")?;
+                    op.colorize(colors, out)?;
+                }
+
+                Ok(())
+            }
+            Opcode::MCRR2(coproc, opc) => {
+                write!(out, "mcrr2 p{}, {}", coproc, opc)?;
+                let ops = self.operands.iter();
+                for op in ops {
+                    if let Operand::Nothing = op {
+                        break;
+                    }
+                    write!(out, ", ")?;
+                    op.colorize(colors, out)?;
+                }
+
+                Ok(())
+            }
+            Opcode::MRC2(coproc, opc1, opc2) => {
+                write!(out, "mrc2 p{}, {}", coproc, opc1)?;
+                let ops = self.operands.iter();
+                for op in ops {
+                    if let Operand::Nothing = op {
+                        break;
+                    }
+                    write!(out, ", ")?;
+                    op.colorize(colors, out)?;
+                }
+
+                write!(out, ", {}", opc2)?;
+
+                Ok(())
+            }
+            Opcode::MCR2(coproc, opc1, opc2) => {
+                write!(out, "mcr2 p{}, {}", coproc, opc1)?;
+                let ops = self.operands.iter();
+                for op in ops {
+                    if let Operand::Nothing = op {
+                        break;
+                    }
+                    write!(out, ", ")?;
+                    op.colorize(colors, out)?;
+                }
+
+                write!(out, ", {}", opc2)?;
+
+                Ok(())
+            }
+            Opcode::CDP2(coproc, opc1, opc2) => {
+                write!(out, "cdp2 p{}, {}", coproc, opc1)?;
+                let ops = self.operands.iter();
+                for op in ops {
+                    if let Operand::Nothing = op {
+                        break;
+                    }
+                    write!(out, ", ")?;
+                    op.colorize(colors, out)?;
+                }
+
+                write!(out, ", {}", opc2)?;
+
+                Ok(())
+            }
             _ => {
                 ConditionedOpcode(self.opcode, self.s, self.condition).colorize(colors, out)?;
                 let mut ops = self.operands.iter();
                 if let Some(first_op) = ops.next() {
+                    if let Operand::Nothing = first_op {
+                        return Ok(());
+                    }
                     write!(out, " ")?;
                     first_op.colorize(colors, out)?;
                 } else {
@@ -226,6 +289,11 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
             Opcode::SBC |
             Opcode::RSC |
 
+            Opcode::QADD |
+            Opcode::QSUB |
+            Opcode::QDADD |
+            Opcode::QDSUB |
+
             Opcode::CLZ |
 
             Opcode::MUL |
@@ -250,6 +318,12 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
             Opcode::CMP |
             Opcode::CMN => { write!(out, "{}", colors.comparison_op(self)) },
 
+            Opcode::LDRSH |
+            Opcode::LDRSHT |
+            Opcode::LDRSB |
+            Opcode::LDRSBT |
+            Opcode::STRD |
+            Opcode::LDRD |
             Opcode::LDREXH |
             Opcode::STREXH |
             Opcode::LDREXB |
@@ -266,24 +340,42 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
             Opcode::STM(false, true, _, _) |
             Opcode::STM(true, false, _, _) |
             Opcode::STM(true, true, _, _) |
-            Opcode::LDR(_, _, _) |
-            Opcode::STR(_, _, _) |
-            Opcode::LDRH(_, _, _) |
-            Opcode::STRH(_, _, _) |
-            Opcode::LDRB(_, _, _) |
-            Opcode::STRB(_, _, _) |
-            Opcode::LDRT(_) |
-            Opcode::STRT(_) |
-            Opcode::LDRHT(_) |
-            Opcode::STRHT(_) |
-            Opcode::LDRBT(_) |
-            Opcode::STRBT(_) |
+            Opcode::LDR |
+            Opcode::STR |
+            Opcode::LDRH |
+            Opcode::STRH |
+            Opcode::LDRB |
+            Opcode::STRB |
+            Opcode::LDRT |
+            Opcode::STRT |
+            Opcode::LDRHT |
+            Opcode::STRHT |
+            Opcode::LDRBT |
+            Opcode::STRBT |
             Opcode::SWP |
             Opcode::SWPB |
             Opcode::MSR |
             Opcode::MRS |
             Opcode::MOV |
+            Opcode::MOVT |
             Opcode::MVN => { write!(out, "{}", colors.data_op(self)) },
+
+            Opcode::SRS(_, _) |
+            Opcode::BKPT => { write!(out, "{}", colors.misc_op(self)) },
+
+            Opcode::ERET |
+            Opcode::RFE(_, _) |
+            Opcode::HVC |
+            Opcode::SMC |
+            Opcode::LDC2(_) |
+            Opcode::LDC2L(_) |
+            Opcode::STC2(_) |
+            Opcode::STC2L(_) |
+            Opcode::MCRR2(_, _) |
+            Opcode::MCR2(_, _, _) |
+            Opcode::MRRC2(_, _) |
+            Opcode::MRC2(_, _, _) |
+            Opcode::CDP2(_, _, _) => { write!(out, "{}", colors.platform_op(self)) },
         }
     }
 }
@@ -291,6 +383,32 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
 impl Display for Opcode {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         match self {
+            Opcode::LDRSH => { write!(f, "ldrsh") },
+            Opcode::LDRSHT => { write!(f, "ldrsht") },
+            Opcode::LDRSB => { write!(f, "ldrsb") },
+            Opcode::LDRSBT => { write!(f, "ldrsbt") },
+            Opcode::STRD => { write!(f, "strd") },
+            Opcode::LDRD => { write!(f, "ldrd") },
+            Opcode::LDC2(_) => { write!(f, "ldc2") },
+            Opcode::LDC2L(_) => { write!(f, "ldc2l") },
+            Opcode::STC2(_) => { write!(f, "stc2") },
+            Opcode::STC2L(_) => { write!(f, "stc2l") },
+            Opcode::MCRR2(_, _) => { write!(f, "mcrr2") },
+            Opcode::MCR2(_, _, _) => { write!(f, "mcr2") },
+            Opcode::MRRC2(_, _) => { write!(f, "mrrc2") },
+            Opcode::MRC2(_, _, _) => { write!(f, "mrc2") },
+            Opcode::CDP2(_, _, _) => { write!(f, "cdp2") },
+            Opcode::SRS(p, u) => { write!(f, "srs{}{}", if *u { "i" } else { "d" }, if *p { "b" } else { "a" }) },
+            Opcode::RFE(p, u) => { write!(f, "rfe{}{}", if *u { "i" } else { "d" }, if *p { "b" } else { "a" }) },
+            Opcode::ERET => { write!(f, "eret") },
+            Opcode::HVC => { write!(f, "hvc") },
+            Opcode::BKPT => { write!(f, "bkpt") },
+            Opcode::SMC => { write!(f, "smc") },
+            Opcode::MOVT => { write!(f, "movt") },
+            Opcode::QADD => { write!(f, "qadd") },
+            Opcode::QSUB => { write!(f, "qsub") },
+            Opcode::QDADD => { write!(f, "qdadd") },
+            Opcode::QDSUB => { write!(f, "qdsub") },
             Opcode::Incomplete(word) => { write!(f, "incomplete: {:#x}", word) },
             Opcode::Invalid => { write!(f, "invalid") },
             Opcode::POP => { write!(f, "pop") },
@@ -341,18 +459,18 @@ impl Display for Opcode {
             Opcode::STM(false, true, _, _) => { write!(f, "stmdb") },
             Opcode::STM(true, false, _, _) => { write!(f, "stm") },
             Opcode::STM(true, true, _, _) => { write!(f, "stmia") },
-            Opcode::LDR(_, _, _) => { write!(f, "ldr") },
-            Opcode::STR(_, _, _) => { write!(f, "str") },
-            Opcode::LDRH(_, _, _) => { write!(f, "ldrh") },
-            Opcode::STRH(_, _, _) => { write!(f, "strh") },
-            Opcode::LDRB(_, _, _) => { write!(f, "ldrb") },
-            Opcode::STRB(_, _, _) => { write!(f, "strb") },
-            Opcode::LDRT(_) => { write!(f, "ldrt") },
-            Opcode::STRT(_) => { write!(f, "strt") },
-            Opcode::LDRHT(_) => { write!(f, "ldrht") },
-            Opcode::STRHT(_) => { write!(f, "strht") },
-            Opcode::LDRBT(_) => { write!(f, "ldrbt") },
-            Opcode::STRBT(_) => { write!(f, "strbt") },
+            Opcode::LDR => { write!(f, "ldr") },
+            Opcode::STR => { write!(f, "str") },
+            Opcode::LDRH => { write!(f, "ldrh") },
+            Opcode::STRH => { write!(f, "strh") },
+            Opcode::LDRB => { write!(f, "ldrb") },
+            Opcode::STRB => { write!(f, "strb") },
+            Opcode::LDRT => { write!(f, "ldrt") },
+            Opcode::STRT => { write!(f, "strt") },
+            Opcode::LDRHT => { write!(f, "ldrht") },
+            Opcode::STRHT => { write!(f, "strht") },
+            Opcode::LDRBT => { write!(f, "ldrbt") },
+            Opcode::STRBT => { write!(f, "strbt") },
             Opcode::SWP => { write!(f, "swp") },
             Opcode::SWPB => { write!(f, "swpb") },
             Opcode::MUL => { write!(f, "mul") },
@@ -383,6 +501,7 @@ impl Display for Opcode {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[allow(non_camel_case_types)]
 pub enum Opcode {
     Incomplete(u32),
     Invalid,
@@ -434,18 +553,35 @@ pub enum Opcode {
     STREX,
     LDM(bool, bool, bool, bool),
     STM(bool, bool, bool, bool),
-    LDR(bool, bool, bool),
-    STR(bool, bool, bool),
-    LDRH(bool, bool, bool),
-    STRH(bool, bool, bool),
-    LDRB(bool, bool, bool),
-    STRB(bool, bool, bool),
-    LDRT(bool),
-    STRT(bool),
-    LDRHT(bool),
-    STRHT(bool),
-    LDRBT(bool),
-    STRBT(bool),
+    LDR,
+    STR,
+    LDRH,
+    STRH,
+    LDRB,
+    STRB,
+    LDRSH,
+    LDRSHT,
+    LDRSB,
+    LDRSBT,
+    STRD,
+    LDRD,
+    LDC2(u8),
+    LDC2L(u8),
+    STC2(u8),
+    STC2L(u8),
+    MCRR2(u8, u8),
+    MCR2(u8, u8, u8),
+    MRRC2(u8, u8),
+    MRC2(u8, u8, u8),
+    CDP2(u8, u8, u8),
+    SRS(bool, bool),
+    RFE(bool, bool),
+    LDRT,
+    STRT,
+    LDRHT,
+    STRHT,
+    LDRBT,
+    STRBT,
     SWP,
     SWPB,
     MUL,
@@ -461,6 +597,15 @@ pub enum Opcode {
     SMLAL_halfword(bool, bool),
     SMAL(bool, bool),
     SMLAW(bool),
+    ERET,
+    BKPT,
+    HVC,
+    SMC,
+    MOVT,
+    QDSUB,
+    QDADD,
+    QSUB,
+    QADD,
 }
 
 static DATA_PROCESSING_OPCODES: [Opcode; 16] = [
@@ -520,6 +665,17 @@ pub enum ShiftStyle {
     ROR = 3,
 }
 
+impl Display for ShiftStyle {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ShiftStyle::LSL => write!(f, "lsl"),
+            ShiftStyle::LSR => write!(f, "lsr"),
+            ShiftStyle::ASR => write!(f, "asr"),
+            ShiftStyle::ROR => write!(f, "ror"),
+        }
+    }
+}
+
 impl ShiftStyle {
     fn from(bits: u8) -> ShiftStyle {
         match bits {
@@ -568,6 +724,73 @@ pub struct Reg {
 }
 
 impl Reg {
+    #[allow(non_snake_case)]
+    fn from_sysm(R: bool, M: u8) -> Option<Operand> {
+/*
+ * Is one of:
+ * • <Rm>_<mode>, encoded with R==0.
+ * • ELR_hyp, encoded with R==0.
+ * • SPSR_<mode>, encoded with R==1.
+ * For a full description of the encoding of this field, see Encoding and use of Banked register
+ * transfer
+ * instructions on page B9-1959.
+ * */
+        if R == false {
+            [
+                Some(Operand::BankedReg(Bank::Usr, Reg::from_u8(8))),
+                Some(Operand::BankedReg(Bank::Usr, Reg::from_u8(9))),
+                Some(Operand::BankedReg(Bank::Usr, Reg::from_u8(10))),
+                Some(Operand::BankedReg(Bank::Usr, Reg::from_u8(11))),
+                Some(Operand::BankedReg(Bank::Usr, Reg::from_u8(12))),
+                Some(Operand::BankedReg(Bank::Usr, Reg::from_u8(13))),
+                Some(Operand::BankedReg(Bank::Usr, Reg::from_u8(14))),
+                None,
+                Some(Operand::BankedReg(Bank::Fiq, Reg::from_u8(8))),
+                Some(Operand::BankedReg(Bank::Fiq, Reg::from_u8(9))),
+                Some(Operand::BankedReg(Bank::Fiq, Reg::from_u8(10))),
+                Some(Operand::BankedReg(Bank::Fiq, Reg::from_u8(11))),
+                Some(Operand::BankedReg(Bank::Fiq, Reg::from_u8(12))),
+                Some(Operand::BankedReg(Bank::Fiq, Reg::from_u8(13))),
+                Some(Operand::BankedReg(Bank::Fiq, Reg::from_u8(14))),
+                None,
+                Some(Operand::BankedReg(Bank::Irq, Reg::from_u8(13))),
+                Some(Operand::BankedReg(Bank::Irq, Reg::from_u8(14))),
+                Some(Operand::BankedReg(Bank::Svc, Reg::from_u8(13))),
+                Some(Operand::BankedReg(Bank::Svc, Reg::from_u8(14))),
+                Some(Operand::BankedReg(Bank::Abt, Reg::from_u8(13))),
+                Some(Operand::BankedReg(Bank::Abt, Reg::from_u8(14))),
+                Some(Operand::BankedReg(Bank::Und, Reg::from_u8(13))),
+                Some(Operand::BankedReg(Bank::Und, Reg::from_u8(14))),
+                None,
+                None,
+                None,
+                None,
+                Some(Operand::BankedReg(Bank::Mon, Reg::from_u8(13))),
+                Some(Operand::BankedReg(Bank::Mon, Reg::from_u8(14))),
+                Some(Operand::BankedReg(Bank::Hyp, Reg::from_u8(13))),
+                Some(Operand::BankedReg(Bank::Hyp, Reg::from_u8(14))),
+            ][M as usize]
+        } else {
+            if M == 0b01110 {
+                Some(Operand::BankedSPSR(Bank::Fiq))
+            } else if M == 0b10000 {
+                Some(Operand::BankedSPSR(Bank::Irq))
+            } else if M == 0b10010 {
+                Some(Operand::BankedSPSR(Bank::Svc))
+            } else if M == 0b10100 {
+                Some(Operand::BankedSPSR(Bank::Abt))
+            } else if M == 0b10110 {
+                Some(Operand::BankedSPSR(Bank::Und))
+            } else if M == 0b11100 {
+                Some(Operand::BankedSPSR(Bank::Mon))
+            } else if M == 0b11110 {
+                Some(Operand::BankedSPSR(Bank::Hyp))
+            } else {
+                None
+            }
+        }
+    }
+
     pub fn from_u8(bits: u8) -> Reg {
         if bits > 0b1111 {
             panic!("register number out of range");
@@ -581,25 +804,204 @@ impl Reg {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct CReg {
+    bits: u8
+}
+
+impl Display for CReg {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "c{}", self.bits)
+    }
+}
+
+impl CReg {
+    pub fn from_u8(bits: u8) -> CReg {
+        if bits > 0b1111 {
+            panic!("register number out of range");
+        }
+
+        CReg { bits }
+    }
+
+    pub fn number(&self) -> u8 {
+        self.bits
+    }
+}
+
+impl Display for StatusRegMask {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            StatusRegMask::CPSR_C => write!(f, "cpsr_c"),
+            StatusRegMask::CPSR_X => write!(f, "cpsr_x"),
+            StatusRegMask::CPSR_XC => write!(f, "cpsr_xc"),
+            StatusRegMask::APSR_G => write!(f, "apsr_g"),
+            StatusRegMask::CPSR_SC => write!(f, "cpsr_sc"),
+            StatusRegMask::CPSR_SX => write!(f, "cpsr_sx"),
+            StatusRegMask::CPSR_SXC => write!(f, "cpsr_sxc"),
+            StatusRegMask::APSR_NZCVQ => write!(f, "apsr_nzcvq"),
+            StatusRegMask::CPSR_FC => write!(f, "cpsr_fc"),
+            StatusRegMask::CPSR_FX => write!(f, "cpsr_fx"),
+            StatusRegMask::CPSR_FXC => write!(f, "cpsr_fxc"),
+            StatusRegMask::APSR_NZCVQG => write!(f, "apsr_nzcvqg"),
+            StatusRegMask::CPSR_FSC => write!(f, "cpsr_fsc"),
+            StatusRegMask::CPSR_FSX => write!(f, "cpsr_fsx"),
+            StatusRegMask::CPSR_FSXC => write!(f, "cpsr_fsxc"),
+            StatusRegMask::SPSR => write!(f, "spsr"),
+            StatusRegMask::SPSR_C => write!(f, "spsr_c"),
+            StatusRegMask::SPSR_X => write!(f, "spsr_x"),
+            StatusRegMask::SPSR_XC => write!(f, "spsr_xc"),
+            StatusRegMask::SPSR_S => write!(f, "spsr_s"),
+            StatusRegMask::SPSR_SC => write!(f, "spsr_sc"),
+            StatusRegMask::SPSR_SX => write!(f, "spsr_sx"),
+            StatusRegMask::SPSR_SXC => write!(f, "spsr_sxc"),
+            StatusRegMask::SPSR_F => write!(f, "spsr_f"),
+            StatusRegMask::SPSR_FC => write!(f, "spsr_fc"),
+            StatusRegMask::SPSR_FX => write!(f, "spsr_fx"),
+            StatusRegMask::SPSR_FXC => write!(f, "spsr_fxc"),
+            StatusRegMask::SPSR_FS => write!(f, "spsr_fs"),
+            StatusRegMask::SPSR_FSC => write!(f, "spsr_fsc"),
+            StatusRegMask::SPSR_FSX => write!(f, "spsr_fsx"),
+            StatusRegMask::SPSR_FSXC => write!(f, "spsr_fsxc"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(non_camel_case_types)]
+pub enum StatusRegMask {
+    // Note 0b0000 is unused (as is 0b10000)
+    CPSR_C = 0b0001,
+    CPSR_X = 0b0010,
+    CPSR_XC = 0b0011,
+    APSR_G = 0b0100,
+    CPSR_SC = 0b0101,
+    CPSR_SX = 0b0110,
+    CPSR_SXC = 0b0111,
+    APSR_NZCVQ = 0b1000,
+    CPSR_FC = 0b1001,
+    CPSR_FX = 0b1010,
+    CPSR_FXC = 0b1011,
+    APSR_NZCVQG = 0b1100,
+    CPSR_FSC = 0b1101,
+    CPSR_FSX = 0b1110,
+    CPSR_FSXC = 0b1111,
+    SPSR = 0b10000,
+    SPSR_C = 0b10001,
+    SPSR_X = 0b10010,
+    SPSR_XC = 0b10011,
+    SPSR_S = 0b10100,
+    SPSR_SC = 0b10101,
+    SPSR_SX = 0b10110,
+    SPSR_SXC = 0b10111,
+    SPSR_F = 0b11000,
+    SPSR_FC = 0b11001,
+    SPSR_FX = 0b11010,
+    SPSR_FXC = 0b11011,
+    SPSR_FS = 0b11100,
+    SPSR_FSC = 0b11101,
+    SPSR_FSX = 0b11110,
+    SPSR_FSXC = 0b11111,
+}
+
+impl StatusRegMask {
+    fn from_raw(raw: u8) -> StatusRegMask {
+        if raw == 0 {
+            panic!("invalid status reg mask value");
+        }
+        [
+            StatusRegMask::CPSR_C, // actually unreachable
+            StatusRegMask::CPSR_C,
+            StatusRegMask::CPSR_X,
+            StatusRegMask::CPSR_XC,
+            StatusRegMask::APSR_G,
+            StatusRegMask::CPSR_SC,
+            StatusRegMask::CPSR_SX,
+            StatusRegMask::CPSR_SXC,
+            StatusRegMask::APSR_NZCVQ,
+            StatusRegMask::CPSR_FC,
+            StatusRegMask::CPSR_FX,
+            StatusRegMask::CPSR_FXC,
+            StatusRegMask::APSR_NZCVQG,
+            StatusRegMask::CPSR_FSC,
+            StatusRegMask::CPSR_FSX,
+            StatusRegMask::CPSR_FSXC,
+            StatusRegMask::SPSR,
+            StatusRegMask::SPSR_C,
+            StatusRegMask::SPSR_X,
+            StatusRegMask::SPSR_XC,
+            StatusRegMask::SPSR_S,
+            StatusRegMask::SPSR_SC,
+            StatusRegMask::SPSR_SX,
+            StatusRegMask::SPSR_SXC,
+            StatusRegMask::SPSR_F,
+            StatusRegMask::SPSR_FC,
+            StatusRegMask::SPSR_FX,
+            StatusRegMask::SPSR_FXC,
+            StatusRegMask::SPSR_FS,
+            StatusRegMask::SPSR_FSC,
+            StatusRegMask::SPSR_FSX,
+            StatusRegMask::SPSR_FSXC,
+        ][raw as usize]
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operand {
     Reg(Reg),
+    RegWBack(Reg, bool),
     RegList(u16),
     RegDeref(Reg),
     RegDisp(Reg, i16),
     RegShift(RegShift),
-    RegDerefRegShift(RegShift),
-    RegDerefPostindexOffset(Reg, u16, bool), // add/sub
-    RegDerefPreindexOffset(Reg, u16, bool), // add/sub
-    RegDerefPostindexReg(Reg, Reg, bool),
-    RegDerefPreindexReg(Reg, Reg, bool),
+    RegDerefPostindexRegShift(Reg, RegShift, bool, bool), // add/sub, wback
+    RegDerefPreindexRegShift(Reg, RegShift, bool, bool), // add/sub, wback
+    RegDerefPostindexOffset(Reg, u16, bool, bool), // add/sub, wback
+    RegDerefPreindexOffset(Reg, u16, bool, bool), // add/sub, wback
+    RegDerefPostindexReg(Reg, Reg, bool, bool), // add/sub, wback
+    RegDerefPreindexReg(Reg, Reg, bool, bool), // add/sub, wback
     Imm12(u16),
     Imm32(u32),
     BranchOffset(i32),
-    ASPR,
-    CSPR,
+    BranchThumbOffset(i32),
+    Coprocessor(u8),
+    CoprocOption(u8),
+    CReg(CReg),
+    APSR,
+    CPSR,
     SPSR,
+    BankedReg(Bank, Reg),
+    BankedSPSR(Bank),
+    StatusRegMask(StatusRegMask),
     Nothing,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Bank {
+    Usr,
+    Fiq,
+    Irq,
+    Svc,
+    Abt,
+    Und,
+    Mon,
+    Hyp,
+}
+
+impl Display for Bank {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Bank::Usr => write!(f, "usr"),
+            Bank::Fiq => write!(f, "fiq"),
+            Bank::Irq => write!(f, "irq"),
+            Bank::Svc => write!(f, "svc"),
+            Bank::Abt => write!(f, "abt"),
+            Bank::Und => write!(f, "und"),
+            Bank::Mon => write!(f, "mon"),
+            Bank::Hyp => write!(f, "hyp"),
+        }
+    }
 }
 
 impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color, Y> for Operand {
@@ -608,6 +1010,12 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
             Operand::RegList(list) => {
                 format_reg_list(f, *list, colors)
             }
+            Operand::BankedReg(bank, reg) => {
+                write!(f, "{}_{}", reg_name_colorize(*reg, colors), bank)
+            },
+            Operand::BankedSPSR(bank) => {
+                write!(f, "spsr_{}", bank)
+            },
             Operand::Reg(reg) => {
                 write!(f, "{}", reg_name_colorize(*reg, colors))
             }
@@ -620,22 +1028,23 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
             Operand::RegShift(shift) => {
                 format_shift(f, *shift, colors)
             }
-            Operand::RegDerefRegShift(shift) => {
-                write!(f, "[")?;
-                format_shift(f, *shift, colors)?;
-                write!(f, "]")
+            Operand::RegDerefPostindexRegShift(reg, shift, add, wback) => {
+                format_reg_shift_mem(f, *reg, *shift, *add, false, *wback, colors)
             }
-            Operand::RegDerefPostindexOffset(reg, offs, add) => {
-                write!(f, "[{}, {}{:#x}]", reg_name_colorize(*reg, colors), if *add { "" } else { "-" }, offs)
+            Operand::RegDerefPreindexRegShift(reg, shift, add, wback) => {
+                format_reg_shift_mem(f, *reg, *shift, *add, true, *wback, colors)
             }
-            Operand::RegDerefPreindexOffset(reg, offs, add) => {
-                write!(f, "[{}], {}{:#x}", reg_name_colorize(*reg, colors), if *add { "" } else { "-" }, offs)
+            Operand::RegDerefPostindexOffset(reg, offs, add, wback) => {
+                format_reg_imm_mem(f, *reg, *offs, *add, false, *wback, colors)
             }
-            Operand::RegDerefPostindexReg(reg, offsreg, add) => {
-                write!(f, "[{}, {}{}]", reg_name_colorize(*reg, colors), if *add { "" } else { "-" }, reg_name_colorize(*offsreg, colors))
+            Operand::RegDerefPreindexOffset(reg, offs, add, wback) => {
+                format_reg_imm_mem(f, *reg, *offs, *add, true, *wback, colors)
             }
-            Operand::RegDerefPreindexReg(reg, offsreg, add) => {
-                write!(f, "[{}], {}{}", reg_name_colorize(*reg, colors), if *add { "" } else { "-" }, reg_name_colorize(*offsreg, colors))
+            Operand::RegDerefPostindexReg(reg, offsreg, add, wback) => {
+                write!(f, "[{}], {}{}{}", reg_name_colorize(*reg, colors), if *add { "" } else { "-" }, reg_name_colorize(*offsreg, colors), if *wback { "!" } else { "" })
+            }
+            Operand::RegDerefPreindexReg(reg, offsreg, add, wback) => {
+                write!(f, "[{}, {}{}]{}", reg_name_colorize(*reg, colors), if *add { "" } else { "-" }, reg_name_colorize(*offsreg, colors), if *wback { "!" } else { "" })
             }
             Operand::Imm12(imm) => {
                 write!(f, "{:#x}", imm)
@@ -645,13 +1054,39 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
             }
             Operand::BranchOffset(imm) => {
                 if *imm < 0 {
-                    write!(f, " $-{:#x}", (-*imm) * 4)
+                    write!(f, "$-{:#x}", (-*imm) * 4)
                 } else {
-                    write!(f, " $+{:#x}", *imm * 4)
+                    write!(f, "$+{:#x}", *imm * 4)
                 }
             }
-            Operand::ASPR => { write!(f, "aspr") },
-            Operand::CSPR => { write!(f, "cspr") },
+            Operand::BranchThumbOffset(imm) => {
+                if *imm < 0 {
+                    write!(f, "$-{:#x}", (-*imm) * 2)
+                } else {
+                    write!(f, "$+{:#x}", *imm * 2)
+                }
+            }
+            Operand::Coprocessor(num) => {
+                write!(f, "p{}", num)
+            }
+            Operand::CoprocOption(num) => {
+                write!(f, "{{{:#x}}}", num)
+            }
+            Operand::RegWBack(reg, wback) => {
+                if *wback {
+                    write!(f, "{}!", reg_name_colorize(*reg, colors))
+                } else {
+                    write!(f, "{}", reg_name_colorize(*reg, colors))
+                }
+            }
+            Operand::CReg(creg) => {
+                write!(f, "{}", creg)
+            }
+            Operand::StatusRegMask(mask) => {
+                write!(f, "{}", mask)
+            }
+            Operand::APSR => { write!(f, "apsr") },
+            Operand::CPSR => { write!(f, "cpsr") },
             Operand::SPSR => { write!(f, "spsr") },
             Operand::Nothing => { panic!("tried to print Nothing operand") },
         }
@@ -672,6 +1107,8 @@ pub enum DecodeError {
     InvalidOpcode,
     InvalidOperand,
     Incomplete,
+    Nonconforming,
+    Undefined,
 }
 
 impl fmt::Display for DecodeError {
@@ -681,6 +1118,8 @@ impl fmt::Display for DecodeError {
             DecodeError::InvalidOpcode => write!(f, "invalid opcode"),
             DecodeError::InvalidOperand => write!(f, "invalid operand"),
             DecodeError::Incomplete => write!(f, "incomplete decoder"),
+            DecodeError::Nonconforming => write!(f, "invalid reserved bits"),
+            DecodeError::Undefined => write!(f, "undefined encoding"),
         }
     }
 }
@@ -736,24 +1175,16 @@ fn format_reg_list<T: fmt::Write, C: fmt::Display, Y: YaxColors<C>>(f: &mut T, m
 
 #[allow(non_snake_case)]
 fn format_shift<T: fmt::Write, C: fmt::Display, Y: YaxColors<C>>(f: &mut T, shift: RegShift, colors: &Y) -> Result<(), fmt::Error> {
-    fn shift_tpe_to_str(tpe: ShiftStyle) -> &'static str {
-        match tpe {
-            ShiftStyle::LSL => "lsl",
-            ShiftStyle::LSR => "lsr",
-            ShiftStyle::ASR => "asr",
-            ShiftStyle::ROR => "ror",
-        }
-    }
     match shift.into_shift() {
         RegShiftStyle::RegImm(imm_shift) => {
             if imm_shift.imm() == 0 && imm_shift.stype() == ShiftStyle::LSL {
                 write!(f, "{}", reg_name_colorize(imm_shift.shiftee(), colors))
             } else {
-                write!(f, "{}, {} {}", reg_name_colorize(imm_shift.shiftee(), colors), shift_tpe_to_str(imm_shift.stype()), imm_shift.imm())
+                write!(f, "{}, {} {}", reg_name_colorize(imm_shift.shiftee(), colors), imm_shift.stype(), imm_shift.imm())
             }
         }
         RegShiftStyle::RegReg(reg_shift) => {
-            write!(f, "{}, {} {}", reg_name_colorize(reg_shift.shiftee(), colors), shift_tpe_to_str(reg_shift.stype()), reg_name_colorize(reg_shift.shifter(), colors))
+            write!(f, "{}, {} {}", reg_name_colorize(reg_shift.shiftee(), colors), reg_shift.stype(), reg_name_colorize(reg_shift.shifter(), colors))
         },
     }
 }
@@ -774,7 +1205,7 @@ fn format_reg_shift_mem<T: fmt::Write, C: fmt::Display, Y: YaxColors<C>>(f: &mut
             write!(f, "]")
         },
         (false, true) => {
-            unreachable!("I don't know how to render an operand with pre==false and wback==true, this seems like it should be LDRT");
+            unreachable!("preindex with writeback is not an ARM addressing mode. this is a decoder bug.");
         },
         (false, false) => {
             write!(f, "[{}], {}", reg_name_colorize(Rd, colors), op)?;
@@ -790,16 +1221,16 @@ fn format_reg_imm_mem<T: fmt::Write, C: fmt::Display, Y: YaxColors<C>>(f: &mut T
 
         match (pre, wback) {
             (true, true) => {
-                write!(f, "[{}, #{}{:#x}]!", reg_name_colorize(Rn, colors), op, imm * 4)
+                write!(f, "[{}, {}{:#x}]!", reg_name_colorize(Rn, colors), op, imm)
             },
             (true, false) => {
-                write!(f, "[{}, #{}{:#x}]", reg_name_colorize(Rn, colors), op, imm * 4)
+                write!(f, "[{}, {}{:#x}]", reg_name_colorize(Rn, colors), op, imm)
             },
             (false, true) => {
-                unreachable!("I don't know how to render an operand with pre==false and wback==true, this seems like it should be LDRT");
+                unreachable!("I don't know how to render an operand with postindex and wback==true, this seems like it should be LDRT");
             },
             (false, false) => {
-                write!(f, "[{}], #{}{:#x}", reg_name_colorize(Rn, colors), op, imm * 4)
+                write!(f, "[{}], {}{:#x}", reg_name_colorize(Rn, colors), op, imm)
             }
         }
     } else {
@@ -904,9 +1335,159 @@ impl ConditionCode {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug, Copy, Clone)]
+#[allow(dead_code)]
+enum DecodeMode {
+    User,
+    FIQ,
+    IRQ,
+    Supervisor,
+    Monitor,
+    Abort,
+    Hyp,
+    Undefined,
+    System,
+    /// Catch-all mode to try decoding all ARM instructions. Some instructions are `UNDEFINED` or
+    /// `UNPREDICTABLE` in some modes, but `Any` will attempt to decode all.
+    Any,
+}
+
+impl Default for DecodeMode {
+    fn default() -> Self {
+        DecodeMode::Any
+    }
+}
+
+impl DecodeMode {
+    fn is_user(&self) -> bool {
+        match self {
+            DecodeMode::Any |
+            DecodeMode::User => true,
+            _ => false
+        }
+    }
+    #[allow(dead_code)]
+    fn is_supervisor(&self) -> bool {
+        match self {
+            DecodeMode::Any |
+            DecodeMode::Supervisor => true,
+            _ => false
+        }
+    }
+    fn is_hyp(&self) -> bool {
+        match self {
+            DecodeMode::Any |
+            DecodeMode::Hyp => true,
+            _ => false
+        }
+    }
+    fn is_system(&self) -> bool {
+        match self {
+            DecodeMode::Any |
+            DecodeMode::System => true,
+            _ => false
+        }
+    }
+    fn is_any(&self) -> bool {
+        match self {
+            DecodeMode::Any => true,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+#[allow(non_camel_case_types)]
+enum ARMVersion {
+    v4,
+    v5,
+    v6,
+    v6t2,
+    v7,
+    v7ve,
+    v7vese,
+    Any,
+}
+
+impl Default for ARMVersion {
+    fn default() -> Self {
+        ARMVersion::Any
+    }
+}
+
+#[derive(Debug)]
 pub struct InstDecoder {
-    system_mode: bool
+    mode: DecodeMode,
+    version: ARMVersion,
+    should_is_must: bool,
+}
+
+impl Default for InstDecoder {
+    fn default() -> Self {
+        Self {
+            mode: DecodeMode::Any,
+            version: ARMVersion::Any,
+            should_is_must: true,
+        }
+    }
+}
+
+impl InstDecoder {
+    pub fn armv4() -> Self {
+        Self {
+            mode: DecodeMode::Any,
+            version: ARMVersion::v4,
+            should_is_must: true,
+        }
+    }
+
+    pub fn armv5() -> Self {
+        Self {
+            mode: DecodeMode::Any,
+            version: ARMVersion::v5,
+            should_is_must: true,
+        }
+    }
+
+    pub fn armv6() -> Self {
+        Self {
+            mode: DecodeMode::Any,
+            version: ARMVersion::v6,
+            should_is_must: true,
+        }
+    }
+
+    pub fn armv6t2() -> Self {
+        Self {
+            mode: DecodeMode::Any,
+            version: ARMVersion::v6t2,
+            should_is_must: true,
+        }
+    }
+
+    pub fn armv7() -> Self {
+        Self {
+            mode: DecodeMode::Any,
+            version: ARMVersion::v7,
+            should_is_must: true,
+        }
+    }
+
+    pub fn armv7ve() -> Self {
+        Self {
+            mode: DecodeMode::Any,
+            version: ARMVersion::v7ve,
+            should_is_must: true,
+        }
+    }
+
+    pub fn armv7vese() -> Self {
+        Self {
+            mode: DecodeMode::Any,
+            version: ARMVersion::v7vese,
+            should_is_must: true,
+        }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -936,21 +1517,73 @@ impl Decoder<Instruction> for InstDecoder {
         };
 
         if cond == 0b1111 {
-            // do unconditional instruction stuff
+            // unconditional instructions, section A5.7/page A5-214
             inst.condition = ConditionCode::AL;
             let op1 = (word >> 20) as u8;
-            if op1 > 0x80 {
+            if op1 >= 0b1000_0000 {
                 match (op1 >> 5) & 0b11 {
                     0b00 => {
-                        inst.opcode = Opcode::Incomplete(word);
+                        match op1 & 0b101 {
+                            0b000 |
+                            0b101 => {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+                            0b100 => {
+                                // SRS (see table A5.7, op1 = 0b100xx1x0, page A5-214)
+                                if !self.mode.is_any() && self.mode.is_hyp() {
+                                    return Err(DecodeError::Undefined);
+                                }
+                                if self.should_is_must {
+                                    if word & 0x000fffe0 != 0x000d0500 {
+                                        return Err(DecodeError::Nonconforming);
+                                    }
+                                }
+                                let puxw = (word >> 21) & 0b1111;
+                                let P = puxw & 0b1000 != 0;
+                                let U = puxw & 0b0100 != 0;
+                                let W = puxw & 0b0001 != 0;
+                                inst.opcode = Opcode::SRS(P, U);
+                                inst.operands = [
+                                    Operand::RegWBack(Reg::from_u8(13), W),
+                                    Operand::Imm32(word & 0b1111),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            },
+                            0b001 => {
+                                // RFE (see table A5.7, op1 = 0b100xx0x1, page A5-214)
+                                if !self.mode.is_any() && self.mode.is_hyp() {
+                                    return Err(DecodeError::Undefined);
+                                }
+                                if self.should_is_must {
+                                    if word & 0xffff != 0x0a00 {
+                                        return Err(DecodeError::Nonconforming);
+                                    }
+                                }
+                                let puxw = (word >> 21) & 0b1111;
+                                let P = puxw & 0b1000 != 0;
+                                let U = puxw & 0b0100 != 0;
+                                let W = puxw & 0b0001 != 0;
+                                inst.opcode = Opcode::RFE(P, U);
+                                inst.operands = [
+                                    Operand::RegWBack(Reg::from_u8((word >> 16) as u8 & 0b1111), W),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            }
+                            _ => {
+                                unreachable!("op1 mask is 0b101 but somehow we got an invalid pattern");
+                            }
+                        }
                     }
                     0b01 => {
                         inst.opcode = Opcode::BLX;
-                        let operand = ((word & 0xffffff) as i32) << 8 >> 6;
+                        let operand = ((word & 0xffffff) as i32) << 8 >> 7;
                         inst.operands = [
-                            Operand::BranchOffset(
+                            Operand::BranchThumbOffset(
                                 operand | (
-                                    ((word >> 23) & 0b10) as i32
+                                    ((word >> 24) & 0b1) as i32
                                 )
                             ),
                             Operand::Nothing,
@@ -959,16 +1592,142 @@ impl Decoder<Instruction> for InstDecoder {
                         ];
                     }
                     0b10 => {
-                        inst.opcode = Opcode::Incomplete(word);
+                        // op1=0b110xxxxx, see table A5-23
+                        if (word >> 20) & 0b11010 == 0b00000 {
+                            // the `not 11000x0{0,1}` cases in table A5-23, MCRR or MRRC
+                            // but first check that bit 2 of op1 is in fact 1:
+                            if (word >> 20) & 0b00100 != 0 {
+                                // actually MCRR or MRRC
+                                let CRm = word as u8 & 0b1111;
+                                let opc1 = (word >> 4) as u8 & 0b1111;
+                                let coproc = (word >> 8) as u8 & 0b1111;
+                                if coproc & 0b1110 == 0b1010 {
+                                    // TODO: `UNDEFINED`
+                                    return Err(DecodeError::InvalidOpcode);
+                                }
+                                let Rt = (word >> 12) as u8 & 0b1111;
+                                let Rt2 = (word >> 16) as u8 & 0b1111;
+                                if Rt == 15 || Rt2 == 15 || Rt == Rt2 {
+                                    // TODO: actually `UNPREDICTABLE`
+                                    return Err(DecodeError::InvalidOperand);
+                                }
+                                if (word >> 20) & 0b00001 != 0 {
+                                    inst.opcode = Opcode::MRRC2(coproc, opc1);
+                                } else {
+                                    inst.opcode = Opcode::MCRR2(coproc, opc1);
+                                }
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(Rt)),
+                                    Operand::Reg(Reg::from_u8(Rt2)),
+                                    Operand::CReg(CReg::from_u8(CRm)),
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+                        } else {
+                            // STC or LDC
+                            let pudw = (word >> 21) as u8 & 0b1111;
+                            let Rn = (word >> 16) as u8 & 0b1111;
+                            let CRd = (word >> 12) as u8 & 0b1111;
+                            let coproc = (word >> 8) as u8 & 0b1111;
+                            let imm8 = word & 0b11111111;
+
+                            if coproc & 0b1110 == 0b1010 {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+
+                            if (word >> 20) & 0b00001 == 0 {
+                                // op=110xxxx0, STC
+                                // page A8-663
+
+                                if pudw & 0b0010 != 0 {
+                                    inst.opcode = Opcode::STC2L(coproc);
+                                } else {
+                                    inst.opcode = Opcode::STC2(coproc);
+                                }
+                            } else {
+                                // op=110xxxx1, LDC
+                                // page A8-393
+
+                                if pudw & 0b0010 != 0 {
+                                    inst.opcode = Opcode::LDC2L(coproc);
+                                } else {
+                                    inst.opcode = Opcode::LDC2(coproc);
+                                }
+                            }
+
+                            let P = pudw & 0b1000 != 0;
+                            let U = pudw & 0b0100 != 0;
+                            let W = pudw & 0b0001 != 0;
+
+                            inst.operands = [
+                                Operand::CReg(CReg::from_u8(CRd)),
+                                if P {
+                                    Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), (imm8 << 2) as u16, U, W)
+                                } else {
+                                    if W {
+                                        // preindex has no wback
+                                        Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), (imm8 << 2) as u16, U, false)
+                                    } else {
+                                        Operand::RegDeref(Reg::from_u8(Rn))
+                                    }
+                                },
+                                if !P && !W {
+                                    // TODO: not sure what ldc2{l}'s <option> field really means?
+                                    // at this point the invalid encoding and mrrc/mcrr forms have
+                                    // been tested, so..
+                                    debug_assert!(U);
+                                    Operand::CoprocOption(imm8 as u8)
+                                } else {
+                                    Operand::Nothing
+                                },
+                                Operand::Nothing,
+                            ];
+                        }
                     }
                     0b11 => {
-                        inst.opcode = Opcode::Incomplete(word);
+                        // operands are shared between cdp2 and mcr2/mrc2, but Rt is repurposed as
+                        // CRd
+                        let CRm = word as u8 & 0b1111;
+                        let opc2 = (word >> 5) as u8 & 0b111;
+                        let coproc = (word >> 8) as u8 & 0b1111;
+                        let Rt = (word >> 12) as u8 & 0b1111;
+                        let CRn = (word >> 16) as u8 & 0b1111;
+
+                        if (word >> 4) & 1 == 0 {
+                            // CDP2, page A8-356
+                            let opc1 = (word >> 20) as u8 & 0b1111;
+                            inst.opcode = Opcode::CDP2(coproc, opc1, opc2);
+                            inst.operands = [
+                                Operand::CReg(CReg::from_u8(Rt)),
+                                Operand::CReg(CReg::from_u8(CRn)),
+                                Operand::CReg(CReg::from_u8(CRm)),
+                                Operand::Nothing,
+                            ];
+                        } else {
+                            // MCR2/MRC2, page A8-477/A8-493
+                            let opc1 = (word >> 21) as u8 & 0b111;
+                            if (word >> 20) & 1 == 0 {
+                                inst.opcode = Opcode::MCR2(coproc, opc1, opc2);
+                            } else {
+                                inst.opcode = Opcode::MRC2(coproc, opc1, opc2);
+                            }
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(Rt)),
+                                Operand::CReg(CReg::from_u8(CRn)),
+                                Operand::CReg(CReg::from_u8(CRm)),
+                                Operand::Nothing,
+                            ];
+                        }
                     }
                     _ => {
                         unreachable!();
                     }
                 }
             } else {
+                // op1=0xxxxxxx, "Memory hints, Advanced SIMD instructions, and miscellaneous
+                // instructions on pge A5-215"
                 inst.opcode = Opcode::Incomplete(word);
             }
             return Ok(());
@@ -1243,16 +2002,18 @@ impl Decoder<Instruction> for InstDecoder {
                                     0b00000 => {
                                         // STRHT or STRH
                                         if !P && W { // flags == 0b0x010
-                                            inst.opcode = Opcode::STRHT(U);
+                                            inst.opcode = Opcode::STRHT;
                                         } else {
-                                            inst.opcode = Opcode::STRH(U, P, W);
+                                            inst.opcode = Opcode::STRH;
                                         }
                                         inst.operands = [
                                             Operand::Reg(Reg::from_u8(Rd)),
                                             if P {
-                                                Operand::RegDerefPostindexReg(Reg::from_u8(Rn), Reg::from_u8(LoOffset), U)
+                                                Operand::RegDerefPreindexReg(Reg::from_u8(Rn), Reg::from_u8(LoOffset), U, W)
                                             } else {
-                                                Operand::RegDerefPreindexReg(Reg::from_u8(Rn), Reg::from_u8(LoOffset), U)
+                                                // either this is !P && W, so STRHT, and no wback,
+                                                // or this is !W, and no wback
+                                                Operand::RegDerefPostindexReg(Reg::from_u8(Rn), Reg::from_u8(LoOffset), U, false)
                                             },
                                             Operand::Nothing,
                                             Operand::Nothing,
@@ -1261,16 +2022,18 @@ impl Decoder<Instruction> for InstDecoder {
                                     0b00001 => {
                                         // LDRHT or LDRH
                                         if !P && W { // flags == 0b0x011
-                                            inst.opcode = Opcode::LDRHT(U);
+                                            inst.opcode = Opcode::LDRHT;
                                         } else {
-                                            inst.opcode = Opcode::LDRH(U, P, W);
+                                            inst.opcode = Opcode::LDRH;
                                         }
                                         inst.operands = [
                                             Operand::Reg(Reg::from_u8(Rd)),
                                             if P {
-                                                Operand::RegDerefPostindexReg(Reg::from_u8(Rn), Reg::from_u8(LoOffset), U)
+                                                Operand::RegDerefPreindexReg(Reg::from_u8(Rn), Reg::from_u8(LoOffset), U, W)
                                             } else {
-                                                Operand::RegDerefPreindexReg(Reg::from_u8(Rn), Reg::from_u8(LoOffset), U)
+                                                // either this is !P && W, so LDRHT, and no wback,
+                                                // or this is !W, and no wback
+                                                Operand::RegDerefPostindexReg(Reg::from_u8(Rn), Reg::from_u8(LoOffset), U, false)
                                             },
                                             Operand::Nothing,
                                             Operand::Nothing,
@@ -1279,17 +2042,19 @@ impl Decoder<Instruction> for InstDecoder {
                                     0b00100 => {
                                         // STRHT or STRH
                                         if !P && W { // flags == 0b0x110
-                                            inst.opcode = Opcode::STRHT(U);
+                                            inst.opcode = Opcode::STRHT;
                                         } else {
-                                            inst.opcode = Opcode::STRH(U, P, W);
+                                            inst.opcode = Opcode::STRH;
                                         }
                                         let imm = (HiOffset << 4) as u16 | LoOffset as u16;
                                         inst.operands = [
                                             Operand::Reg(Reg::from_u8(Rd)),
                                             if P {
-                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U)
+                                                Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm, U, W)
                                             } else {
-                                                Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm, U)
+                                                // either this is !P && W, so STRHT, and no wback,
+                                                // or this is !W, and no wback
+                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U, false)
                                             },
                                             Operand::Nothing,
                                             Operand::Nothing,
@@ -1298,17 +2063,19 @@ impl Decoder<Instruction> for InstDecoder {
                                     0b00101 => {
                                         // LDRHT or LDRH
                                         if !P && W { // flags == 0b0x111
-                                            inst.opcode = Opcode::LDRHT(U);
+                                            inst.opcode = Opcode::LDRHT;
                                         } else {
-                                            inst.opcode = Opcode::LDRH(U, P, W);
+                                            inst.opcode = Opcode::LDRH;
                                         }
                                         let imm = (HiOffset << 4) as u16 | LoOffset as u16;
                                         inst.operands = [
                                             Operand::Reg(Reg::from_u8(Rd)),
                                             if P {
-                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U)
+                                                Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm, U, W)
                                             } else {
-                                                Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm, U)
+                                                // either this is !P && W, so LDRHT, and no wback,
+                                                // or this is !W, and no wback
+                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U, false)
                                             },
                                             Operand::Nothing,
                                             Operand::Nothing,
@@ -1323,14 +2090,251 @@ impl Decoder<Instruction> for InstDecoder {
                             0b10 => {
                     // |c o n d|0 0 0 x|x x x x x x x x x x x x x x x x|1 1 0 1|x x x x|
                     // page A5-201
-                                inst.opcode = Opcode::Incomplete(word);
-                                return Ok(());
+                                let P = flags & 0b10000 != 0;
+                                let U = flags & 0b01000 != 0;
+                                let W = flags & 0b00010 != 0;
+
+                                match flags & 0b00101 {
+                                    0b00000 => {
+                                        // LDRD or invalid
+                                        if !P && W { // flags == 0b0x010
+                                            return Err(DecodeError::InvalidOperand);
+                                        } else {
+                                            inst.opcode = Opcode::LDRD;
+                                        }
+                                        if self.should_is_must {
+                                            if (word >> 8) & 0b1111 == 0 {
+                                                return Err(DecodeError::Nonconforming);
+                                            }
+                                        }
+                                        let Rm = word as u8 & 0b1111;
+                                        let Rt = (word >> 12) as u8 & 0b1111;
+                                        if Rt & 1 != 0 {
+                                            return Err(DecodeError::InvalidOperand);
+                                        }
+                                        if Rt == 15 {
+                                            return Err(DecodeError::InvalidOperand);
+                                        }
+                                        let Rn = (word >> 16) as u8 & 0b1111;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(Rt)),
+                                            Operand::Reg(Reg::from_u8(Rt + 1)),
+                                            if P {
+                                                Operand::RegDerefPreindexReg(Reg::from_u8(Rn), Reg::from_u8(Rm), U, W)
+                                            } else {
+                                                // either !P & W (invalid) or !W
+                                                Operand::RegDerefPostindexReg(Reg::from_u8(Rn), Reg::from_u8(Rm), U, false)
+                                            },
+                                            Operand::Nothing,
+                                        ];
+                                    },
+                                    0b00001 => {
+                                        // LDRSB or LDRSBT
+                                        if !P && W { // flags == 0b0x010
+                                            inst.opcode = Opcode::LDRSBT;
+                                        } else {
+                                            inst.opcode = Opcode::LDRSB;
+                                        }
+                                        if self.should_is_must {
+                                            if (word >> 8) & 0b1111 == 0 {
+                                                return Err(DecodeError::Nonconforming);
+                                            }
+                                        }
+                                        let Rm = word as u8 & 0b1111;
+                                        let Rt = (word >> 12) as u8 & 0b1111;
+                                        let Rn = (word >> 16) as u8 & 0b1111;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(Rt)),
+                                            if P {
+                                                Operand::RegDerefPreindexReg(Reg::from_u8(Rn), Reg::from_u8(Rm), U, W)
+                                            } else {
+                                                // either !P & W (ldrsbt) or !W
+                                                Operand::RegDerefPostindexReg(Reg::from_u8(Rn), Reg::from_u8(Rm), U, false)
+                                            },
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    },
+                                    0b00100 => {
+                                        // LDRD (immediate)
+                                        if !P && W { // flags == 0b0x110
+                                            return Err(DecodeError::InvalidOperand);
+                                        } else {
+                                            inst.opcode = Opcode::LDRD;
+                                        }
+                                        let Rt = (word >> 12) as u8 & 0b1111;
+                                        if Rt & 1 != 0 {
+                                            return Err(DecodeError::InvalidOperand);
+                                        }
+                                        if Rt == 14 || Rn == 15 {
+                                            return Err(DecodeError::InvalidOperand);
+                                        }
+                                        let Rn = (word >> 16) as u8 & 0b1111;
+                                        let imm = (HiOffset << 4) as u16 | LoOffset as u16;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(Rt)),
+                                            Operand::Reg(Reg::from_u8(Rt + 1)),
+                                            if P {
+                                                Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm, U, W)
+                                            } else {
+                                                // either !P & W (invalid) or !W
+                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U, false)
+                                            },
+                                            Operand::Nothing,
+                                        ];
+                                    },
+                                    0b00101 => {
+                                        // LDRSB or LDRSBT
+                                        if !P && W { // flags == 0b0x010
+                                            inst.opcode = Opcode::LDRSBT;
+                                        } else {
+                                            inst.opcode = Opcode::LDRSB;
+                                        }
+                                        if self.should_is_must {
+                                            if (word >> 8) & 0b1111 == 0 {
+                                                return Err(DecodeError::Nonconforming);
+                                            }
+                                        }
+                                        let Rt = (word >> 12) as u8 & 0b1111;
+                                        let Rn = (word >> 16) as u8 & 0b1111;
+                                        let imm = (HiOffset << 4) as u16 | LoOffset as u16;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(Rt)),
+                                            if P {
+                                                Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm, U, W)
+                                            } else {
+                                                // either !P & W (ldrsbt) or !W
+                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U, false)
+                                            },
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    },
+                                    _ => { unreachable!("impossible bit pattern"); }
+                                }
                             }
                             0b11 => {
                     // |c o n d|0 0 0 x|x x x x x x x x x x x x x x x x|1 1 1 1|x x x x|
                     // page A5-201
-                                inst.opcode = Opcode::Incomplete(word);
-                                return Ok(());
+                                let P = flags & 0b10000 != 0;
+                                let U = flags & 0b01000 != 0;
+                                let W = flags & 0b00010 != 0;
+
+                                match flags & 0b00101 {
+                                    0b00000 => {
+                                        // STRD or invalid
+                                        if !P && W { // flags == 0b0x010
+                                            return Err(DecodeError::InvalidOperand);
+                                        } else {
+                                            inst.opcode = Opcode::STRD;
+                                        }
+                                        if self.should_is_must {
+                                            if (word >> 8) & 0b1111 == 0 {
+                                                return Err(DecodeError::Nonconforming);
+                                            }
+                                        }
+                                        let Rm = word as u8 & 0b1111;
+                                        let Rt = (word >> 12) as u8 & 0b1111;
+                                        if Rt & 1 != 0 {
+                                            return Err(DecodeError::InvalidOperand);
+                                        }
+                                        let Rn = (word >> 16) as u8 & 0b1111;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(Rt)),
+                                            Operand::Reg(Reg::from_u8(Rt + 1)),
+                                            if P {
+                                                Operand::RegDerefPreindexReg(Reg::from_u8(Rn), Reg::from_u8(Rm), U, W)
+                                            } else {
+                                                // either !P & W (invalid) or !W
+                                                Operand::RegDerefPostindexReg(Reg::from_u8(Rn), Reg::from_u8(Rm), U, false)
+                                            },
+                                            Operand::Nothing,
+                                        ];
+                                    },
+                                    0b00001 => {
+                                        // LDRSH or LDRSHT
+                                        if !P && W { // flags == 0b0x010
+                                            inst.opcode = Opcode::LDRSHT;
+                                        } else {
+                                            inst.opcode = Opcode::LDRSH;
+                                        }
+                                        if self.should_is_must {
+                                            if (word >> 8) & 0b1111 == 0 {
+                                                return Err(DecodeError::Nonconforming);
+                                            }
+                                        }
+                                        let Rm = word as u8 & 0b1111;
+                                        let Rt = (word >> 12) as u8 & 0b1111;
+                                        let Rn = (word >> 16) as u8 & 0b1111;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(Rt)),
+                                            if P {
+                                                Operand::RegDerefPreindexReg(Reg::from_u8(Rn), Reg::from_u8(Rm), U, W)
+                                            } else {
+                                                // either !P & W (ldrsht) or !W
+                                                Operand::RegDerefPostindexReg(Reg::from_u8(Rn), Reg::from_u8(Rm), U, false)
+                                            },
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    },
+                                    0b00100 => {
+                                        // STRD (immediate)
+                                        if !P && W { // flags == 0b0x110
+                                            return Err(DecodeError::InvalidOperand);
+                                        } else {
+                                            inst.opcode = Opcode::STRD;
+                                        }
+                                        let Rt = (word >> 12) as u8 & 0b1111;
+                                        if Rt & 1 != 0 {
+                                            return Err(DecodeError::InvalidOperand);
+                                        }
+                                        if Rt == 15 {
+                                            return Err(DecodeError::InvalidOperand);
+                                        }
+                                        let Rn = (word >> 16) as u8 & 0b1111;
+                                        let imm = (HiOffset << 4) as u16 | LoOffset as u16;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(Rt)),
+                                            Operand::Reg(Reg::from_u8(Rt + 1)),
+                                            if P {
+                                                Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm, U, W)
+                                            } else {
+                                                // either !P & W (invalid) or !W
+                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U, false)
+                                            },
+                                            Operand::Nothing,
+                                        ];
+                                    },
+                                    0b00101 => {
+                                        // LDRSH or LDRSHT
+                                        if !P && W { // flags == 0b0x010
+                                            inst.opcode = Opcode::LDRSHT;
+                                        } else {
+                                            inst.opcode = Opcode::LDRSH;
+                                        }
+                                        if self.should_is_must {
+                                            if (word >> 8) & 0b1111 == 0 {
+                                                return Err(DecodeError::Nonconforming);
+                                            }
+                                        }
+                                        let Rt = (word >> 12) as u8 & 0b1111;
+                                        let Rn = (word >> 16) as u8 & 0b1111;
+                                        let imm = (HiOffset << 4) as u16 | LoOffset as u16;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(Rt)),
+                                            if P {
+                                                Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm, U, W)
+                                            } else {
+                                                // either !P & W (ldrsht) or !W
+                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U, false)
+                                            },
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    },
+                                    _ => { unreachable!("impossible bit pattern"); }
+                                }
                             }
                             _ => { unreachable!(); }
                         }
@@ -1350,61 +2354,77 @@ impl Decoder<Instruction> for InstDecoder {
                             // misc instructions (page A5-194)
                             match op2 {
                                 0b000 => {
-                                    if word & 0b1000000000 != 0 {
+                                    // test B bit (bit 9)
+                                    if word & 0b10_0000_0000 != 0 {
                                         // TODO: ARMv7VE flag
-                                        let _M = (((word >> 9) & 1) << 4) | ((word >> 16) & 0x0f);
-                                        let _R = (word >> 22) & 1;
+                                        let SYSm = (((word >> 9) & 1) << 4) as u8 | ((word >> 16) & 0x0f) as u8;
+                                        let R = (word >> 22) & 1;
 
                                         if opcode & 0b01 == 0b01 {
+                                            if self.should_is_must {
+                                                if word & 0b1111_1100_0000_0000 != 0xf000 {
+                                                    return Err(DecodeError::InvalidOperand);
+                                                }
+                                            }
                                             inst.opcode = Opcode::MSR;
+                                            inst.operands[0] = Reg::from_sysm(R != 0, SYSm).expect("from_sysm works");
                                             inst.operands[1] = Operand::Reg(Reg::from_u8(word as u8 & 0b1111));
-                                            return Err(DecodeError::Incomplete);
+                                            inst.operands[2] = Operand::Nothing;
+                                            inst.operands[3] = Operand::Nothing;
                                         } else {
+                                            if self.should_is_must {
+                                                if word & 0b0000_1100_0000_1111 != 0x0000 {
+                                                    return Err(DecodeError::InvalidOperand);
+                                                }
+                                            }
                                             inst.opcode = Opcode::MRS;
                                             inst.operands[0] = Operand::Reg(Reg::from_u8((word >> 12) as u8 & 0b1111));
-                                            return Err(DecodeError::Incomplete);
+                                            inst.operands[1] = Reg::from_sysm(R != 0, SYSm).expect("from_sysm works");
+                                            inst.operands[2] = Operand::Nothing;
+                                            inst.operands[3] = Operand::Nothing;
                                         }
                                     } else {
                                         match opcode & 0b11 {
                                             0b00 |
                                             0b10 => {
                                                 inst.opcode = Opcode::MRS;
-                                                /*
-                                                let src = if self.system_mode {
+                                                let src = if self.mode.is_system() {
                                                     let R = (word >> 22) & 1 != 0;
                                                     if R {
                                                         Operand::SPSR
                                                     } else {
-                                                        Operand::CSPR
+                                                        Operand::CPSR
                                                     }
                                                 } else {
-                                                    Operand::ASPR
+                                                    Operand::APSR
                                                 };
-                                                */
                                                 inst.operands[0] = Operand::Reg(Reg::from_u8((word >> 12) as u8 & 0b1111));
-                                                // TODO:
-                                                return Err(DecodeError::Incomplete);
+                                                inst.operands[1] = src;
+                                                inst.operands[2] = Operand::Nothing;
+                                                inst.operands[3] = Operand::Nothing;
                                             }
                                             0b01 => {
                                                 inst.opcode = Opcode::MSR;
                                                 let mask = (word >> 16) & 0b1111;
-                                                if self.system_mode {
-                                                    let R = (word >> 22) & 1 != 0;
-                                                    let _dest = if R {
-                                                        Operand::SPSR
-                                                    } else {
-                                                        Operand::CSPR
-                                                    };
-                                                    // inst.operands[0] = /* masked write to dest */
-                                                    inst.operands[1] = Operand::Reg(Reg::from_u8(word as u8 & 0b1111));
-                                                    // TODO:
-                                                    return Err(DecodeError::Incomplete);
-                                                } else {
-                                                    if mask & 0b11 == 0 {
+                                                if mask & 0b11 == 0 {
+                                                    if self.mode.is_user() {
+                                                        inst.operands[0] = Operand::StatusRegMask(StatusRegMask::from_raw(mask as u8));
                                                         inst.operands[1] = Operand::Reg(Reg::from_u8(word as u8 & 0b1111));
-                                                        // TODO:
-                                                        // inst.operands[0] = /* derived from mask >> 2 */
-                                                        return Err(DecodeError::Incomplete);
+                                                        inst.operands[2] = Operand::Nothing;
+                                                        inst.operands[3] = Operand::Nothing;
+                                                    } else {
+                                                        // MSR with op == 01, op == xx00, but not
+                                                        // user mode
+                                                        return Err(DecodeError::InvalidOperand);
+                                                    }
+                                                } else {
+                                                    if self.mode.is_system() {
+                                                        // bit 22 is the high bit of opcode, so..
+                                                        let R = (word >> 22) as u8 & 1;
+                                                        inst.operands[0] = Operand::StatusRegMask(StatusRegMask::from_raw((R << 4) | mask as u8));
+                                                        inst.operands[1] = Operand::Reg(Reg::from_u8(word as u8 & 0b1111));
+                                                        inst.operands[2] = Operand::Nothing;
+                                                        inst.operands[3] = Operand::Nothing;
                                                     } else {
                                                         // MSR with op == 01, op != xx00
                                                         return Err(DecodeError::InvalidOperand);
@@ -1412,14 +2432,18 @@ impl Decoder<Instruction> for InstDecoder {
                                                 }
                                             },
                                             0b11 => {
-                                                if !self.system_mode {
+                                                if !self.mode.is_system() {
                                                     return Err(DecodeError::InvalidOperand);
                                                 }
 
                                                 inst.opcode = Opcode::MSR;
-                                                inst.operands[0] = Operand::Reg(Reg::from_u8((word >> 12) as u8 & 0b1111));
-                                                // TODO:
-                                                return Err(DecodeError::Incomplete);
+                                                let mask = (word >> 16) & 0b1111;
+                                                // bit 22 is the high bit of opcode, so..
+                                                let R = (word >> 22) & 1;
+                                                inst.operands[0] = Operand::StatusRegMask(StatusRegMask::from_raw((R << 4) as u8 | mask as u8));
+                                                inst.operands[1] = Operand::Reg(Reg::from_u8(word as u8 & 0b1111));
+                                                inst.operands[2] = Operand::Nothing;
+                                                inst.operands[3] = Operand::Nothing;
                                             }
                                             _ => {
                                                 unreachable!();
@@ -1475,18 +2499,121 @@ impl Decoder<Instruction> for InstDecoder {
                                 },
                                 0b101 => {
                                     // TODO: "Saturating addition and subtraction" page A5-200
-                                    return Err(DecodeError::Incomplete);
+                                    match (word >> 21) & 0b11 {
+                                        0b00 => {
+                                            inst.opcode = Opcode::QADD;
+                                        },
+                                        0b01 => {
+                                            inst.opcode = Opcode::QSUB;
+                                        },
+                                        0b10 => {
+                                            inst.opcode = Opcode::QDADD;
+                                        },
+                                        0b11 => {
+                                            inst.opcode = Opcode::QDSUB;
+                                        },
+                                        _ => {
+                                            unreachable!("bit pattern masked by 0b11 but large value observed");
+                                        }
+                                    }
+
+                                    if self.should_is_must {
+                                        if (word >> 8) & 0b1111 != 0 {
+                                            return Err(DecodeError::Nonconforming);
+                                        }
+                                    }
+
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(((word >> 12) & 0b1111) as u8)),
+                                        Operand::Reg(Reg::from_u8((word & 0b1111) as u8)),
+                                        Operand::Reg(Reg::from_u8(((word >> 16) & 0b1111) as u8)),
+                                        Operand::Nothing
+                                    ];
                                 }
                                 0b110 => {
-                                    // TODO: "ERET" page B9-1968
-                                    return Err(DecodeError::Incomplete);
+                                    if (word >> 21) & 0b11 != 0b11 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+
+                                    // "ERET" page B9-1968, from A5.2.12, page A5-205
+                                    if self.should_is_must {
+                                        if word & 0b1111_1111_1111_1111 != 0b0000_0000_0000_0110_1110 {
+                                            return Err(DecodeError::Nonconforming);
+                                        }
+                                    }
+                                    inst.opcode = Opcode::ERET;
+                                    inst.operands = [
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
                                 },
                                 0b111 => {
-                                    // TODO: "BKPT, HVC, SMC" from table A5-14/page A5-203
-                                    return Err(DecodeError::Incomplete);
+                                    // "BKPT, HVC, SMC" from table A5-14/page A5-205
+                                    match (word >> 21) & 0b11 {
+                                        0b00 => {
+                                            return Err(DecodeError::InvalidOpcode);
+                                        }
+                                        0b01 => {
+                                            // BKPT
+                                            if self.should_is_must {
+                                                if (word >> 28) & 0b1111 != 0b1110 {
+                                                    // "BKPT must be encoded with AL condition"
+                                                    return Err(DecodeError::InvalidOpcode);
+                                                }
+                                            }
+                                            inst.opcode = Opcode::BKPT;
+                                            let immlo = word & 0x0f;
+                                            let imm = ((word >> 4) & 0xfff0) | immlo;
+                                            inst.operands = [
+                                                Operand::Imm32(imm),
+                                                Operand::Nothing,
+                                                Operand::Nothing,
+                                                Operand::Nothing,
+                                            ];
+                                        }
+                                        0b10 => {
+                                            // HVC
+                                            if self.should_is_must {
+                                                if (word >> 28) & 0b1111 != 0b1110 {
+                                                    // "HVC must be encoded with AL condition"
+                                                    return Err(DecodeError::InvalidOpcode);
+                                                }
+                                            }
+                                            inst.opcode = Opcode::HVC;
+                                            let immlo = word & 0x0f;
+                                            let imm = ((word >> 4) & 0xfff0) | immlo;
+                                            inst.operands = [
+                                                Operand::Imm32(imm),
+                                                Operand::Nothing,
+                                                Operand::Nothing,
+                                                Operand::Nothing,
+                                            ];
+                                        }
+                                        0b11 => {
+                                            // SMC
+                                            if self.should_is_must {
+                                                if word & 0xf_ff_ff_70 == 0x1_60_00_70 {
+                                                    // "SMC must be encoded with AL condition"
+                                                    return Err(DecodeError::InvalidOpcode);
+                                                }
+                                            }
+                                            inst.opcode = Opcode::SMC;
+                                            let immlo = word & 0x0f;
+                                            let imm = ((word >> 4) & 0xfff0) | immlo;
+                                            inst.operands = [
+                                                Operand::Imm32(imm),
+                                                Operand::Nothing,
+                                                Operand::Nothing,
+                                                Operand::Nothing,
+                                            ];
+                                        }
+                                        _ => { unreachable!("impossible bit pattern"); }
+                                    }
                                 },
                                 _ => {
-                                    unreachable!();
+                                    unreachable!("op2 is a three bit field, got an invalid pattern");
                                 }
                             }
                         } else {
@@ -1592,9 +2719,10 @@ impl Decoder<Instruction> for InstDecoder {
 
                             if shift_spec & 0xff0 == 0 {
                                 if (0b1101 & opcode) == 0b1101 {
-                                    if Rn != 0 {
-                                        // this is really a "should be zero" situation
-                                        return Err(DecodeError::Incomplete);
+                                    if self.should_is_must {
+                                        if Rn != 0 {
+                                            return Err(DecodeError::Nonconforming);
+                                        }
                                     }
                                     // MOV or MVN
                                     inst.operands = [
@@ -1612,9 +2740,11 @@ impl Decoder<Instruction> for InstDecoder {
                                     ];
                                 }
                             } else {
-                                if opcode == 0b1101 && Rn != 0 {
-                                    // Rn "should" be zero
-                                    return Err(DecodeError::Incomplete);
+                                if self.should_is_must {
+                                    if opcode == 0b1101 && Rn != 0 {
+                                        // Rn "should" be zero
+                                        return Err(DecodeError::Nonconforming);
+                                    }
                                 }
 
                                 inst.operands = [
@@ -1672,8 +2802,69 @@ impl Decoder<Instruction> for InstDecoder {
                 // which means 16-bit immediate load, high half immediate load, or MSR (immediate)
                 // + hints.
                 // See table A5-2, page A5-194.
-                    inst.opcode = Opcode::Incomplete(word);
-                    return Ok(());
+                    match opcode & 0b0011 {
+                        0b00 => {
+                            // 16-bit immediate load, MOV (immediate) on page A8-485
+                            inst.opcode = Opcode::MOV;
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(((word >> 12) & 0b1111) as u8)),
+                                Operand::Imm32(((word >> 4) & 0xf000) | (word & 0xfff)),
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b10 => {
+                            // High halfword 16-bit immediate load, MOVT on page A8-492
+                            inst.opcode = Opcode::MOVT;
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(((word >> 12) & 0b1111) as u8)),
+                                Operand::Imm32(((word >> 4) & 0xf000) | (word & 0xfff)),
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b01 => {
+                            // MSR (immediate), and hints on page A5-204, op==0
+                            let op1 = (word >> 16) & 0b1111;
+                            match op1 {
+                                0b0000 => {
+
+                                },
+                                _ => {
+                                    // Move to Special register, Application level MSR (immediate) on
+                                    // page A8-499
+                                    if self.should_is_must {
+                                        if (word >> 12) & 0b1111 != 0b1111 {
+                                            return Err(DecodeError::Nonconforming);
+                                        }
+                                    }
+                                    inst.operands = [
+                                        Operand::StatusRegMask(StatusRegMask::from_raw(op1 as u8)),
+                                        Operand::Imm32(word & 0xfff),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                    inst.opcode = Opcode::MSR;
+                                },
+                            }
+                        }
+                        0b11 => {
+                            // MSR (immediate), and hints on page A5-204, op==1
+                            if self.should_is_must {
+                                if (word >> 12) & 0b1111 != 0b1111 {
+                                    return Err(DecodeError::Nonconforming);
+                                }
+                            }
+                            inst.operands = [
+                                Operand::StatusRegMask(StatusRegMask::from_raw((word >> 16) as u8 & 0b1111 | 0b10000)),
+                                Operand::Imm32(word & 0xfff),
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+                            inst.opcode = Opcode::MSR;
+                        }
+                        _ => { unreachable!("impossible bit pattern"); }
+                    }
                 } else {
                     // Data-processing (immediate)
                     // Page A5-197
@@ -1685,7 +2876,7 @@ impl Decoder<Instruction> for InstDecoder {
 
                     let (Rn, Rd, imm) = {
                         let rot = word & 0x00000f00;
-                        let imm = (word & 0x000000ff);
+                        let imm = word & 0x000000ff;
                         let imm = (imm as u32).rotate_right(2 * (rot >> 8));
                         ((word >> 16) as u8 & 0x0f, (word >> 12) as u8 & 0x0f, imm)
                     };
@@ -1734,12 +2925,18 @@ impl Decoder<Instruction> for InstDecoder {
                     0x111 -> LDRBT
                     */
                     inst.opcode = match op {
-                        0b010 => Opcode::STRT(add),
-                        0b011 => Opcode::LDRT(add),
-                        0b110 => Opcode::STRBT(add),
-                        0b111 => Opcode::LDRBT(add),
+                        0b010 => Opcode::STRT,
+                        0b011 => Opcode::LDRT,
+                        0b110 => Opcode::STRBT,
+                        0b111 => Opcode::LDRBT,
                         _ => { unreachable!(); }
                     };
+                    inst.operands = [
+                        Operand::Reg(Reg::from_u8(Rt)),
+                        Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm as u16, add, false),
+                        Operand::Nothing,
+                        Operand::Nothing,
+                    ];
                 } else {
                     /*
                     xx0x0 not 0x010 -> STR (imm)
@@ -1747,59 +2944,71 @@ impl Decoder<Instruction> for InstDecoder {
                     xx1x0 not 0x110 -> STRB (imm)
                     xx1x1 not 0x111 -> LDRB (imm)
                     */
-                    let pre = (op & 0b10000) != 0;
-                    let wback = (op & 0b00010) != 0;
+                    let P = (op & 0b10000) != 0;
+                    let W = (op & 0b00010) != 0;
                     let op = op & 0b00101;
-                    inst.opcode = if !pre && wback {
+                    inst.opcode = if !P && W {
                         // Table A5-15
                         // strt, ldrt, strbt, ldrbt
                         match op {
-                            0b000 => Opcode::STRT(add),
-                            0b001 => Opcode::LDRT(add),
-                            0b100 => Opcode::STRBT(add),
-                            0b101 => Opcode::LDRBT(add),
+                            0b000 => Opcode::STRT,
+                            0b001 => Opcode::LDRT,
+                            0b100 => Opcode::STRBT,
+                            0b101 => Opcode::LDRBT,
                             _ => { unreachable!("bad bit pattern, table A5-15"); }
                         }
                     } else {
                         match op {
-                            0b000 => Opcode::STR(add, pre, wback),
+                            0b000 => Opcode::STR,
                             0b001 => {
                                 if Rn == 0b1111 {
                                     inst.operands = [
                                         Operand::Reg(Reg::from_u8(Rt)),
-                                        Operand::RegDisp(Reg::from_u8(Rn), imm as u16 as i16),
+                                        if P {
+                                            Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm as u16, add, W)
+                                        } else {
+                                            Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm as u16, add, W)
+                                        },
                                         Operand::Nothing,
                                         Operand::Nothing,
                                     ];
-                                    inst.opcode = Opcode::LDR(add, pre, wback);
+                                    inst.opcode = Opcode::LDR;
                                     return Ok(());
                                 }
-                                Opcode::LDR(add, pre, wback)
+                                Opcode::LDR
                             },
-                            0b100 => Opcode::STRB(add, pre, wback),
+                            0b100 => Opcode::STRB,
                             0b101 => {
                                 if Rn == 0b1111 {
                                     inst.operands = [
                                         Operand::Reg(Reg::from_u8(Rt)),
-                                        Operand::RegDisp(Reg::from_u8(Rn), imm as u16 as i16),
+                                        if P {
+                                            Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm as u16, add, W)
+                                        } else {
+                                            Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm as u16, add, W)
+                                        },
                                         Operand::Nothing,
                                         Operand::Nothing,
                                     ];
-                                    inst.opcode = Opcode::LDRB(add, pre, wback);
+                                    inst.opcode = Opcode::LDRB;
                                     return Ok(());
                                 }
-                                Opcode::LDRB(add, pre, wback)
+                                Opcode::LDRB
                             },
                             _ => { unreachable!(); }
                         }
                     };
+                    inst.operands = [
+                        Operand::Reg(Reg::from_u8(Rt)),
+                        if P {
+                            Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm as u16, add, W)
+                        } else {
+                            Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm as u16, add, W)
+                        },
+                        Operand::Nothing,
+                        Operand::Nothing,
+                    ];
                 }
-                inst.operands = [
-                    Operand::Reg(Reg::from_u8(Rt)),
-                    Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm as u16, add),
-                    Operand::Nothing,
-                    Operand::Nothing,
-                ];
             },
             0b011 => {
                 // page A5-192 to distinguish the following:
@@ -1808,12 +3017,15 @@ impl Decoder<Instruction> for InstDecoder {
                 // |c o n d|0 1 1|x x x x|x|x x x x|x x x x|x x x x x|x x|1|x x x x|
                     // using language from A5-206: A == 1 and B == 1
                     // so this is media instructions (A5-207)
+                    return Err(DecodeError::Incomplete);
                 } else {
                 // |c o n d|0 1 1|x x x x|x|x x x x|x x x x|x x x x x|x x|0|x x x x|
                     // instructions here are A == 1, B == 0 in A5-206
                     let op = ((word >> 20) & 0x1f) as u8;
 
-                    let add = (op & 0b01000) != 0;
+                    let P = (op & 0b10000) != 0;
+                    let U = (op & 0b01000) != 0;
+                    let W = (op & 0b00010) != 0;
                     /*
                         xx0x0 not 0x010 -> STR (register)
                         0x010 -> STRT
@@ -1835,10 +3047,10 @@ impl Decoder<Instruction> for InstDecoder {
                         0x111 -> LDRBT
                         */
                         inst.opcode = match op {
-                            0b010 => Opcode::STRT(add),
-                            0b011 => Opcode::LDRT(add),
-                            0b110 => Opcode::STRBT(add),
-                            0b111 => Opcode::LDRBT(add),
+                            0b010 => Opcode::STRT,
+                            0b011 => Opcode::LDRT,
+                            0b110 => Opcode::STRBT,
+                            0b111 => Opcode::LDRBT,
                             _ => { unreachable!(); }
                         };
                     } else {
@@ -1848,14 +3060,12 @@ impl Decoder<Instruction> for InstDecoder {
                         xx1x0 not 0x110 -> STRB (imm)
                         xx1x1 not 0x111 -> LDRB (imm)
                         */
-                        let pre = (op & 0b10000) != 0;
-                        let wback = (op & 0b00010) != 0;
                         let op = op & 0b00101;
                         inst.opcode = match op {
-                            0b000 => Opcode::STR(add, pre, wback),
-                            0b001 => Opcode::LDR(add, pre, wback),
-                            0b100 => Opcode::STRB(add, pre, wback),
-                            0b101 => Opcode::LDRB(add, pre, wback),
+                            0b000 => Opcode::STR,
+                            0b001 => Opcode::LDR,
+                            0b100 => Opcode::STRB,
+                            0b101 => Opcode::LDRB,
                             _ => { unreachable!(); }
                         };
                     }
@@ -1865,9 +3075,14 @@ impl Decoder<Instruction> for InstDecoder {
                         let Rt = (word & 0xf) as u8;
                         (Rt, shift)
                     };
+                    let Rn = (word >> 16) as u8 & 0b1111;
                     inst.operands = [
                         Operand::Reg(Reg::from_u8(Rt)),
-                        Operand::RegDerefRegShift(RegShift::from_raw(shift)),
+                        if P {
+                            Operand::RegDerefPreindexRegShift(Reg::from_u8(Rn), RegShift::from_raw(shift), U, W)
+                        } else {
+                            Operand::RegDerefPostindexRegShift(Reg::from_u8(Rn), RegShift::from_raw(shift), U, false)
+                        },
                         Operand::Nothing,
                         Operand::Nothing,
                     ];
@@ -1919,6 +3134,7 @@ impl Decoder<Instruction> for InstDecoder {
             0b110 | 0b111 => {
                 // coprocessor instructions and supervisor call
                 // page A5-213
+                // low bit of 0b110 or 0b111 corresponds to high bit of op1
                 inst.opcode = Opcode::Incomplete(word);
                 return Ok(());
             },
