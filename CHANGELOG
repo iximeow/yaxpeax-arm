@@ -1,0 +1,13 @@
+## 0.0.3
+`Instruction`, `Opcode`, and `Operand` are now a useful model of decoded
+operations.
+* `Operands`, plural, the enum of operands in the instruction, is now gone in
+  favor of `Operand` that describe one operand of the instruction
+* `Instruction` no longer include operand attributes like "add", "index", or "wback"
+* better (not quite complete) support for non-user instructions and coprocessor instructions
+* instructions operating on status registers through masks are now directly supported
+* first brush of arm-version-specific decoder feature selection
+* fix several preindex/postindex reversals
+
+## 0.0.2
+last revison that's sufficient for disassembly and really nothing else
