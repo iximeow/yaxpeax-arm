@@ -953,7 +953,6 @@ pub enum Operand {
     RegWBack(Reg, bool),
     RegList(u16),
     RegDeref(Reg),
-    RegDisp(Reg, i16),
     RegShift(RegShift),
     RegDerefPostindexRegShift(Reg, RegShift, bool, bool), // add/sub, wback
     RegDerefPreindexRegShift(Reg, RegShift, bool, bool), // add/sub, wback
@@ -968,12 +967,12 @@ pub enum Operand {
     Coprocessor(u8),
     CoprocOption(u8),
     CReg(CReg),
-    APSR,
-    CPSR,
-    SPSR,
     BankedReg(Bank, Reg),
     BankedSPSR(Bank),
     StatusRegMask(StatusRegMask),
+    APSR,
+    SPSR,
+    CPSR,
     Nothing,
 }
 
@@ -1021,9 +1020,6 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
             }
             Operand::RegDeref(reg) => {
                 write!(f, "[{}]", reg_name_colorize(*reg, colors))
-            }
-            Operand::RegDisp(reg, imm) => {
-                write!(f, "[{} + {:#x}]", reg_name_colorize(*reg, colors), imm)
             }
             Operand::RegShift(shift) => {
                 format_shift(f, *shift, colors)
@@ -1085,9 +1081,9 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
             Operand::StatusRegMask(mask) => {
                 write!(f, "{}", mask)
             }
-            Operand::APSR => { write!(f, "apsr") },
-            Operand::CPSR => { write!(f, "cpsr") },
-            Operand::SPSR => { write!(f, "spsr") },
+            Operand::APSR => write!(f, "apsr"),
+            Operand::SPSR => write!(f, "spsr"),
+            Operand::CPSR => write!(f, "cpsr"),
             Operand::Nothing => { panic!("tried to print Nothing operand") },
         }
     }
