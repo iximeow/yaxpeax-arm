@@ -3,7 +3,7 @@
 
 use std::fmt::{self, Display, Formatter};
 
-use yaxpeax_arch::{Arch, Decoder, LengthedInstruction, ShowContextual, YaxColors};
+use yaxpeax_arch::{Arch, AddressDiff, Decoder, LengthedInstruction, ShowContextual, YaxColors};
 
 #[allow(non_snake_case)]
 mod docs {
@@ -642,9 +642,13 @@ impl Display for Instruction {
 }
 
 impl LengthedInstruction for Instruction {
-    type Unit = <ARMv8 as Arch>::Address;
-    fn len(&self) -> Self::Unit { 4 }
-    fn min_size() -> Self::Unit { 4 }
+    type Unit = AddressDiff<<ARMv8 as Arch>::Address>;
+    fn min_size() -> Self::Unit {
+        AddressDiff::from_const(4)
+    }
+    fn len(&self) -> Self::Unit {
+        AddressDiff::from_const(4)
+    }
 }
 
 impl Default for Instruction {
