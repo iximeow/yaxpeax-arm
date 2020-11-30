@@ -65,10 +65,10 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
                     _ => {}
                 }
             },
-            Opcode::LDM(true, false, true, _usermode) => {
+            Opcode::LDM(true, false, false, _usermode) => {
                 // TODO: what indicates usermode in the ARM syntax?
                 match self.operands {
-                    [Operand::Reg(Reg { bits: 13 }), Operand::RegList(list), Operand::Nothing, Operand::Nothing] => {
+                    [Operand::RegWBack(Reg { bits: 13 }, wback), Operand::RegList(list), Operand::Nothing, Operand::Nothing] => {
                         ConditionedOpcode(Opcode::POP, self.s, self.condition).colorize(colors, out)?;
                         write!(out, " ")?;
                         return format_reg_list(out, list, colors);
@@ -76,10 +76,10 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
                     _ => {}
                 }
             }
-            Opcode::STM(false, true, true, _usermode) => {
+            Opcode::STM(false, true, false, _usermode) => {
                 // TODO: what indicates usermode in the ARM syntax?
                 match self.operands {
-                    [Operand::Reg(Reg { bits: 13 }), Operand::RegList(list), Operand::Nothing, Operand::Nothing] => {
+                    [Operand::RegWBack(Reg { bits: 13 }, wback), Operand::RegList(list), Operand::Nothing, Operand::Nothing] => {
                         ConditionedOpcode(Opcode::PUSH, self.s, self.condition).colorize(colors, out)?;
                         write!(out, " ")?;
                         return format_reg_list(out, list, colors);
@@ -92,10 +92,10 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
 
         match self.opcode {
             // TODO: [add, pre, usermode]
-            Opcode::STM(_add, _pre, wback, _usermode) |
-            Opcode::LDM(_add, _pre, wback, _usermode) => {
+            Opcode::STM(_add, _pre, _wback, _usermode) |
+            Opcode::LDM(_add, _pre, _wback, _usermode) => {
                 match self.operands {
-                    [Operand::Reg(Rr), Operand::RegList(list), Operand::Nothing, Operand::Nothing] => {
+                    [Operand::RegWBack(Rr, wback), Operand::RegList(list), Operand::Nothing, Operand::Nothing] => {
                         ConditionedOpcode(self.opcode, self.s, self.condition).colorize(colors, out)?;
                         write!(
                             out, " {}{}, ",
@@ -3095,12 +3095,12 @@ impl Decoder<Instruction> for InstDecoder {
                     let pre = (op & 0b010000) != 0;
                     let usermode = (op & 0b000100) != 0;
                     inst.opcode = if (op & 1) == 0 {
-                        Opcode::STM(add, pre, wback, usermode)
+                        Opcode::STM(add, pre, false, usermode)
                     } else {
-                        Opcode::LDM(add, pre, wback, usermode)
+                        Opcode::LDM(add, pre, false, usermode)
                     };
                     inst.operands = [
-                        Operand::Reg(Reg::from_u8(((word >> 16) & 0xf) as u8)),
+                        Operand::RegWBack(Reg::from_u8(((word >> 16) & 0xf) as u8), wback),
                         Operand::RegList((word & 0xffff) as u16),
                         Operand::Nothing,
                         Operand::Nothing,
