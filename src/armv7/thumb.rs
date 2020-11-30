@@ -1,0 +1,3103 @@
+use std::fmt;
+
+// use yaxpeax_arch::{Arch, AddressDiff, Decoder, LengthedInstruction};
+
+use armv7::ConditionCode;
+use armv7::DecodeError;
+use armv7::Reg;
+use armv7::RegShift;
+use armv7::Operand;
+use armv7::Opcode;
+use armv7::Instruction;
+use armv7::InstDecoder;
+use armv7::StatusRegMask;
+
+#[allow(non_snake_case)]
+fn ROR_C(x: u32, shift: u16) -> (u32, bool) {
+//    let m = shift % 32; // `shift` is known to be 31 or lower
+    let m = shift;
+    let result = (x >> m) | (x << (32 - m));
+    let carry_out = (result >> 31) & 1 != 0;
+    (result, carry_out)
+}
+
+#[allow(non_snake_case)]
+fn ThumbExpandImm_C(imm: u16) -> u32 {
+    if imm & 0b1100_0000_0000 == 0 {
+        let ty = (imm >> 8) & 0b11;
+        let imm_low = (imm & 0b11111111) as u32;
+        match ty {
+            0b00 => {
+                imm_low
+            }
+            0b01 => {
+                if imm_low == 0 {
+                    panic!("unpredictable");
+                }
+                (imm_low << 16) | imm_low
+            }
+            0b10 => {
+                if imm_low == 0 {
+                    panic!("unpredictable");
+                }
+                (imm_low << 24) | (imm_low << 8)
+            }
+            0b11 => {
+                if imm_low == 0 {
+                    panic!("unpredictable");
+                }
+                (imm_low << 24) | (imm_low << 16) | (imm_low << 8) | imm_low
+            }
+            _ => {
+                unreachable!("impossible bit pattern");
+            }
+        }
+    } else {
+        let unrotated_value = ((1 << 7) | (imm & 0b1111111)) as u32;
+        let rot = (imm >> 7) & 0b11111;
+        // TODO: figure out what to do with carry_out
+        let (imm32, _carry_out) = ROR_C(unrotated_value, rot);
+        imm32
+    }
+}
+
+#[allow(non_snake_case)]
+fn DecodeImmShift(reg: u8, ty: u8, imm5: u8) -> RegShift {
+    let imm = match ty {
+        0b00 => { imm5 },
+        0b01 => {
+            if imm5 == 0 {
+                32
+            } else {
+                imm5
+            }
+        },
+        0b10 => {
+            if imm5 == 0 {
+                32
+            } else {
+                imm5
+            }
+        },
+        0b11 => {
+            // ignores the `if ty == 11 && imm5 = 00000 then shift_t = RRX && shift_n = 1`
+            imm5
+        }
+        _ => {
+            unreachable!("impossible bit pattern");
+        }
+    };
+    RegShift::from_raw(
+        0b1000 |    // `RegImm`
+        reg as u16 |
+        ((ty as u16) << 5)|
+        ((imm as u16) << 7)
+    )
+}
+
+#[allow(non_snake_case)]
+pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut Instruction, bytes: T) -> Result<(), DecodeError> {
+    let mut iter = bytes.into_iter();
+    let instr: u16 =
+        ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u16)      ) |
+        ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u16) << 8 );
+
+    let opword = instr >> 11;
+
+    // `A6.1 Thumb instruction set encoding`
+    if opword >= 0b11101 {
+        let lower: u16 =
+            ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u16)      ) |
+            ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u16) << 8 );
+
+        let op2 = (instr >> 5) & 0b1111111;
+
+        // 32b instruction - `A6-228, 32-bit Thumb instruction encoding`
+        // opword low bits 01, 10, and 11 correspond to `op1` in table `A6-9`
+        if opword < 0b11110 {
+            // op1 == 0b01
+            if op2 < 0b1000000 {
+                // `op2` is `0b00.. ` or `0b01..`
+                if op2 < 0b0100000 {
+                    // `Load/store`, either `multiple` or `dual`
+                    let rn = (instr & 0b1111) as u8;
+                    // TODO: double check
+                    if op2 & 0b0000100 != 0 {
+                        // `Load/store dual, load/store exclusive, table branch` (`A6-236`)
+                        let op1op2 = ((instr >> 7) & 0b11) | ((instr >> 4) & 0b11);
+                        let rn = (instr & 0b1111) as u8;
+                        let imm8 = lower & 0b11111111;
+                        let rd = ((lower >> 8) & 0b1111) as u8;
+                        let rt = ((lower >> 12) & 0b1111) as u8;
+
+                        match op1op2 {
+                            0b0000 => {
+                                // `STREX` (`A8-691`)
+                                // v6T2
+                                if rd == 13 || rd == 15 || rt == 13 || rt == 15 || rn == 15 {
+                                    todo!("UNPREDICTABLE");
+                                }
+                                if rd == rn || rd == rt {
+                                    todo!("UNPREDICTABLE");
+                                }
+                                inst.opcode = Opcode::STREX;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rt)),
+                                    // preindex for `[<Rn>, #<imm>]`, no writeback. imm is zero
+                                    // extended, so not signed; always add.
+                                    Operand::RegDerefPreindexOffset(
+                                        Reg::from_u8(rn),
+                                        imm8 << 2,
+                                        true,
+                                        false,
+                                    ),
+                                    Operand::Nothing,
+                                ];
+                            }
+                            0b0001 => {
+                                // `LDREX` (`A8-433`)
+                                // v6T2
+                                if rt == 13 || rt == 15 || rn == 15 {
+                                    todo!("UNPREDICTABLE");
+                                }
+                                // TODO: should_is_must()
+                                // rd == 0b1111
+                                inst.opcode = Opcode::LDREX;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rt)),
+                                    // preindex for `[<Rn>, #<imm>]`, no writeback. imm is zero
+                                    // extended, so not signed; always add.
+                                    Operand::RegDerefPreindexOffset(
+                                        Reg::from_u8(rn),
+                                        imm8 << 2,
+                                        true,
+                                        false,
+                                    ),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            }
+                            0b0010 |
+                            0b0110 => {
+                                // `STRD (immediate)` (`A8-687`)
+                                // v6T2
+                                // bit 5 (w) == 0
+                                let w = false;
+                                let u = (instr >> 7) & 1 != 0;
+                                let p = (instr >> 8) & 1 != 0;
+                                // `if P == '0' && W == '0' then SEE "Related encodings"` -> this
+                                // would imply tbb/tbh, should be unreachable
+                                if rn == 15 || rt == 13 || rt == 15 || rd == 13 || rd == 15 {
+                                    todo!("UNPREDICTABLE");
+                                }
+                                inst.opcode = Opcode::STRD;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rt)),
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    if p {
+                                        Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8 << 2, u, w)
+                                    } else {
+                                        // p == 0 and w == 0 is impossible, would be tbb/tbh
+                                        Operand::RegDerefPostindexOffset(Reg::from_u8(rn), imm8 << 2, u, false)
+                                    },
+                                    Operand::Nothing,
+                                ];
+                            }
+                            0b0011 |
+                            0b0111 => {
+                                // `LDRD (immediate)`/`(literal)` (`A8-687`)
+                                // bit 5 (w) == 0
+                                let w = false;
+                                let u = (instr >> 7) & 1 != 0;
+                                let p = (instr >> 8) & 1 != 0;
+                                // `if P == '0' && W == '0' then SEE "Related encodings"` -> this
+                                // would imply tbb/tbh, should be unreachable
+                                if rt == 13 || rt == 15 || rd == 13 || rd == 15 || rd == rt {
+                                    todo!("UNPREDICTABLE");
+                                }
+                                if w && (rn == rt || rn == rd) {
+                                    todo!("UNPREDICTABLE");
+                                }
+                                if rn != 0b1111 {
+                                    // `LDRD (immediate)` (`A8-427`)
+                                    // v6T2
+                                    inst.opcode = Opcode::LDRD;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rt)),
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        if p {
+                                            Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8 << 2, u, w)
+                                        } else {
+                                            // p == 0 and w == 0 is impossible, would be tbb/tbh
+                                            Operand::RegDerefPostindexOffset(Reg::from_u8(rn), imm8 << 2, u, false)
+                                        },
+                                        Operand::Nothing,
+                                    ];
+                                } else {
+                                    // `LDRD (literal)` (`A8-429`)
+                                    // v6T2
+                                    if w {
+                                        todo!("UNPREDICTABLE");
+                                    }
+                                    // which because !(p == 0 && w == 0), we know p is true
+                                    inst.opcode = Opcode::LDRD;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rt)),
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8 << 2, u, false),
+                                        Operand::Nothing,
+                                    ];
+                                }
+                            }
+                            0b0100 => {
+                                // `STREX_`
+                                // v7
+                                let op3 = (lower >> 4) & 0b1111;
+                                let rt2 = rd;
+                                let rd = (imm8 & 0b1111) as u8;
+                                match op3 {
+                                    0b0100 => {
+                                        // `STREXB` (`A8-693`)
+                                        if rd == 13 || rd == 15 || rt == 13 || rt == 15 || rn == 15 {
+                                            todo!("UNPREDICTABLE");
+                                        }
+                                        if rd == rn || rd == rt {
+                                            todo!("UNPREDICTABLE");
+                                        }
+                                        // TODO: should_is_must()
+                                        // rt2 == 0b1111
+                                        inst.opcode = Opcode::STREXB;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rt)),
+                                            Operand::RegDeref(Reg::from_u8(rn)),
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                    0b0101 => {
+                                        // `STREXH` (`A8-693`)
+                                        if rd == 13 || rd == 15 || rt == 13 || rt == 15 || rn == 15 {
+                                            todo!("UNPREDICTABLE");
+                                        }
+                                        if rd == rn || rd == rt {
+                                            todo!("UNPREDICTABLE");
+                                        }
+                                        // TODO: should_is_must()
+                                        // rt2 == 0b1111
+                                        inst.opcode = Opcode::STREXH;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rt)),
+                                            Operand::RegDeref(Reg::from_u8(rn)),
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                    0b0111 => {
+                                        // `STREXD` (`A8-693`)
+                                        if rd == 13 || rd == 15 || rt == 13 || rt == 15 || rt2 == 13 || rt2 == 15 || rn == 15 {
+                                            todo!("UNPREDICTABLE");
+                                        }
+                                        if rd == rn || rd == rt || rd == rt2 {
+                                            todo!("UNPREDICTABLE");
+                                        }
+                                        inst.opcode = Opcode::STREXD;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rt)),
+                                            Operand::Reg(Reg::from_u8(rt2)),
+                                            Operand::RegDeref(Reg::from_u8(rn)),
+                                        ];
+                                    }
+                                    _ => {
+                                        return Err(DecodeError::Undefined);
+                                    }
+                                }
+                            }
+                            0b0101 => {
+                                // `TBB`/`TBH`/`LDREX_`
+                                let op3 = (lower >> 4) & 0b1111;
+                                let rt2 = rd;
+                                let rd = (imm8 & 0b1111) as u8;
+                                match op3 {
+                                    0b0000 => {
+                                        // `TBB`
+                                        // TODO: should_is_must()
+                                        // rt == 0b1111
+                                        // rd == 0b0000
+                                        inst.opcode = Opcode::TBB;
+                                        inst.operands = [
+                                            Operand::RegDerefPreindexReg(
+                                                Reg::from_u8(rn),
+                                                Reg::from_u8(rd),
+                                                true, // add
+                                                false, // no wback
+                                            ),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                    0b0001 => {
+                                        // `TBH`
+                                        // TODO: should_is_must()
+                                        // rt == 0b1111
+                                        // rd == 0b0000
+                                        inst.opcode = Opcode::TBB;
+                                        inst.operands = [
+                                            Operand::RegDerefPreindexRegShift(
+                                                Reg::from_u8(rn),
+                                                // want `<Rm>, LSL #1`, construct a raw shift
+                                                // ourselves
+                                                RegShift::from_raw(
+                                                    0b1000 |        // `RegImm`
+                                                    rd as u16 |            // reg == rd
+                                                    (0b00 << 5) |   // LSL
+                                                    (1 << 7)        // shift == #1
+                                                ),
+                                                true, // add
+                                                false, // no wback
+                                            ),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                    0b0100 => {
+                                        // `LDREXB`
+                                        if rt == 13 || rt == 15 || rn == 15 {
+                                            todo!("UNPREDICTABLE");
+                                        }
+                                        // TODO: should_is_must()
+                                        // rt2 == 0b1111
+                                        // rd == 0b1111
+                                        inst.opcode = Opcode::LDREXB;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rt)),
+                                            Operand::RegDeref(Reg::from_u8(rn)),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                    0b0101 => {
+                                        // `LDREXH`
+                                        if rt == 13 || rt == 15 || rn == 15 {
+                                            todo!("UNPREDICTABLE");
+                                        }
+                                        // TODO: should_is_must()
+                                        // rt2 == 0b1111
+                                        // rd == 0b1111
+                                        inst.opcode = Opcode::LDREXH;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rt)),
+                                            Operand::RegDeref(Reg::from_u8(rn)),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                    0b0110 => {
+                                        // `LDREXD`
+                                        if rt == 13 || rt == 15 || rt2 == 13 || rt2 == 15 || rn == 15 {
+                                            todo!("UNPREDICTABLE");
+                                        }
+                                        // TODO: should_is_must()
+                                        // rd == 0b1111
+                                        inst.opcode = Opcode::LDREXD;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rt)),
+                                            Operand::Reg(Reg::from_u8(rt2)),
+                                            Operand::RegDeref(Reg::from_u8(rn)),
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                    _ => {
+                                        return Err(DecodeError::Undefined);
+                                    }
+                                }
+                            }
+                            0b1000 |
+                            0b1010 |
+                            0b1100 |
+                            0b1110 => {
+                                // `STRD (immediate)` (`A8-687`)
+                                // v6T2
+                                // bit 5 (w) == 1
+                                let w = true;
+                                let u = (instr >> 7) & 1 != 0;
+                                let p = (instr >> 8) & 1 != 0;
+                                // `if P == '0' && W == '0' then SEE "Related encodings"` -> this
+                                // would imply tbb/tbh, should be unreachable
+                                if rn == 15 || rt == 13 || rt == 15 || rd == 13 || rd == 15 {
+                                    todo!("UNPREDICTABLE");
+                                }
+                                inst.opcode = Opcode::STRD;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rt)),
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    if p {
+                                        Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8 << 2, u, w)
+                                    } else {
+                                        // p == 0 and w == 0 is impossible, would be tbb/tbh
+                                        Operand::RegDerefPostindexOffset(Reg::from_u8(rn), imm8 << 2, u, false)
+                                    },
+                                    Operand::Nothing,
+                                ];
+                            }
+                            0b1001 |
+                            0b1011 |
+                            0b1101 |
+                            0b1111 => {
+                                // `LDRD (immediate)` (`A8-687`)
+                                // v6T2
+                                // bit 5 (w) == 1
+                                let w = true;
+                                let u = (instr >> 7) & 1 != 0;
+                                let p = (instr >> 8) & 1 != 0;
+                                // `if P == '0' && W == '0' then SEE "Related encodings"` -> this
+                                // would imply tbb/tbh, should be unreachable
+                                if rt == 13 || rt == 15 || rd == 13 || rd == 15 || rd == rt {
+                                    todo!("UNPREDICTABLE");
+                                }
+                                if w && (rn == rt || rn == rd) {
+                                    todo!("UNPREDICTABLE");
+                                }
+                                if rn != 0b1111 {
+                                    // `LDRD (immediate)` (`A8-427`)
+                                    // v6T2
+                                    inst.opcode = Opcode::LDRD;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rt)),
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        if p {
+                                            Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8 << 2, u, w)
+                                        } else {
+                                            // p == 0 and w == 0 is impossible, would be tbb/tbh
+                                            Operand::RegDerefPostindexOffset(Reg::from_u8(rn), imm8 << 2, u, false)
+                                        },
+                                        Operand::Nothing,
+                                    ];
+                                } else {
+                                    // `LDRD (literal)` (`A8-429`)
+                                    // v6T2
+                                    if w {
+                                        todo!("UNPREDICTABLE");
+                                    }
+                                    // which because !(p == 0 && w == 0), we know p is true
+                                    inst.opcode = Opcode::LDRD;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rt)),
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8 << 2, u, false),
+                                        Operand::Nothing,
+                                    ];
+                                }
+                            }
+                            _ => {
+                                unreachable!("impossible bit pattern");
+                            }
+                        }
+                    } else {
+                        let w = instr & 0b100000 != 0;
+                        // `Load/store multiple` (`A6-235`)
+                        if instr & 0b10000 == 0 {
+                            // `L == 0`
+                            match (instr >> 7) & 0b11 {
+                                0b00 => {
+                                    // `SRS (Thumb)` (`B9-1990`)
+                                    // v6T2
+                                    inst.opcode = Opcode::SRS(false, true); // `srsdb`
+                                    inst.operands = [
+                                        Operand::RegWBack(Reg::from_u8(13), w),
+                                        Operand::Imm12(lower & 0b1111), // #<mode> ? what's the syntax here? #<the literal>?
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                0b01 => {
+                                    // `STM (STMIA, STMEA)` (`A8-665`)
+                                    // v6T2
+                                    if rn == 15 || lower.count_ones() < 2 {
+                                        todo!("UNPREDICTABLE");
+                                    }
+                                    if w && (lower & (1 << rn)) != 0 {
+                                        todo!("UNPREDICTABLE");
+                                    }
+                                    inst.opcode = Opcode::STM(
+                                        true, // add
+                                        true, // preincrement
+                                        w, // wback
+                                        true, // usermode
+                                    );
+                                    inst.operands = [
+                                        Operand::RegWBack(Reg::from_u8(rn), w),
+                                        Operand::RegList(lower),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                0b10 => {
+                                    // `STMDB`/`STMFD` (`A8-669`)
+                                    // or `PUSH` (`A8-539`)
+                                    if w && rn == 0b1101 {
+                                        // `PUSH`
+                                        // v6T2
+                                        if lower.count_ones() < 2 {
+                                            todo!("UNPREDICTABLE");
+                                        }
+                                        inst.opcode = Opcode::PUSH;
+                                        inst.operands = [
+                                            Operand::RegList(lower),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    } else {
+                                        // `STMDB`
+                                        // v6T2
+                                        if rn == 15 || lower.count_ones() < 2 {
+                                            todo!("UNPREDICTABLE");
+                                        }
+                                        if w && (lower & (1 << rn)) != 0 {
+                                            todo!("UNPREDICTABLE");
+                                        }
+                                        inst.opcode = Opcode::STM(
+                                            false, // decrement
+                                            true, // preincrement
+                                            w, // wback
+                                            true, // usermode?
+                                        );
+                                        inst.operands = [
+                                            Operand::RegWBack(Reg::from_u8(rn), w),
+                                            Operand::RegList(lower),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                }
+                                0b11 => {
+                                    // `SRS (Thumb)` (`B9-1990`)
+                                    // v6T2
+                                    inst.opcode = Opcode::SRS(false, true); // `srsia`
+                                    inst.operands = [
+                                        Operand::RegWBack(Reg::from_u8(13), w),
+                                        Operand::Imm12(lower & 0b1111), // #<mode> ? what's the syntax here? #<the literal>?
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                _ => {
+                                    unreachable!();
+                                }
+                            }
+                        } else {
+                            // `L == 1`
+                            match (instr >> 7) & 0b11 {
+                                0b00 => {
+                                    // `RFE` (`B9-1986`)
+                                    // v6T2
+                                    if rn == 15 {
+                                        todo!("UNPREDICTABLE");
+                                    }
+                                    inst.opcode = Opcode::RFE(false, true);
+                                    inst.operands = [
+                                        Operand::RegWBack(Reg::from_u8(rn), w),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                0b01 => {
+                                    // `LDM/LDMIA/LDMFD (Thumb)` (`A8-397`)
+                                    if w && rn == 0b1101 {
+                                        // `POP` (`A8-535`)
+                                        if lower.count_ones() < 2 || (lower & 0xc000) == 0xc000 {
+                                            todo!("UNPREDICTABLE");
+                                        }
+                                        inst.opcode = Opcode::POP;
+                                        inst.operands = [
+                                            Operand::RegList(lower),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    } else {
+                                        // `LDM/LDMIA/LDMFD`
+                                        if rn == 15 || lower.count_ones() < 2 {
+                                            todo!("UNPREDICTABLE");
+                                        }
+                                        if w && (lower & (1 << rn)) != 0 {
+                                            todo!("UNPREDICTABLE");
+                                        }
+                                        inst.opcode = Opcode::LDM(true, true, w, true);
+                                        inst.operands = [
+                                            Operand::RegWBack(Reg::from_u8(rn), w),
+                                            Operand::RegList(lower),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                }
+                                0b10 => {
+                                    // `LDMDB/LDMEA` (`A8-403`)
+                                    if rn == 15 || lower.count_ones() < 2 {
+                                        todo!("UNPREDICTABLE");
+                                    }
+                                    if w && (lower & (1 << rn)) != 0 {
+                                        todo!("UNPREDICTABLE");
+                                    }
+                                    inst.opcode = Opcode::LDM(false, true, w, true);
+                                    inst.operands = [
+                                        Operand::RegWBack(Reg::from_u8(rn), w),
+                                        Operand::RegList(lower),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                0b11 => {
+                                    // `RFE` (`B9-1986`)
+                                    // v6T2
+                                    if rn == 15 {
+                                        todo!("UNPREDICTABLE");
+                                    }
+                                    inst.opcode = Opcode::RFE(true, false);
+                                    inst.operands = [
+                                        Operand::RegWBack(Reg::from_u8(rn), w),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                _ => {
+                                    unreachable!();
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // `Data-processing (shfited register)` (`A6-241`)
+                    // v6T2
+                    let op = op2 & 0b1111;
+                    let s = instr & 0b10000 != 0;
+                    let rn = (instr & 0b1111) as u8;
+                    let rd = ((lower >> 8) & 0b1111) as u8;
+
+                    let imm3 = (lower >> 12) & 0b111;
+                    let imm2 = (lower >> 6) & 0b11;
+                    let tp = (lower >> 4) & 0b11;
+                    let rm = (lower & 0b1111) as u8;
+
+                    let shift = RegShift::from_raw(
+                        0b1000 | // reg-imm shift. TODO: probably need to change the const
+                        rm  as u16 |
+                        (imm2 << 7) | (imm3 << 9) |
+                        tp << 5
+                    );
+                    let shift = Operand::RegShift(shift);
+
+                    match op {
+                        0b0000 => {
+                            if rd == 0b1111 && s {
+                                // `TST` (`A8-747`)
+                                // v6T2
+                                inst.opcode = Opcode::TST;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    shift,
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                // `AND` (`A8-324`)
+                                // v6T2
+                                // TODO: S
+                                inst.opcode = Opcode::AND;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    shift,
+                                    Operand::Nothing,
+                                ];
+                            }
+                        }
+                        0b0001 => {
+                            // `BIC` (`A8-340`)
+                            // v6T2
+                            // TODO: S
+                            inst.opcode = Opcode::BIC;
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Reg(Reg::from_u8(rn)),
+                                shift,
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b0010 => {
+                            if rn == 0b1111 {
+                                // `Move register and immediate shifts`, also `A6-241`
+                                let tp = (lower >> 4) & 0b11;
+                                let imm2 = (lower >> 6) & 0b11;
+                                let imm3 = (lower >> 12) & 0b111;
+                                match tp {
+                                    0b00 => {
+                                        if imm2 | imm3 == 0 {
+                                            // `MOV (register, Thumb)` (`A8-487`)
+                                            return Err(DecodeError::Incomplete);
+                                        } else {
+                                            // `LSL (immediate)` (`A8-469`)
+                                            return Err(DecodeError::Incomplete);
+                                        }
+                                    },
+                                    0b01 => {
+                                        // `LSR (immediate)` (`A8-473`)
+                                        return Err(DecodeError::Incomplete);
+                                    }
+                                    0b10 => {
+                                        // `ASR (immediate)` (`A8-328`)
+                                        return Err(DecodeError::Incomplete);
+                                    }
+                                    0b11 => {
+                                        if imm2 | imm3 == 0 {
+                                            // `RRX` (`A8-573`)
+                                            return Err(DecodeError::Incomplete);
+                                        } else {
+                                            // `ROR (immediate)` (`A8-569`)
+                                            return Err(DecodeError::Incomplete);
+                                        }
+                                    }
+                                    _ => {
+                                        unreachable!("impossible bit pattern for `tp`");
+                                    }
+                                }
+                            } else {
+                                // `ORR` (`A8-519`)
+                                // v6T2
+                                // TODO: S
+                                inst.opcode = Opcode::ORR;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    shift,
+                                    Operand::Nothing,
+                                ];
+                            }
+                        }
+                        0b0011 => {
+                            if rn == 0b1111 {
+                                // `MVN` (`A8-507`)
+                                // v6T2
+                                // TODO: S
+                                inst.opcode = Opcode::MVN;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    shift,
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                // `ORN` (`A8-515`)
+                                // v6T2
+                                // TODO: S
+                                inst.opcode = Opcode::ORN;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    shift,
+                                    Operand::Nothing,
+                                ];
+                            }
+                        }
+                        0b0100 => {
+                            if rd == 0b1111 && s {
+                                // `TEQ` (`A8-741`)
+                                // v6T2
+                                inst.opcode = Opcode::TEQ;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    shift,
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                // `EOR` (`A8-385`)
+                                // v6T2
+                                // TODO: S
+                                inst.opcode = Opcode::EOR;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    shift,
+                                    Operand::Nothing,
+                                ];
+                            }
+                        }
+                        0b0110 => {
+                            // `PKH` (`A8-523`)
+                            // v6T2
+                            // TODO: fix shift
+                            // TODO: check opcode
+                            // TODO: S
+                            inst.opcode = if lower & 0b10000 != 0 {
+                                Opcode::PKHTB
+                            } else {
+                                Opcode::PKHBT
+                            };
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Reg(Reg::from_u8(rn)),
+                                shift,
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b1000 => {
+                            if rd == 0b1111 && s {
+                                // `CMN` (`A8-364`)
+                                // v6T2
+                                inst.opcode = Opcode::CMN;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    shift,
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                // `ADD` (`A8-308`)
+                                // TODO: S
+                                inst.opcode = Opcode::ADD;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    shift,
+                                    Operand::Nothing,
+                                ];
+                            }
+                        }
+                        0b1010 => {
+                            // `ADC` (`A8-300`)
+                            // v6T2
+                            // TODO: S
+                            inst.opcode = Opcode::ADC;
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Reg(Reg::from_u8(rn)),
+                                shift,
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b1011 => {
+                            // `SBC` (`A8-595`)
+                            // v6T2
+                            // TODO: S
+                            inst.opcode = Opcode::SBC;
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Reg(Reg::from_u8(rn)),
+                                shift,
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b1101 => {
+                            if rd == 0b1111 && s {
+                                // `CMP` (`A8-370`)
+                                // v6T2
+                                inst.opcode = Opcode::CMP;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    shift,
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                // `SUB` (`A8-713`)
+                                // v6T2
+                                // TODO: S
+                                inst.opcode = Opcode::SUB;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    shift,
+                                    Operand::Nothing,
+                                ];
+                            }
+                        }
+                        0b1110 => {
+                            // `RSB` (`A8-577`)
+                            inst.opcode = Opcode::RSB;
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Reg(Reg::from_u8(rn)),
+                                shift,
+                                Operand::Nothing,
+                            ];
+                        }
+                        _ => {
+                            // undefined encoding
+                            return Err(DecodeError::Undefined);
+                        }
+                    }
+                }
+            } else {
+                // `Coprocessor, Advanced SIMD, and Floating-point instructions` (`A6-249`)
+                // v6T2
+                eprintln!("TODO: coproc/simd/fp");
+                return Err(DecodeError::Incomplete);
+            }
+        } else if opword < 0b11111 {
+            // op1 == 0b10
+            if lower & 0x80 == 0 {
+                // op == 0
+                if op2 & 0b0100000 == 0 {
+                    // `A6.3.1` `Data-processing (modified immediate)` (`A6-229`)
+                    // see `A6.3.2` for `Modified immediate constants in Thumb instructions` on how
+                    // to decode immediates
+                    // v6T2
+                    let op = op2 & 0b1111;
+                    let i = instr >> 10 & 1;
+                    let s = instr & 0b10000 != 0;
+                    let rn = (instr & 0b1111) as u8;
+                    let imm3 = (lower >> 12) & 0b111;
+                    let rd = ((lower >> 8) & 0b1111) as u8;
+                    let imm8 = lower & 0b11111111;
+                    let imm = (i << 11) | (imm3 << 8) | imm8;
+
+                    let imm = ThumbExpandImm_C(imm);
+
+                    match op {
+                        0b0000 => {
+                            if rd == 0b1111 && s {
+                                // `TST` (`A8-745`)
+                                // v6T2
+                                inst.opcode = Opcode::TST;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Imm32(imm as u32),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                // `AND` (`A8-322`)
+                                // v6T2
+                                // TODO: S
+                                inst.opcode = Opcode::AND;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Imm32(imm as u32),
+                                    Operand::Nothing,
+                                ];
+                            }
+                        }
+                        0b0001 => {
+                            // `BIC` (`A8-338`)
+                            // v6T2
+                            // TODO: S
+                            inst.opcode = Opcode::BIC;
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Reg(Reg::from_u8(rn)),
+                                Operand::Imm32(imm as u32),
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b0010 => {
+                            if rn == 0b1111 {
+                                // `MOV` (`A8-485`)
+                                // v6T2
+                                // TODO: S
+                                inst.opcode = Opcode::MOV;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Imm32(imm as u32),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                // `ORR` (`A8-517`)
+                                // v6T2
+                                // TODO: S
+                                inst.opcode = Opcode::ORR;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Imm32(imm as u32),
+                                    Operand::Nothing,
+                                ];
+                            }
+                        }
+                        0b0011 => {
+                            if rn == 0b1111 {
+                                // `MVN` (`A8-505`)
+                                // v6T2
+                                // TODO: S
+                                inst.opcode = Opcode::MOV;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Imm32(imm as u32),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                // `ORN` (`A8-513`)
+                                // v6T2
+                                // TODO: S
+                                inst.opcode = Opcode::ORN;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Imm32(imm as u32),
+                                    Operand::Nothing,
+                                ];
+                            }
+                        }
+                        0b0100 => {
+                            if rd == 0b1111 && s {
+                                // `TEQ` (`A8-739`)
+                                // v6T2
+                                // TODO: S
+                                inst.opcode = Opcode::TEQ;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Imm32(imm as u32),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                // `EOR` (`A8-383`)
+                                // v6T2
+                                // TODO: S
+                                inst.opcode = Opcode::EOR;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Imm32(imm as u32),
+                                    Operand::Nothing,
+                                ];
+                            }
+                        }
+                        0b1000 => {
+                            if rd == 0b1111 && s {
+                                // `CMN` (`A8-362`)
+                                // v6T2
+                                // TODO: S
+                                inst.opcode = Opcode::CMN;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Imm32(imm as u32),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                // `ADD` (`A8-304`)
+                                // v6T2
+                                // TODO: S
+                                inst.opcode = Opcode::ADD;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Imm32(imm as u32),
+                                    Operand::Nothing,
+                                ];
+                            }
+                        }
+                        0b1010 => {
+                            // `ADC` (`A8-298`)
+                            // v6T2
+                            // TODO: S
+                            inst.opcode = Opcode::ADC;
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Reg(Reg::from_u8(rn)),
+                                Operand::Imm32(imm as u32),
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b1011 => {
+                            // `SBC` (`A8-593`)
+                            // v6T2
+                            // TODO: S
+                            inst.opcode = Opcode::SBC;
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Reg(Reg::from_u8(rn)),
+                                Operand::Imm32(imm as u32),
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b1101 => {
+                            if rd == 0b1111 && s {
+                                // `CMP` (`A8-368`)
+                                // v6T2
+                                // TODO: S
+                                inst.opcode = Opcode::CMP;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Imm32(imm as u32),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                // `SUB` (`A8-709`)
+                                // v6T2
+                                // TODO: S
+                                inst.opcode = Opcode::SUB;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Imm32(imm as u32),
+                                    Operand::Nothing,
+                                ];
+                            }
+                        }
+                        0b1110 => {
+                            // `RSB` (`A8-575`)
+                            // v6T2
+                            // TODO: S
+                            inst.opcode = Opcode::RSB;
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Reg(Reg::from_u8(rn)),
+                                Operand::Imm32(imm as u32),
+                                Operand::Nothing,
+                            ];
+                        }
+                        _ => {
+                            // undefined encoding
+                            return Err(DecodeError::Undefined);
+                        }
+                    }
+                } else {
+                    // `Data-processing (plain binary immediate)` (`A6-232`)
+                    // v6T2
+                    let op = (instr >> 4) & 0b11111;
+                    let i = instr >> 10 & 1;
+                    let s = instr & 0b10000 != 0;
+                    inst.s = s;
+                    let rn = (instr & 0b1111) as u8;
+                    let imm3 = (lower >> 12) & 0b111;
+                    let rd = ((lower >> 8) & 0b1111) as u8;
+                    let imm8 = lower & 0b11111111;
+                    let imm = (i << 11) | (imm3 << 8) | imm8;
+
+                    match op {
+                        0b00000 => {
+                            if rn != 0b1111 {
+                                // `ADD` (`A8-304`)
+                                // v6T2
+                                inst.opcode = Opcode::ADD;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Imm32(imm as u32),
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                // `ADR` (`A8-320`)
+                                // v6T2
+                                // TODO: add = TRUE;
+                                inst.opcode = Opcode::ADR;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Imm32(imm as u32),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            }
+                        }
+                        0b00100 => {
+                            // `MOV` (`A8-485`)
+                            inst.opcode = Opcode::MOV;
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Imm32(imm as u32 | ((rn as u32) << 16)),
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b01010 => {
+                            if rn != 0b1111 {
+                                // `SUB` (`A8-709`)
+                                // v6T2
+                                inst.opcode = Opcode::SUB;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Imm32(imm as u32),
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                // `ADR` (`A8-320`)
+                                // v6T2
+                                // TODO: add = FALSE;
+                                inst.opcode = Opcode::ADR;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Imm32(imm as u32),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            }
+                        }
+                        0b01100 => {
+                            // `MOVT` (`A8-492`)
+                            // v6T2
+                            inst.opcode = Opcode::MOVT;
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Imm32(imm as u32 | ((rn as u32) << 16)),
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b10000 => {
+                            // `SSAT` (`A8-653`)
+                            // v6T2
+                            let imm3_2 = ((lower >> 10) & 0b11100) | ((lower >> 6) & 0b11);
+                            let sh = 0; // from the opcode
+                            let shift = DecodeImmShift(rn, sh << 1, imm3_2 as u8);
+                            inst.opcode = Opcode::SSAT;
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Imm32((lower & 0b11111) as u32),
+                                Operand::RegShift(shift),
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b10010 => {
+                            let imm3_2 = ((lower >> 10) & 0b11100) | ((lower >> 6) & 0b11);
+                            if imm3_2 != 0 {
+                                let shift = DecodeImmShift(rn, ((instr >> 4) & 0b10) as u8, imm3_2 as u8);
+                                // `SSAT`
+                                // v6T2
+                                inst.opcode = Opcode::SSAT;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Imm32((lower & 0b11111) as u32),
+                                    Operand::RegShift(shift),
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                // `SSAT16`
+                                // v6T2
+                                inst.opcode = Opcode::SSAT16;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Imm32((lower & 0b11111) as u32),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Nothing,
+                                ];
+                            }
+                        }
+                        0b10100 => {
+                            // `SBFX` (`A8-599`)
+                            // v6T2
+                            inst.opcode = Opcode::SBFX;
+                            let imm3_2 = ((lower >> 10) & 0b11100) | ((lower >> 6) & 0b11);
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Reg(Reg::from_u8(rn)),
+                                Operand::Imm12(imm3_2),
+                                Operand::Imm12((lower & 0b11111) + 1),
+                            ];
+                        }
+                        0b10110 => {
+                            if rn != 0b1111 {
+                                // `BFI` (`A8-336`)
+                                // v6T2
+                                inst.opcode = Opcode::BFI;
+                                let imm3_2 = ((lower >> 10) & 0b11100) | ((lower >> 6) & 0b11);
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Imm12(imm3_2),
+                                    // TODO: this is `msb` but the operand here should be `width`
+                                    Operand::Imm12(lower & 0b11111),
+                                ];
+                            } else {
+                                // `BFC` (`A8-334`)
+                                // v6T2
+                                inst.opcode = Opcode::BFC;
+                                let imm3_2 = ((lower >> 10) & 0b11100) | ((lower >> 6) & 0b11);
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Imm12(imm3_2),
+                                    // TODO: this is `msb` but the operand here should be `width`
+                                    Operand::Imm32((lower & 0b1111) as u32),
+                                ];
+                            }
+                        }
+                        0b11000 => {
+                            // `USAT` (`A8-797`)
+                            // v6T2
+                            let imm3_2 = ((lower >> 10) & 0b11100) | ((lower >> 6) & 0b11);
+                            let sh = 0; // from the opcode
+                            let shift = DecodeImmShift(rn, sh << 1, imm3_2 as u8);
+                            inst.opcode = Opcode::USAT;
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Imm32((lower & 0b1111) as u32),
+                                Operand::RegShift(shift),
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b11010 => {
+                            let imm3_2 = ((lower >> 10) & 0b11100) | ((lower >> 6) & 0b11);
+                            if imm3_2 != 0 {
+                                let sh = 1; // from the opcode
+                                let shift = DecodeImmShift(rn, sh << 1, imm3_2 as u8);
+                                // `USAT`
+                                // v6T2
+                                inst.opcode = Opcode::USAT;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Imm32((lower & 0b1111) as u32),
+                                    Operand::RegShift(shift),
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                // `USAT16`
+                                // v6T2
+                                inst.opcode = Opcode::USAT16;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Imm32((lower & 0b1111) as u32),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Nothing,
+                                ];
+                            }
+                        }
+                        0b11100 => {
+                            // `UBFX` (`A8-757`)
+                            // v6T2
+                            inst.opcode = Opcode::UBFX;
+                            let imm3_2 = ((lower >> 10) & 0b11100) | ((lower >> 6) & 0b11);
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Reg(Reg::from_u8(rn)),
+                                Operand::Imm12(imm3_2),
+                                Operand::Imm12((lower & 0b11111) + 1),
+                            ];
+                        }
+                        _ => {
+                            return Err(DecodeError::Undefined);
+                        }
+                    }
+                }
+            } else {
+                // op == 1
+                // `Branches and miscellaneous control` (`A6-233`)
+                let imm8 = lower & 0b11111111;
+                let op2 = (lower >> 8) & 0b0111;
+                let op1 = (lower >> 12) & 0b111;
+                let op = (instr >> 4) & 0b1111111;
+                if op1 & 0b101 == 0b000 {
+                    // the high bit of op is a sign bit, if a conditional branch. otherwise, it is
+                    // 0 for valid instructiosn other than `udf`, `hvc`, and `smc`. `Branch` is
+                    //   ruled out as `op1` is `0x1`, so see if this is any of the misc
+                    //   instructions:
+                    if op & 0b0111000 != 0b0111000 {
+                        // `Conditional branch` (`A8-332`)
+                        // v6T2
+                        inst.condition = ConditionCode::build(((instr >> 8) & 0b1111) as u8);
+                        inst.opcode = Opcode::B;
+                        inst.operands = [
+                            Operand::BranchThumbOffset(((instr & 0b11111111) + 1) as i8 as i32),
+                            Operand::Nothing,
+                            Operand::Nothing,
+                            Operand::Nothing,
+                        ];
+                    } else {
+                        // some misc instruction, rule out `udf`, `hvc`, `smc`:
+                        if op < 0b1000000 {
+                            // misc instruction
+                            if op < 0b0111010 {
+                                // `MSR` in some form, slightly more work to figure this out
+                                let rn = (instr & 0b1111) as u8;
+                                if imm8 & 0b00100000 != 0 {
+                                    // `MSR` (`B9-1980`)
+                                    // v7VE
+                                    let sysm = (((lower >> 4) & 1) << 4) | ((lower >> 8) & 0b1111);
+                                    let r = (instr >> 4) & 1;
+                                    inst.opcode = Opcode::MSR;
+                                    inst.operands = [
+                                        // TODO: is this the appropriate banked reg?
+                                        Reg::from_sysm(r != 0, sysm as u8).expect("from_sysm works"),
+                                        Operand::Reg(Reg::from_u8(rn)),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else {
+                                    if op == 0b0111000 {
+                                        if op2 & 0b0011 == 0b00 {
+                                            // `Move to Special register, Application level` (`A8-501`)
+                                            let mask = (lower >> 10) & 0b11;
+                                            let spec_reg = match mask {
+                                                0b00 => {
+                                                    todo!("UNPREDICTABLE");
+                                                }
+                                                0b01 => {
+                                                    StatusRegMask::APSR_G
+                                                }
+                                                0b10 => {
+                                                    StatusRegMask::APSR_NZCVQ
+                                                }
+                                                0b11 => {
+                                                    StatusRegMask::APSR_NZCVQG
+                                                }
+                                                _ => {
+                                                    unreachable!("impossible mask bits");
+                                                }
+                                            };
+                                            inst.opcode = Opcode::MSR;
+                                            inst.operands = [
+                                                Operand::StatusRegMask(spec_reg),
+                                                Operand::Reg(Reg::from_u8(rn)),
+                                                Operand::Nothing,
+                                                Operand::Nothing,
+                                            ];
+                                        } else {
+                                            // `Move to Special register, System level` (`B9-1984`)
+                                            let mask = ((lower >> 8) & 0b1111) as u8;
+                                            let r = (instr >> 4) & 1;
+                                            inst.opcode = Opcode::MSR;
+                                            inst.operands = [
+                                                // TODO: is this the appropriate?
+                                                Reg::from_sysm(r != 0, mask).expect("from_sysm works"),
+                                                Operand::Reg(Reg::from_u8(rn)),
+                                                Operand::Nothing,
+                                                Operand::Nothing,
+                                            ];
+                                        }
+                                    } else {
+                                        // `Move to Special register, System level` (`B9-1984`)
+                                        let mask = ((lower >> 8) & 0b1111) as u8;
+                                        let r = (instr >> 4) & 1;
+                                        inst.opcode = Opcode::MSR;
+                                        inst.operands = [
+                                            // TODO: is this the appropriate?
+                                            Reg::from_sysm(r != 0, mask).expect("from_sysm works"),
+                                            Operand::Reg(Reg::from_u8(rn)),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                }
+                            } else if op < 0b0111011 {
+                                // `Change Processor State, and hints` (`A6-234`)
+                                let op1 = (lower >> 8) & 0b111;
+                                let op2 = lower & 0b11111111;
+                                if op1 != 0b000 {
+                                    // `CPS (Thumb)` (`B9-1964`)
+                                    // v6T2
+                                    let _mode = lower & 0b11111;
+                                    let _aif = (lower >> 5) & 0b111;
+                                    let _m = (lower >> 8) & 1;
+                                    let _imod = (lower >> 9) & 0b11;
+                                    // TODO: no CPS instruction? yet?
+                                    eprintln!("cps support is not complete");
+                                    return Err(DecodeError::Incomplete);
+                                    // inst.opcode = Opcode::CPS;
+                                } else {
+                                    if op2 >= 0b11110000 {
+                                        // `DBG` (`A8-378`)
+                                        let option = lower & 0b1111;
+                                        inst.opcode = Opcode::DBG;
+                                        inst.operands = [
+                                            Operand::Imm12(option),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    } else {
+                                        match op2 {
+                                            0b00000000 => {
+                                                // `NOP` (`A8-511`)
+                                                // v6T2
+                                                // TODO: should_is_must
+                                                inst.opcode = Opcode::NOP;
+                                                inst.operands = [
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                ];
+                                            }
+                                            0b00000001 => {
+                                                // `YIELD` (`A8-1109`)
+                                                // v7
+                                                inst.opcode = Opcode::YIELD;
+                                                inst.operands = [
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                ];
+                                            }
+                                            0b00000010 => {
+                                                // `WFE` (`A8-1105`)
+                                                // v7
+                                                inst.opcode = Opcode::WFE;
+                                                inst.operands = [
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                ];
+                                            }
+                                            0b00000011 => {
+                                                // `WFI` (`A8-1107`)
+                                                // v7
+                                                inst.opcode = Opcode::WFI;
+                                                inst.operands = [
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                ];
+                                            }
+                                            0b00000100 => {
+                                                // `SEV` (`A8-607`)
+                                                // v7
+                                                inst.opcode = Opcode::SEV;
+                                                inst.operands = [
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                ];
+                                            }
+                                            0b00010100 => {
+                                                // `CSDB` (`A8-376`)
+                                                // v6T2
+                                                inst.opcode = Opcode::CSDB;
+                                                inst.operands = [
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                ];
+                                            }
+                                            _ => {
+                                                return Err(DecodeError::Undefined);
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if op < 0b0111100 {
+                                // `Miscellaneous control instructions` (`A6-235`)
+                                let op = (lower >> 4) & 0b1111;
+                                match op {
+                                    0b0000 => {
+                                        // `ENTERX` (`A9-1116`)
+                                        // ThumbEE
+                                        inst.opcode = Opcode::LEAVEX;
+                                        inst.operands = [
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    },
+                                    0b0001 => {
+                                        // `ENTERX` (`A9-1116`)
+                                        // ThumbEE
+                                        inst.opcode = Opcode::ENTERX;
+                                        inst.operands = [
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    },
+                                    0b0010 => {
+                                        // `CLREX` (`A8-358`)
+                                        // v7
+                                        inst.opcode = Opcode::CLREX;
+                                        inst.operands = [
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    },
+                                    0b0100 => {
+                                        // `DSB` (`A8-381`)
+                                        // v7
+                                        let option = lower & 0b1111;
+                                        inst.opcode = Opcode::DSB;
+                                        inst.operands = [
+                                            Operand::Imm12(option),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    },
+                                    0b0101 => {
+                                        // `DMB` (`A8-379`)
+                                        // v7
+                                        let option = lower & 0b1111;
+                                        inst.opcode = Opcode::DMB;
+                                        inst.operands = [
+                                            Operand::Imm12(option),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    },
+                                    0b0110 => {
+                                        // `ISB` (`A8-390`)
+                                        // v7
+                                        let option = lower & 0b1111;
+                                        inst.opcode = Opcode::ISB;
+                                        inst.operands = [
+                                            Operand::Imm12(option),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    },
+                                    _ => {
+                                        return Err(DecodeError::Undefined);
+                                    }
+                                }
+                            } else if op < 0b0111101 {
+                                // `BXJ` (`A8-352`)
+                                // v6T2
+                                let rm = (instr & 0b1111) as u8;
+                                inst.opcode = Opcode::BXJ;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rm)),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else if op < 0b0111110 {
+                                // `ERET` or `SUBS PC, LR`
+                                // v6T2
+                                // `v7VE` defines `ERET` here, identical to `subs pc, lr` with
+                                // `imm8 == 0`. `v7VE` does not change the behavior of this
+                                // instruction at `PL1`.
+                                let imm8 = lower & 0b11111111;
+                                if imm8 == 0 {
+                                    // `ERET` (`B9-1968`)
+                                    // v6T2
+                                    // if <v7VE, `subs pc, lr, #0`
+                                    inst.opcode = Opcode::ERET;
+                                    inst.operands = [
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else {
+                                    // `SUBS PC, LR (Thumb)` (`B9-1996`)
+                                    // v6T2
+                                    inst.opcode = Opcode::SUB;
+                                    inst.s = true;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(15)), // pc
+                                        Operand::Reg(Reg::from_u8(14)), // lr
+                                        Operand::Imm12(lower & 0b11111111),
+                                        Operand::Nothing,
+                                    ];
+                                }
+                            } else {
+                                // `op` is `0b0111110` or `0b0111111`, both are `MRS` but there's
+                                // some discerning to do still.
+                                let imm8 = lower & 0b11111111;
+                                if imm8 & 0b00100000 != 0 {
+                                    // `MRS (Banked register)` (`B9-1978`)
+                                    // v7VE
+                                    let r = instr & 0b10000;
+                                    let sysm = (lower & 0b10000) | (instr & 0b1111);
+                                    let rd = ((lower >> 8) & 0b1111) as u8;
+                                    inst.opcode = Opcode::MRS;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        Reg::from_sysm(r != 0, sysm as u8).expect("from_sysm works"),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else {
+                                    if op == 0b0111110 {
+                                        // `MRS` (`A8-497`)
+                                        // v6T2
+                                        inst.opcode = Opcode::MRS;
+                                        let rd = ((lower >> 8) & 0b1111) as u8;
+                                        inst.opcode = Opcode::MRS;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            // TODO: "<spec_reg>"?
+                                            Reg::from_sysm(false, 0).expect("from_sysm works"),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    } else {
+                                        // `MRS` (`B9-1976`)
+                                        // v6T2
+                                        inst.opcode = Opcode::MRS;
+                                        let rd = ((lower >> 8) & 0b1111) as u8;
+                                        let r = (instr >> 4) & 1;
+                                        inst.opcode = Opcode::MRS;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            // TODO: "<spec_reg>"?
+                                            Reg::from_sysm(r != 0, 0).expect("from_sysm works"),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                }
+                            }
+                        } else {
+                            if op == 0b1111111 {
+                                if op1 == 0b000 {
+                                    // `SMC` (aka `SMI`) (`B9-1988`)
+                                    // "Security Extensions"
+                                    let imm = instr & 0b1111;
+                                    inst.opcode = Opcode::SMC;
+                                    inst.operands = [
+                                        Operand::Imm12(imm),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else {
+                                    // `UDF` (`A8-759`)
+                                    // All (first defined in issue `C.a`)
+                                    // TODO: should this decode to an intentional `UDF`
+                                    // instruction?
+                                    return Err(DecodeError::Undefined);
+                                }
+                            } else if op == 0b1111110 {
+                                if op1 == 0b000 {
+                                    // `HVC` (`B8-1970`)
+                                    // v7VE
+                                    let imm = lower & 0b1111_1111_1111;
+                                    inst.opcode = Opcode::HVC;
+                                    inst.operands = [
+                                        Operand::Imm12(imm),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else {
+                                    // undefined, but by not being mentioned in the manual
+                                    return Err(DecodeError::Undefined);
+                                }
+                            } else {
+                                // undefined, but by not being mentioned in the manual
+                                return Err(DecodeError::Undefined);
+                            }
+                        }
+                    }
+                } else if op1 & 0b101 == 0b001 {
+                    // `Branch` (`A8-332`)
+                    // v6T2
+                    //
+                    let imm11 = lower & 0b111_1111_1111;
+                    let imm6 = instr & 0b11_1111;
+                    let j1 = (lower >> 13) & 1;
+                    let j2 = (lower >> 11) & 1;
+                    let s = (instr >> 10) & 1;
+                    let imm =
+                        (imm11 as u32) |
+                        ((imm6 as u32) << 11) |
+                        ((j1 as u32) << 17) |
+                        ((j2 as u32) << 18) |
+                        ((s as u32) << 19);
+                    let imm = (imm << 12) >> 12;
+                    inst.opcode = Opcode::B;
+                    inst.operands = [
+                        Operand::Imm32(imm as u32),
+                        Operand::Nothing,
+                        Operand::Nothing,
+                        Operand::Nothing,
+                    ];
+                } else if op1 & 0b101 == 0b100 {
+                    // `Branch with Link and Exchange` (`A8-346`)
+                    // `UNDEFINED` in v4T
+                    // v5T
+                    let imm11 = lower & 0b111_1111_1111;
+                    let imm10 = instr & 0b11_1111_1111;
+                    let j1 = (lower >> 13) & 1;
+                    let j2 = (lower >> 11) & 1;
+                    let s = (instr >> 10) & 1;
+                    let imm =
+                        (imm11 as u32) |
+                        ((imm10 as u32) << 11) |
+                        ((j1 as u32) << 21) |
+                        ((j2 as u32) << 22) |
+                        ((s as u32) << 23);
+                    let imm = (imm << 8) >> 8;
+                    inst.opcode = Opcode::BLX;
+                    inst.operands = [
+                        Operand::Imm32(imm as u32),
+                        Operand::Nothing,
+                        Operand::Nothing,
+                        Operand::Nothing,
+                    ];
+                } else {
+                    // `Brach with Link` (`A8-346`)
+                    // v4T
+                    let imm11 = lower & 0b111_1111_1111;
+                    let imm10 = instr & 0b11_1111_1111;
+                    let j1 = (lower >> 13) & 1;
+                    let j2 = (lower >> 11) & 1;
+                    let s = (instr >> 10) & 1;
+                    let imm =
+                        (imm11 as u32) |
+                        ((imm10 as u32) << 11) |
+                        ((j1 as u32) << 21) |
+                        ((j2 as u32) << 22) |
+                        ((s as u32) << 23);
+                    let imm = (imm << 8) >> 8;
+                    inst.opcode = Opcode::BL;
+                    inst.operands = [
+                        Operand::Imm32(imm as u32),
+                        Operand::Nothing,
+                        Operand::Nothing,
+                        Operand::Nothing,
+                    ];
+                }
+            }
+        } else {
+            // op1 == 0b11
+            if op2 & 0b1000000 == 0 {
+                if op2 & 0b0100000 == 0 {
+                    // loads, stores
+                    if op2 & 0b0000001 == 0 {
+                        // store single item, or advanced simd load/store
+                        if op2 & 0b00100000 == 0 {
+                            // `Store single data item` (`A6-240`)
+                            let rn = (instr & 0b1111) as u8;
+                            let op1 = (instr >> 5) & 0b111;
+                            let size_bits = op1 & 0b011;
+                            let op2 = (lower >> 6) & 0b111111;
+                            match size_bits {
+                                0b00 => {
+                                    // `STRB_`
+                                    if op2 == 0 {
+                                        // `STRB (register)` (`A8-683`)
+                                        // encoding T2
+                                        // v6T2
+                                        let rm = (lower & 0b1111) as u8;
+                                        let imm2 = (lower >> 4) & 0b11;
+                                        let rt = ((lower >> 12) & 0b1111) as u8;
+                                        inst.opcode = Opcode::STRB;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rt)),
+                                            Operand::RegDerefPreindexRegShift(
+                                                Reg::from_u8(rn),
+                                                RegShift::from_raw(
+                                                    // do things
+                                                    0b0000 |        // imm shift
+                                                    (imm2 << 7) |   // imm
+                                                    rm as u16 |            // shiftee
+                                                    (0b00 << 5) // shift style (lsl)
+                                                ),
+                                                true,   // add
+                                                false,  // wback
+                                            ),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    } else if (op2 & 0b111100) == 0b111000 {
+                                        // `STRBT` (`A8-685`)
+                                        // v6T2
+                                        let imm8 = lower & 0b1111_1111;
+                                        let rt = ((lower >> 12) & 0b1111) as u8;
+                                        inst.opcode = Opcode::STRBT;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rt)),
+                                            Operand::RegDerefPreindexOffset(
+                                                Reg::from_u8(rn),
+                                                imm8,
+                                                true,   // add
+                                                false,  // wback
+                                            ),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    } else {
+                                        // `STRB (immediate, Thumb)` (`A8-679`)
+                                        // encoding T3
+                                        // v6T2
+                                        let imm8 = lower & 0b1111_1111;
+                                        let puw = (lower >> 8) & 0b111;
+                                        let p = puw & 0b100 != 0;
+                                        let u = puw & 0b010 != 0;
+                                        let w = puw & 0b001 != 0;
+                                        // assert!(puw != 0b110) // would be `strbt`
+                                        let rt = ((lower >> 12) & 0b1111) as u8;
+                                        inst.opcode = Opcode::STRB;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rt)),
+                                            // do the puw
+                                            if p {
+                                                Operand::RegDerefPreindexOffset(
+                                                    Reg::from_u8(rn),
+                                                    imm8,
+                                                    u, // add
+                                                    w, // wback
+                                                )
+                                            } else {
+                                                Operand::RegDerefPostindexOffset(
+                                                    Reg::from_u8(rn),
+                                                    imm8,
+                                                    u, // add
+                                                    w, // wback
+                                                )
+                                            },
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                }
+                                0b01 => {
+                                    // `STRH_`
+                                    // v6T2
+                                    if op2 == 0 {
+                                        // `STRH (register)` (`A8-703`)
+                                        let rm = (lower & 0b1111) as u8;
+                                        let imm2 = (lower >> 4) & 0b11;
+                                        let rt = ((lower >> 12) & 0b1111) as u8;
+                                        inst.opcode = Opcode::STRH;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rt)),
+                                            Operand::RegDerefPreindexRegShift(
+                                                Reg::from_u8(rn),
+                                                RegShift::from_raw(
+                                                    // do things
+                                                    0b0000 |        // imm shift
+                                                    (imm2 << 7) |   // imm
+                                                    rm as u16 |            // shiftee
+                                                    (0b00 << 5) // shift style (lsl)
+                                                ),
+                                                true,   // add
+                                                false,  // wback
+                                            ),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    } else if (op2 & 0b111100) == 0b111000 {
+                                        // `STRHT` (`A8-705`)
+                                        let imm8 = lower & 0b1111_1111;
+                                        let rt = ((lower >> 12) & 0b1111) as u8;
+                                        inst.opcode = Opcode::STRHT;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rt)),
+                                            Operand::RegDerefPreindexOffset(
+                                                Reg::from_u8(rn),
+                                                imm8,
+                                                true,   // add
+                                                false,  // wback
+                                            ),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    } else {
+                                        // `STRH (immediate, Thumb)` (`A8-699`)
+                                        // encoding T3
+                                        // v6T2
+                                        let imm8 = lower & 0b1111_1111;
+                                        let puw = (lower >> 8) & 0b111;
+                                        let p = puw & 0b100 != 0;
+                                        let u = puw & 0b010 != 0;
+                                        let w = puw & 0b001 != 0;
+                                        // assert!(puw != 0b110) // would be `strbt`
+                                        let rt = ((lower >> 12) & 0b1111) as u8;
+                                        inst.opcode = Opcode::STRH;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rt)),
+                                            // do the puw
+                                            if p {
+                                                Operand::RegDerefPreindexOffset(
+                                                    Reg::from_u8(rn),
+                                                    imm8,
+                                                    u, // add
+                                                    w, // wback
+                                                )
+                                            } else {
+                                                Operand::RegDerefPostindexOffset(
+                                                    Reg::from_u8(rn),
+                                                    imm8,
+                                                    u, // add
+                                                    w, // wback
+                                                )
+                                            },
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                }
+                                0b10 => {
+                                    // `STR_`
+                                    if op2 == 0 {
+                                        // `STR (register)` (`A8-677`)
+                                        // v6T2
+                                        let rm = (lower & 0b1111) as u8;
+                                        let imm2 = (lower >> 4) & 0b11;
+                                        let rt = ((lower >> 12) & 0b1111) as u8;
+                                        inst.opcode = Opcode::STR;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rt)),
+                                            Operand::RegDerefPreindexRegShift(
+                                                Reg::from_u8(rn),
+                                                RegShift::from_raw(
+                                                    // do things
+                                                    0b0000 |        // imm shift
+                                                    (imm2 << 7) |   // imm
+                                                    rm as u16 |            // shiftee
+                                                    (0b00 << 5) // shift style (lsl)
+                                                ),
+                                                true,   // add
+                                                false,  // wback
+                                            ),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    } else if (op2 & 0b111100) == 0b111000 {
+                                        // `STRT` (`A8-707`)
+                                        let imm8 = lower & 0b1111_1111;
+                                        let rt = ((lower >> 12) & 0b1111) as u8;
+                                        inst.opcode = Opcode::STRT;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rt)),
+                                            Operand::RegDerefPreindexOffset(
+                                                Reg::from_u8(rn),
+                                                imm8,
+                                                true,   // add
+                                                false,  // wback
+                                            ),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    } else {
+                                        // `STR (immediate, Thumb)` (`A8-673`)
+                                        // encoding T4
+                                        // v6T2
+                                        let imm8 = lower & 0b1111_1111;
+                                        let puw = (lower >> 8) & 0b111;
+                                        let p = puw & 0b100 != 0;
+                                        let u = puw & 0b010 != 0;
+                                        let w = puw & 0b001 != 0;
+                                        // assert!(puw != 0b110) // would be `strbt`
+                                        let rt = ((lower >> 12) & 0b1111) as u8;
+                                        inst.opcode = Opcode::STR;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rt)),
+                                            // do the puw
+                                            if p {
+                                                Operand::RegDerefPreindexOffset(
+                                                    Reg::from_u8(rn),
+                                                    imm8,
+                                                    u, // add
+                                                    w, // wback
+                                                )
+                                            } else {
+                                                Operand::RegDerefPostindexOffset(
+                                                    Reg::from_u8(rn),
+                                                    imm8,
+                                                    u, // add
+                                                    w, // wback
+                                                )
+                                            },
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                }
+                                0b11 => {
+                                    return Err(DecodeError::Undefined);
+                                }
+                                _ => {
+                                    unreachable!("impossible bit pattern");
+                                }
+                            }
+                        } else {
+                            // `Advanced SIMD element or structure load/store instructions`
+                            // (`A7-273`)
+                        }
+                    } else {
+                        // load {byte, halfword, word}
+                        let size_bits = (op2 >> 1) & 0b11;
+                        if size_bits == 0b00 {
+                            // `Load byte, memory hints` (`A6-239`)
+                        } else if size_bits == 0b01 {
+                            // `Load halfword, memory hints` (`A6-238`)
+                        } else if size_bits == 0b10 {
+                            // `Load word` (`A6-237`)
+                        } else {
+                            // `UNDEFINED`
+                            return Err(DecodeError::Undefined);
+                        }
+                    }
+                } else {
+                    if op2 & 0b0010000 == 0 {
+                        // `Data-processing (register)` (`A6-243`)
+                        let op1 = (instr >> 4) & 0b1111;
+                        let op2 = (lower >> 4) & 0b1111;
+                        let rn = (instr & 0b1111) as u8;
+                        if op1 < 0b1000 {
+                            // `LSL`, `LSR`, `ASR`, `ROR`, `SXTAH`, .... out of table `A6-24`
+                            if op2 < 0b1000 {
+                                // `LSL`, `LSR`, `ASR`, `ROR`
+                                // v6T2
+                                let op = [
+                                    Opcode::LSL,
+                                    Opcode::LSR,
+                                    Opcode::ASR,
+                                    Opcode::ROR,
+                                ][((op2 >> 1) & 0b11) as usize];
+                                let rd = ((lower >> 8) & 0b1111) as u8;
+                                let rm = (lower & 0b1111) as u8;
+                                inst.opcode = op;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Reg(Reg::from_u8(rm)),
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                // `SXTAH` and friends
+                                if op1 > 0b101 {
+                                    return Err(DecodeError::Undefined);
+                                }
+
+                                if rn == 0b1111 {
+                                    let op = [
+                                        Opcode::SXTH,
+                                        Opcode::UXTH,
+                                        Opcode::SXTB16,
+                                        Opcode::UXTB16,
+                                        Opcode::SXTB,
+                                        Opcode::UXTB,
+                                    ][(op1 & 0b111) as usize];
+
+                                    let rm = (lower & 0b1111) as u8;
+                                    let rotate = (lower >> 1) & 0b11000;
+                                    let rd = ((lower >> 8) & 0b1111) as u8;
+
+                                    inst.opcode = op;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        Operand::Reg(Reg::from_u8(rm)),
+                                        Operand::Imm32(rotate as u32),
+                                        Operand::Nothing,
+                                    ];
+                                } else {
+                                    let op = [
+                                        Opcode::SXTAH,
+                                        Opcode::UXTAH,
+                                        Opcode::SXTAB16,
+                                        Opcode::UXTAB16,
+                                        Opcode::SXTAH,
+                                        Opcode::UXTAB,
+                                    ][(op1 & 0b111) as usize];
+
+                                    let rm = (lower & 0b1111) as u8;
+                                    let rotate = (lower >> 1) & 0b11000;
+                                    let rd = ((lower >> 8) & 0b1111) as u8;
+
+                                    inst.opcode = op;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        Operand::Reg(Reg::from_u8(rn)),
+                                        Operand::Reg(Reg::from_u8(rm)),
+                                        Operand::Imm32(rotate as u32),
+                                    ];
+                                };
+                            }
+                        } else {
+                            if op2 < 0b0100 {
+                                // `Parallel addition and subtraction, signed`
+                            } else if op2 < 0b1000 {
+                                // `Parallel addition and subtraction, unsigned` (`A6-244`)
+                            } else if op2 < 0b1100 {
+                                // `Miscellaneous operations` (`A6-246`)
+                            } else {
+                                return Err(DecodeError::Undefined);
+                            }
+                        }
+                    } else {
+                        if op2 & 0b0001000 == 0 {
+                            // `Multiply, multiply accumulate, and absolute difference` (`A6-247`)
+                        } else {
+                            // `Long multiply, long multiply accumulate, and divide` (`A6-248`)
+                        }
+                    }
+                }
+            } else {
+                // `Coprocessor, Advanced SIMD, and Floating-point instructions` (`A6-249`)
+            }
+        }
+    } else {
+        // 16b instruction - `A6-221, 16-bit Thumb instruction encoding`
+        // `Table A6-1`
+        if opword < 0b01000 {
+            // `Shift (immediate), add, subtract, move, and compare` page `A6-222`
+            // v4T
+            let opcode = opword & 0b111;
+            // TODO: `S` iff outside `IT` block
+            inst.s = true;
+
+            match opcode {
+                0b000 => {
+                    // LSL (immediate)
+                    // footnote: when opcode is 0, bits 8:6 are 0, encoding is `MOV`. see `A8-487`.
+                    let rd = (instr & 0b111) as u8;
+                    let rm = ((instr >> 3) & 0b111) as u8;
+                    let imm5 = (instr >> 6) & 0b11111;
+                    inst.opcode = Opcode::LSL;
+                    inst.operands = [
+                        Operand::Reg(Reg::from_u8(rd)),
+                        Operand::Reg(Reg::from_u8(rm)),
+                        Operand::Imm12(imm5),
+                        Operand::Nothing,
+                    ];
+                }
+                0b001 => {
+                    /* LSR on page A8-473 */
+                    let rd = (instr & 0b111) as u8;
+                    let rm = ((instr >> 3) & 0b111) as u8;
+                    let imm5 = (instr >> 6) & 0b11111;
+                    let imm = if imm5 == 0 {
+                        0x20
+                    } else {
+                        imm5
+                    };
+                    inst.opcode = Opcode::LSR;
+                    inst.operands = [
+                        Operand::Reg(Reg::from_u8(rd)),
+                        Operand::Reg(Reg::from_u8(rm)),
+                        Operand::Imm12(imm),
+                        Operand::Nothing,
+                    ];
+                }
+                0b010 => {
+                    /* ASR on page A8-328 */
+                    let rd = (instr & 0b111) as u8;
+                    let rm = ((instr >> 3) & 0b111) as u8;
+                    let imm5 = (instr >> 6) & 0b11111;
+                    let imm = if imm5 == 0 {
+                        0x20
+                    } else {
+                        imm5
+                    };
+                    inst.opcode = Opcode::ASR;
+                    inst.operands = [
+                        Operand::Reg(Reg::from_u8(rd)),
+                        Operand::Reg(Reg::from_u8(rm)),
+                        Operand::Imm12(imm),
+                        Operand::Nothing,
+                    ];
+                }
+                0b011 => {
+                    /* ADD, SUB (register/immediate) */
+                    let oplower = (instr >> 9) & 0b11;
+                    let rd = (instr & 0b111) as u8;
+                    let rn = ((instr >> 3) & 0b111) as u8;
+                    let rm = ((instr >> 6) & 0b111) as u8;
+
+                    match oplower {
+                        0b00 => {
+                            inst.opcode = Opcode::ADD;
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Reg(Reg::from_u8(rn)),
+                                Operand::Reg(Reg::from_u8(rm)),
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b01 => {
+                            inst.opcode = Opcode::SUB;
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Reg(Reg::from_u8(rn)),
+                                Operand::Reg(Reg::from_u8(rm)),
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b10 => {
+                            inst.opcode = Opcode::ADD;
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Reg(Reg::from_u8(rn)),
+                                Operand::Imm32(rm as u32),
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b11 => {
+                            inst.opcode = Opcode::SUB;
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(rd)),
+                                Operand::Reg(Reg::from_u8(rn)),
+                                Operand::Imm32(rm as u32),
+                                Operand::Nothing,
+                            ];
+                        }
+                        _ => {
+                            unreachable!("impossible bit pattern");
+                        }
+                    }
+                }
+                0b100 => {
+                    /* MOV on page A8-485 */
+
+                    let imm8 = instr & 0b1111_1111;
+                    let rd = ((instr >> 8) & 0b111) as u8;
+                    inst.opcode = Opcode::MOV;
+                    inst.operands = [
+                        Operand::Reg(Reg::from_u8(rd)),
+                        Operand::Imm32(imm8 as u32),
+                        Operand::Nothing,
+                        Operand::Nothing,
+                    ];
+                }
+                0b101 => {
+                    /* CMP on page A8-368 */
+                    inst.s = false;
+                    let imm8 = instr & 0b1111_1111;
+                    let rd = ((instr >> 8) & 0b111) as u8;
+                    inst.opcode = Opcode::CMP;
+                    inst.operands = [
+                        Operand::Reg(Reg::from_u8(rd)),
+                        Operand::Imm32(imm8 as u32),
+                        Operand::Nothing,
+                        Operand::Nothing,
+                    ];
+                }
+                0b110 => {
+                    /* ADD (immediate, Thumb) on page A8-304 */
+                    let imm8 = instr & 0b1111_1111;
+                    let rdn = ((instr >> 8) & 0b111) as u8;
+                    inst.opcode = Opcode::ADD;
+                    inst.operands = [
+                        Operand::Reg(Reg::from_u8(rdn)),
+                        Operand::Imm32(imm8 as u32),
+                        Operand::Nothing,
+                        Operand::Nothing,
+                    ];
+                }
+                0b111 => {
+                    /* SUB (immediate, Thumb) on page A8-709 */
+                    let imm8 = instr & 0b1111_1111;
+                    let rdn = ((instr >> 8) & 0b111) as u8;
+                    inst.opcode = Opcode::SUB;
+                    inst.operands = [
+                        Operand::Reg(Reg::from_u8(rdn)),
+                        Operand::Imm32(imm8 as u32),
+                        Operand::Nothing,
+                        Operand::Nothing,
+                    ];
+                }
+                _ => {
+                    unreachable!("impossible bit pattern");
+                }
+            }
+        } else if opword < 0b01001 {
+            let opcode_bits = (instr >> 6) & 0b1111;
+            // `Data-processing` on page `A6-223` or `Special data instructions and branch and
+            // exchange` on page `A6-224`
+            if (instr >> 10) < 0b010001 {
+                // `Data-processing` on page `A6-223`
+                // v4T
+                // TODO: condition inside IT block, no S
+                inst.s = true;
+                let rdn = (instr & 0b111) as u8;
+                let rm = ((instr >> 3) & 0b111) as u8;
+                if opcode_bits == 0b1101 {
+                    inst.opcode = Opcode::MUL;
+                    inst.operands = [
+                        Operand::Reg(Reg::from_u8(rdn)),
+                        Operand::Reg(Reg::from_u8(rm)),
+                        Operand::Reg(Reg::from_u8(rdn)),
+                        Operand::Nothing,
+                    ];
+                } else if opcode_bits == 0b1001 {
+                    inst.opcode = Opcode::RSB;
+                    inst.operands = [
+                        Operand::Reg(Reg::from_u8(rdn)),
+                        Operand::Reg(Reg::from_u8(rm)),
+                        Operand::Imm12(0),
+                        Operand::Nothing,
+                    ];
+                } else {
+                    let opcode = [
+                        Opcode::AND,
+                        Opcode::EOR,
+                        Opcode::LSL,
+                        Opcode::LSR,
+                        Opcode::ASR,
+                        Opcode::ADC,
+                        Opcode::SBC,
+                        Opcode::ROR,
+                        Opcode::TST,
+                        Opcode::RSB,
+                        Opcode::CMP,
+                        Opcode::CMN,
+                        Opcode::ORR,
+                        Opcode::MUL,
+                        Opcode::BIC,
+                        Opcode::MVN,
+                    ][opcode_bits as usize];
+                    inst.opcode = opcode;
+                    if opcode_bits == 8 || opcode_bits == 10 || opcode_bits == 11 {
+                        inst.s = false;
+                    }
+                    inst.operands = [
+                        Operand::Reg(Reg::from_u8(rdn)),
+                        Operand::Reg(Reg::from_u8(rm)),
+                        Operand::Nothing,
+                        Operand::Nothing,
+                    ];
+                }
+            } else {
+                // `Special data instructions and branch and exchange` on page `A6-224`
+                match opcode_bits {
+                    0b0000 => {
+                        // `Add Low Registers` (`A8-308`)
+                        // v6T2, `UNPREDICTABLE` in earlier versions
+                        let rdn = ((instr & 0b111) | ((instr >> 4) & 0b1000)) as u8;
+                        let rm = ((instr >> 3) & 0b1111) as u8;
+                        inst.opcode = Opcode::ADD;
+                        inst.operands = [
+                            Operand::Reg(Reg::from_u8(rdn)),
+                            Operand::Reg(Reg::from_u8(rm)),
+                            Operand::Nothing,
+                            Operand::Nothing,
+                        ];
+                    },
+                    0b0001 |
+                    0b0010 |
+                    0b0011 => {
+                        // `Add High Registers` (`A8-308`)
+                        // v4T
+                        let rdn = ((instr & 0b111) | ((instr >> 4) & 0b1000)) as u8;
+                        let rm = ((instr >> 3) & 0b1111) as u8;
+                        inst.opcode = Opcode::ADD;
+                        inst.operands = [
+                            Operand::Reg(Reg::from_u8(rdn)),
+                            Operand::Reg(Reg::from_u8(rm)),
+                            Operand::Nothing,
+                            Operand::Nothing,
+                        ];
+                    },
+                    0b0100 |
+                    0b0101 |
+                    0b0110 |
+                    0b0111 => {
+                        // `Compare High Registers` (`A8-307`)
+                        // v4T
+                        let rn = ((instr & 0b111) | ((instr >> 4) & 0b1000)) as u8;
+                        let rm = ((instr >> 3) & 0b1111) as u8;
+                        inst.opcode = Opcode::CMP;
+                        inst.operands = [
+                            Operand::Reg(Reg::from_u8(rn)),
+                            Operand::Reg(Reg::from_u8(rm)),
+                            Operand::Nothing,
+                            Operand::Nothing,
+                        ];
+                    }
+                    0b1000 => {
+                        // `Move Low Registers` (`A8-487`)
+                        // v6, `UNPREDICTABLE` in earlier versions
+                        // (encoding T1)
+                        let rd = ((instr & 0b111) | ((instr >> 4) & 0b1000)) as u8;
+                        let rm = ((instr >> 3) & 0b1111) as u8;
+                        inst.opcode = Opcode::MOV;
+                        inst.operands = [
+                            Operand::Reg(Reg::from_u8(rd)),
+                            Operand::Reg(Reg::from_u8(rm)),
+                            Operand::Nothing,
+                            Operand::Nothing,
+                        ];
+                    }
+                    0b1001 |
+                    0b1010 |
+                    0b1011 => {
+                        // `Move High Registers` (`A8-487`)
+                        // v4T
+                        let rd = ((instr & 0b111) | ((instr >> 4) & 0b1000)) as u8;
+                        let rm = ((instr >> 3) & 0b1111) as u8;
+                        inst.opcode = Opcode::MOV;
+                        inst.operands = [
+                            Operand::Reg(Reg::from_u8(rd)),
+                            Operand::Reg(Reg::from_u8(rm)),
+                            Operand::Nothing,
+                            Operand::Nothing,
+                        ];
+                    },
+                    0b1100 |
+                    0b1101 => {
+                        // `Branch and Exchange` (`A8-350`)
+                        // v4T
+                        let rm = ((instr >> 3) & 0b1111) as u8;
+                        inst.opcode = Opcode::BX;
+                        inst.operands = [
+                            Operand::Reg(Reg::from_u8(rm)),
+                            Operand::Nothing,
+                            Operand::Nothing,
+                            Operand::Nothing,
+                        ];
+                    }
+                    0b1110 |
+                    0b1111 => {
+                        // `Branch and Link with Exchange` (`A8-348`)
+                        // v5T, `UNPREDICTABLE` in earlier versions
+                        let rm = ((instr >> 3) & 0b1111) as u8;
+                        inst.opcode = Opcode::BLX;
+                        inst.operands = [
+                            Operand::Reg(Reg::from_u8(rm)),
+                            Operand::Nothing,
+                            Operand::Nothing,
+                            Operand::Nothing,
+                        ];
+                    }
+                    _ => {
+                        unreachable!("bad bit pattern");
+                    }
+                }
+            }
+        } else if opword < 0b01010 {
+            // `LDR (literal)` on page `A8-411` -- v4T
+            let imm8 = instr & 0b1111_1111;
+            let rt = ((instr >> 8) & 0b111) as u8;
+            inst.opcode = Opcode::LDR;
+            inst.operands = [
+                Operand::Reg(Reg::from_u8(rt)),
+                Operand::RegDerefPreindexOffset(
+                    Reg::from_u8(0b1111),
+                    imm8 << 2,
+                    true,  // add
+                    false, // no wback
+                ),
+                Operand::Nothing,
+                Operand::Nothing,
+            ];
+        } else if opword < 0b10100 {
+            let op_b = (instr >> 9) & 0b111;
+            let op_a = instr >> 12;
+            // `Load/store single data item` on page `A6-225`
+            // v4T
+            let rt = (instr & 0b111) as u8;
+            let rn = ((instr >> 3) & 0b111) as u8;
+            let rm = ((instr >> 6) & 0b111) as u8;
+            let imm5 = (instr >> 6) & 0b11111;
+            if op_a == 0b0101 {
+                let op = [
+                    Opcode::STR,
+                    Opcode::STRH,
+                    Opcode::STRB,
+                    Opcode::LDRSB,
+                    Opcode::LDR,
+                    Opcode::LDRH,
+                    Opcode::LDRB,
+                    Opcode::LDRSH,
+                ][op_b as usize];
+                inst.opcode = op;
+                inst.operands = [
+                    Operand::Reg(Reg::from_u8(rt)),
+                    Operand::RegDerefPreindexReg(
+                        Reg::from_u8(rn),
+                        Reg::from_u8(rm),
+                        true,   // add
+                        false,  // wback
+                    ),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else {
+                // opword is 0b0110, 0b0111, 0b1000, or 0b1001. opb bit 2 can be used to form a
+                // three-bit index and select an opcode. operands are shared. except the last two.
+                // those are sp-relative.
+                let upper = op_a - 0b0110;
+                let idx = (upper << 1) | (op_b >> 2);
+                let op = [
+                    Opcode::STR,
+                    Opcode::LDR,
+                    Opcode::STRB,
+                    Opcode::LDRB,
+                    Opcode::STRH,
+                    Opcode::LDRH,
+                    Opcode::STR,
+                    Opcode::LDR,
+                ][idx as usize];
+                inst.opcode = op;
+                if idx < 6 {
+                    let shift = match idx >> 1 {
+                        0b00 => 2,
+                        0b01 => 0,
+                        0b10 => 1,
+                        _ => { unreachable!("impossible bit pattern"); }
+                    };
+                    inst.operands = [
+                        Operand::Reg(Reg::from_u8(rt)),
+                        Operand::RegDerefPreindexOffset(
+                            Reg::from_u8(rn),
+                            imm5 << shift,
+                            true,   // add
+                            false,  // wback
+                        ),
+                        Operand::Nothing,
+                        Operand::Nothing,
+                    ];
+                } else {
+                    let rt = ((instr >> 8) & 0b111) as u8;
+                    let imm8 = instr & 0b1111_1111;
+                    inst.operands = [
+                        Operand::Reg(Reg::from_u8(rt)),
+                        Operand::RegDerefPreindexOffset(
+                            Reg::from_u8(13), // sp
+                            imm8 << 2,
+                            true,   // add
+                            false,  // wback
+                        ),
+                        Operand::Nothing,
+                        Operand::Nothing,
+                    ];
+                }
+            }
+        } else if opword < 0b10101 {
+            // `ADR` on page `A8-320` -- v4T
+            let rd = ((instr >> 8) & 0b111) as u8;
+            let imm8 = instr & 0b1111_1111;
+            inst.opcode = Opcode::ADR;
+            inst.operands = [
+                Operand::Reg(Reg::from_u8(rd)),
+                Operand::Imm32(imm8 as u32 * 4),
+                Operand::Nothing,
+                Operand::Nothing,
+            ];
+        } else if opword < 0b10110 {
+            // `ADD (SP plus immediate)` on `A8-314` -- v4T
+            let rd = ((instr >> 8) & 0b111) as u8;
+            let imm8 = instr & 0b1111_1111;
+            inst.opcode = Opcode::ADD;
+            inst.operands = [
+                Operand::Reg(Reg::from_u8(rd)),
+                Operand::Reg(Reg::from_u8(13)), // sp
+                Operand::Imm32(imm8 as u32 * 4),
+                Operand::Nothing,
+            ];
+        } else if opword < 0b11000 {
+            // `Miscellaneous 16-bit instructions` on page `A6-226`
+            let opcode_bits = (instr >> 5) & 0b1111111;
+            if opcode_bits < 0b0000100 {
+                // `Add Immediate to SP` (`A8-314`)
+                // v4T
+                // encoding T2
+                let imm7 = instr & 0b111_1111;
+                inst.s = false;
+                inst.opcode = Opcode::ADD;
+                inst.operands = [
+                    Operand::Reg(Reg::from_u8(13)),
+                    Operand::Reg(Reg::from_u8(13)),
+                    Operand::Imm32((imm7 << 2) as u32),
+                    Operand::Nothing,
+                ];
+            } else if opcode_bits < 0b0001000 {
+                // `Subtract Immediate to SP` (`A8-717`)
+                // v4T
+                let imm7 = instr & 0b111_1111;
+                inst.s = false;
+                inst.opcode = Opcode::SUB;
+                inst.operands = [
+                    Operand::Reg(Reg::from_u8(13)),
+                    Operand::Reg(Reg::from_u8(13)),
+                    Operand::Imm32((imm7 << 2) as u32),
+                    Operand::Nothing,
+                ];
+            } else if opcode_bits < 0b0010000 {
+                // `Compare and Branch on Zero` (`A8-354`)
+                // v6T2
+                let op = (instr >> 11) & 1 != 0;
+                let rn = (instr & 0b111) as u8;
+                let imm5 = (instr >> 3) & 0b11111;
+                let imm = (((instr >> 9) & 1) << 5) | imm5;
+                inst.opcode = if op {
+                    Opcode::CBNZ
+                } else {
+                    Opcode::CBZ
+                };
+                inst.operands = [
+                    Operand::Reg(Reg::from_u8(rn)),
+                    Operand::BranchThumbOffset(imm as i32 + 1),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else if opcode_bits < 0b0010010 {
+                // `Signed Extend Halfword` (`A8-735`)
+                // v6
+                let rd = (instr & 0b111) as u8;
+                let rm = ((instr >> 3) & 0b111) as u8;
+                inst.opcode = Opcode::SXTH;
+                inst.operands = [
+                    Operand::Reg(Reg::from_u8(rd)),
+                    Operand::Reg(Reg::from_u8(rm)),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else if opcode_bits < 0b0010100 {
+                // `Signed Extend Byte` (`A8-731`)
+                // v6
+                let rd = (instr & 0b111) as u8;
+                let rm = ((instr >> 3) & 0b111) as u8;
+                inst.opcode = Opcode::SXTB;
+                inst.operands = [
+                    Operand::Reg(Reg::from_u8(rd)),
+                    Operand::Reg(Reg::from_u8(rm)),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else if opcode_bits < 0b0010110 {
+                // `Unsigned Extend Halfword` (`A8-817`)
+                // v6
+                let rd = (instr & 0b111) as u8;
+                let rm = ((instr >> 3) & 0b111) as u8;
+                inst.opcode = Opcode::UXTH;
+                inst.operands = [
+                    Operand::Reg(Reg::from_u8(rd)),
+                    Operand::Reg(Reg::from_u8(rm)),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else if opcode_bits < 0b0011000 {
+                // `Unsigned Extend Byte` (`A8-813`)
+                // v6
+                let rd = (instr & 0b111) as u8;
+                let rm = ((instr >> 3) & 0b111) as u8;
+                inst.opcode = Opcode::UXTB;
+                inst.operands = [
+                    Operand::Reg(Reg::from_u8(rd)),
+                    Operand::Reg(Reg::from_u8(rm)),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else if opcode_bits < 0b0100000 {
+                // `Compare and Branch on Zero` (`A8-354`)
+                // v6T2
+                let op = (instr >> 11) & 1 != 0;
+                let rn = (instr & 0b111) as u8;
+                let imm5 = (instr >> 3) & 0b11111;
+                let imm = (((instr >> 9) & 1) << 5) | imm5;
+                inst.opcode = if op {
+                    Opcode::CBNZ
+                } else {
+                    Opcode::CBZ
+                };
+                inst.operands = [
+                    Operand::Reg(Reg::from_u8(rn)),
+                    Operand::BranchThumbOffset(imm as i32 + 1),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else if opcode_bits < 0b0110000 {
+                // `Push multiple registers` (`A8-539`)
+                // v4T
+                let m = (instr >> 8) & 1;
+                let reglist = (instr & 0b1111_1111) | (m << (6 + 8));
+                inst.opcode = Opcode::PUSH;
+                inst.operands = [
+                    Operand::RegList(reglist),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else if opcode_bits < 0b0110010 {
+                // undefined encoding between `PUSH` and `SETEND`
+                return Err(DecodeError::Undefined);
+            } else if opcode_bits < 0b0110011 {
+                // opword == 0b0110010
+                // `Set Endianness` (`A8-605`)
+                // v6
+                let e = (instr >> 3) & 1;
+                inst.opcode = Opcode::SETEND;
+                inst.operands = [
+                    Operand::Imm12(e),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else if opcode_bits < 0b0110100 {
+                // opword == 0b0110011
+                // `Change Processor State` (`B9-1964`)
+                // v6
+                let aif = instr & 0b111;
+                let im = (instr >> 4) & 1;
+                inst.opcode = Opcode::CPS(im != 0);
+                inst.operands = [
+                    Operand::Imm12(aif),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else if opcode_bits < 0b1001000 {
+                // undefined encoding between `CPS` and `CBNZ/CBZ`
+                return Err(DecodeError::Undefined);
+            } else if opcode_bits < 0b1010000 {
+                // `Compare and Branch on Nonzero` (`A8-354`)
+                // v6T2
+                let op = (instr >> 11) & 1 != 0;
+                let rn = (instr & 0b111) as u8;
+                let imm5 = (instr >> 3) & 0b11111;
+                let imm = (((instr >> 9) & 1) << 5) | imm5;
+                inst.opcode = if op {
+                    Opcode::CBNZ
+                } else {
+                    Opcode::CBZ
+                };
+                inst.operands = [
+                    Operand::Reg(Reg::from_u8(rn)),
+                    Operand::BranchThumbOffset(imm as i32 + 1),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else if opcode_bits < 0b1010010 {
+                // `Byte-Reverse Word` (`A8-563`)
+                // v6
+                let rd = (instr & 0b111) as u8;
+                let rm = ((instr >> 3) & 0b111) as u8;
+                inst.opcode = Opcode::REV;
+                inst.operands = [
+                    Operand::Reg(Reg::from_u8(rd)),
+                    Operand::Reg(Reg::from_u8(rm)),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else if opcode_bits < 0b1010100 {
+                // `Byte-Reverse Packed Halfword` (`A8-565`)
+                // v6
+                let rd = (instr & 0b111) as u8;
+                let rm = ((instr >> 3) & 0b111) as u8;
+                inst.opcode = Opcode::REV16;
+                inst.operands = [
+                    Operand::Reg(Reg::from_u8(rd)),
+                    Operand::Reg(Reg::from_u8(rm)),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else if opcode_bits < 0b1010110 {
+                // undefined encoding where `Byte-Reverse Signed Word` might go
+                return Err(DecodeError::Undefined);
+            } else if opcode_bits < 0b1011000 {
+                // `Byte-Reverse Signed Halfword` (`A8-567`)
+                // v6
+                let rd = (instr & 0b111) as u8;
+                let rm = ((instr >> 3) & 0b111) as u8;
+                inst.opcode = Opcode::REVSH;
+                inst.operands = [
+                    Operand::Reg(Reg::from_u8(rd)),
+                    Operand::Reg(Reg::from_u8(rm)),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else if opcode_bits < 0b1100000 {
+                // `Compare and Branch on Nonzero` (`A8-354`)
+                // v6T2
+                let op = (instr >> 11) & 1 != 0;
+                let rn = (instr & 0b111) as u8;
+                let imm5 = (instr >> 3) & 0b11111;
+                let imm = (((instr >> 9) & 1) << 5) | imm5;
+                inst.opcode = if op {
+                    Opcode::CBNZ
+                } else {
+                    Opcode::CBZ
+                };
+                inst.operands = [
+                    Operand::Reg(Reg::from_u8(rn)),
+                    Operand::BranchThumbOffset(imm as i32 + 1),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else if opcode_bits < 0b1110000 {
+                // `Pop Multiple Registers` (`A8-535`)
+                // v4T
+                let p = (instr >> 8) & 1;
+                let reglist = (instr & 0b1111_1111) | (p << (7 + 8));
+                inst.opcode = Opcode::POP;
+                inst.operands = [
+                    Operand::RegList(reglist),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else if opcode_bits < 0b1111000 {
+                // `Breakpoint` (`A8-344`)
+                // v5
+                let imm8 = instr & 0b1111_1111;
+                inst.opcode = Opcode::BKPT;
+                inst.operands = [
+                    Operand::Imm32(imm8 as u32),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else {
+                // `If-Then, and hints` (`A6-227`)
+                let opb = instr & 0b1111;
+                let opa = (instr >> 4) & 0b1111;
+
+                if opb != 0 {
+                    // `IT` (`A8-391`)
+                    // v6T2
+                    let firstcond = opa;
+                    let mask = opb;
+                    inst.opcode = Opcode::IT;
+                    if firstcond == 0b1111 {
+                        return Err(DecodeError::InvalidOperand);
+                    }
+                    inst.operands = [
+                        Operand::Imm32(firstcond as u32),
+                        Operand::Imm32(mask as u32),
+                        Operand::Nothing,
+                        Operand::Nothing,
+                    ];
+                } else {
+                    match opa {
+                        0b0000 => {
+                            // `NOP` (`A8-511`)
+                            // v6T2
+                            inst.opcode = Opcode::NOP;
+                            inst.operands = [
+                                Operand::Nothing,
+                                Operand::Nothing,
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b0001 => {
+                            // `YIELD` (`A8-1109`)
+                            // v7
+                            inst.opcode = Opcode::YIELD;
+                            inst.operands = [
+                                Operand::Nothing,
+                                Operand::Nothing,
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b0010 => {
+                            // `WFE` (`A8-1105`)
+                            // v7
+                            inst.opcode = Opcode::WFE;
+                            inst.operands = [
+                                Operand::Nothing,
+                                Operand::Nothing,
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b0011 => {
+                            // `WFI` (`A8-1107`)
+                            // v7
+                            inst.opcode = Opcode::WFI;
+                            inst.operands = [
+                                Operand::Nothing,
+                                Operand::Nothing,
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+                        }
+                        0b0100 => {
+                            // `SEV` (`A8-607`)
+                            // v7
+                            inst.opcode = Opcode::SEV;
+                            inst.operands = [
+                                Operand::Nothing,
+                                Operand::Nothing,
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+                        }
+                        hint => {
+                            // `Other encodings in this space are unallocated hints. They execute
+                            // as NOPs, but software must not use them.`
+                            inst.opcode = Opcode::HINT;
+                            inst.operands = [
+                                Operand::Imm12(hint),
+                                Operand::Nothing,
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+                        }
+                    }
+                }
+            }
+        } else if opword < 0b11001 {
+            // `STM (STMIA, STMEA)` on page `A8-665` -- v4T
+            let rn = ((instr >> 8) & 0b111) as u8;
+            let reglist = instr & 0b1111_1111;
+            inst.opcode = Opcode::STM(true, true, false, true); // stmia, no wback, yes usermode
+            inst.operands = [
+                Operand::RegWBack(Reg::from_u8(rn), true), // always wback
+                Operand::RegList(reglist as u16),
+                Operand::Nothing,
+                Operand::Nothing,
+            ];
+        } else if opword < 0b11010 {
+            // `LDM/LDMIA/LDMFD (Thumb)` on page `A8-397` -- v4T
+            let rn = ((instr >> 8) & 0b111) as u8;
+            let reglist = instr & 0b1111_1111;
+            let w = (reglist & (1 << rn)) == 0;
+            inst.opcode = Opcode::LDM(true, true, false, true); // ldmia, no wback, yes usermode
+            inst.operands = [
+                Operand::RegWBack(Reg::from_u8(rn), w),
+                Operand::RegList(reglist as u16),
+                Operand::Nothing,
+                Operand::Nothing,
+            ];
+        } else if opword < 0b11100 {
+            // `Conditional branch, and Supervisor Call` on page `A6-227`
+            let opcode = (instr >> 8) & 0b1111;
+            if opcode < 0b1110 {
+                // `B` (`A8-332`)
+                // v4T
+                inst.opcode = Opcode::B;
+                let imm = instr & 0b1111_1111;
+                let imm = imm as i8 as i32;
+                let cond = (instr >> 8) & 0b1111;
+                inst.condition = ConditionCode::build(cond as u8);
+                inst.operands = [
+                    Operand::BranchThumbOffset(imm + 1),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else if opcode < 0b1111 {
+                // `UDF` (`A8-759`)
+                // v4T
+                // first described in revision `C.a`
+                inst.opcode = Opcode::UDF;
+                inst.operands = [
+                    Operand::Imm32((instr & 0xff) as u32),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            } else {
+                // `SVC` (`A8-721`)
+                // v4T
+                inst.opcode = Opcode::SVC;
+                inst.operands = [
+                    Operand::Imm32((instr & 0xff) as u32),
+                    Operand::Nothing,
+                    Operand::Nothing,
+                    Operand::Nothing,
+                ];
+            }
+        } else {
+            // `B` on page `A8-332` -- v4T
+            inst.opcode = Opcode::B;
+            let imm = instr & 0b111_1111_1111;
+            let imm = ((imm as i32) << 21) >> 20;
+            inst.operands = [
+                Operand::Imm32(imm as u32),
+                Operand::Nothing,
+                Operand::Nothing,
+                Operand::Nothing,
+            ];
+        }
+    }
+    Ok(())
+}

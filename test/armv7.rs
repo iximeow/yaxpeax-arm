@@ -1,6 +1,8 @@
 use yaxpeax_arch::{Arch, Decoder, LengthedInstruction};
 use yaxpeax_arm::armv7::{ARMv7, Instruction, ConditionCode, DecodeError, Operand, Opcode, Reg, RegShift};
 
+mod thumb;
+
 type InstDecoder = <ARMv7 as Arch>::Decoder;
 
 fn test_invalid_under(decoder: &InstDecoder, data: [u8; 4]) {
@@ -351,9 +353,9 @@ fn test_decode_pop() {
         [0xf0, 0x40, 0x2d, 0xe9],
         Instruction {
             condition: ConditionCode::AL,
-            opcode: Opcode::STM(false, true, true, false),
+            opcode: Opcode::STM(false, true, false, false),
             operands: [
-                Operand::Reg(Reg::from_u8(13)),
+                Operand::RegWBack(Reg::from_u8(13), true),
                 Operand::RegList(16624),
                 Operand::Nothing,
                 Operand::Nothing,
@@ -369,9 +371,9 @@ fn test_decode_pop() {
         [0xf0, 0x80, 0xbd, 0x18],
         Instruction {
             condition: ConditionCode::NE,
-            opcode: Opcode::LDM(true, false, true, false),
+            opcode: Opcode::LDM(true, false, false, false),
             operands: [
-                Operand::Reg(Reg::from_u8(13)),
+                Operand::RegWBack(Reg::from_u8(13), true),
                 Operand::RegList(33008),
                 Operand::Nothing,
                 Operand::Nothing,

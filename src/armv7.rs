@@ -9,6 +9,8 @@ use std::fmt::{self, Display, Formatter};
 
 use yaxpeax_arch::{Arch, AddressDiff, Colorize, Decoder, LengthedInstruction, NoColors, ShowContextual, YaxColors};
 
+mod thumb;
+
 pub struct ConditionedOpcode(pub Opcode, pub bool, pub ConditionCode);
 
 impl Display for ConditionedOpcode {
@@ -45,6 +47,71 @@ fn reg_name_colorize<C: fmt::Display, Y: YaxColors<C>>(reg: Reg, colors: &Y) -> 
 impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u32, NoContext, Color, T, Y> for Instruction {
     fn contextualize(&self, colors: &Y, _address: u32, _context: Option<&NoContext>, out: &mut T) -> fmt::Result {
         match self.opcode {
+            Opcode::IT => {
+                if let (Operand::Imm32(cond), Operand::Imm32(mask)) = (&self.operands[0], &self.operands[1]) {
+                    let inv = cond & 1 == 1;
+                    let condition = ConditionCode::build(*cond as u8);
+                    if mask & 0b0001 != 0 {
+                        // three flags
+                        write!(
+                            out,
+                            "it{}{}{} {}",
+                            if inv ^ ((mask & 0b1000) != 0) { "e" } else { "t" },
+                            if inv ^ ((mask & 0b0100) != 0) { "e" } else { "t" },
+                            if inv ^ ((mask & 0b0010) != 0) { "e" } else { "t" },
+                            condition,
+                        )?;
+                    } else if mask & 0b0010 != 0 {
+                        // two flags
+                        write!(
+                            out,
+                            "it{}{} {}",
+                            if inv ^ ((mask & 0b1000) != 0) { "e" } else { "t" },
+                            if inv ^ ((mask & 0b0100) != 0) { "e" } else { "t" },
+                            condition,
+                        )?;
+                    } else if mask & 0b0100 != 0 {
+                        // one flag
+                        write!(
+                            out,
+                            "it{} {}",
+                            if inv ^ ((mask & 0b1000) != 0) { "e" } else { "t" },
+                            condition,
+                        )?;
+                    } else {
+                        // no flags
+                        write!(out, "it {}", condition)?;
+                    }
+                    // if the condition is AL, it won't get displayed. append it here.
+                    if *cond == 14 {
+                        write!(out, "al")?;
+                    }
+                    return Ok(());
+                } else {
+                    panic!("impossible it operand");
+                }
+            }
+            Opcode::CPS(_) => {
+                if let Operand::Imm12(aif) = &self.operands[0] {
+                    return write!(
+                        out,
+                        "{} {}{}{}",
+                        &self.opcode,
+                        if aif & 0b100 != 0 { "a" } else { "" },
+                        if aif & 0b010 != 0 { "i" } else { "" },
+                        if aif & 0b001 != 0 { "f" } else { "" },
+                    );
+                } else {
+                    panic!("impossible cps operand");
+                }
+            }
+            Opcode::SETEND => {
+                if let Operand::Imm12(i) = &self.operands[0] {
+                    return write!(out, "setend {}", if *i == 0 { "le" } else { "be" });
+                } else {
+                    panic!("impossible setend operand");
+                }
+            }
             Opcode::LDR => {
                 match self.operands {
                     // TODO: should this be PostindexOffset?
@@ -264,7 +331,13 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
     fn colorize(&self, colors: &Y, out: &mut T) -> fmt::Result {
         match self.0 {
             Opcode::Incomplete(_) |
+            Opcode::UDF |
             Opcode::Invalid => { write!(out, "{}", colors.invalid_op(self)) },
+            Opcode::TBB |
+            Opcode::TBH |
+            Opcode::CBZ |
+            Opcode::CBNZ |
+            Opcode::IT |
             Opcode::B |
             Opcode::BL |
             Opcode::BLX |
@@ -274,6 +347,7 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
             Opcode::AND |
             Opcode::EOR |
             Opcode::ORR |
+            Opcode::ORN |
             Opcode::LSL |
             Opcode::LSR |
             Opcode::ROR |
@@ -356,16 +430,58 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
             Opcode::SWPB |
             Opcode::MSR |
             Opcode::MRS |
+            Opcode::CLREX |
+            Opcode::SXTAB |
+            Opcode::SXTAB16 |
+            Opcode::SXTAH |
+            Opcode::SXTB |
+            Opcode::SXTB16 |
+            Opcode::SXTH |
+            Opcode::UXTAB |
+            Opcode::UXTAB16 |
+            Opcode::UXTAH |
+            Opcode::UXTB |
+            Opcode::UXTB16 |
+            Opcode::UXTH |
+            Opcode::PKHTB |
+            Opcode::PKHBT |
+            Opcode::REV |
+            Opcode::REV16 |
+            Opcode::REVSH |
+            Opcode::SSAT |
+            Opcode::SSAT16 |
+            Opcode::SBFX |
+            Opcode::USAT |
+            Opcode::USAT16 |
+            Opcode::UBFX |
+            Opcode::BFI |
+            Opcode::BFC |
             Opcode::MOV |
             Opcode::MOVT |
             Opcode::MVN => { write!(out, "{}", colors.data_op(self)) },
 
+            Opcode::HINT |
+            Opcode::NOP |
+            Opcode::ISB |
+            Opcode::DMB |
+            Opcode::DSB |
+            Opcode::CSDB |
             Opcode::SRS(_, _) |
             Opcode::BKPT => { write!(out, "{}", colors.misc_op(self)) },
 
+            Opcode::DBG |
+            Opcode::CPS(_) |
+            Opcode::SETEND |
+            Opcode::ENTERX |
+            Opcode::LEAVEX |
+            Opcode::YIELD |
+            Opcode::WFE |
+            Opcode::WFI |
+            Opcode::SEV |
             Opcode::ERET |
             Opcode::RFE(_, _) |
             Opcode::HVC |
+            Opcode::SVC |
             Opcode::SMC |
             Opcode::LDC2(_) |
             Opcode::LDC2L(_) |
@@ -453,10 +569,12 @@ impl Display for Opcode {
             Opcode::STREX => { write!(f, "strex") },
             Opcode::LDM(false, false, _, _) => { write!(f, "ldmda") },
             Opcode::LDM(false, true, _, _) => { write!(f, "ldmdb") },
+            // TODO: seems like these are backwards
             Opcode::LDM(true, false, _, _) => { write!(f, "ldm") },
             Opcode::LDM(true, true, _, _) => { write!(f, "ldmia") },
             Opcode::STM(false, false, _, _) => { write!(f, "stmda") },
             Opcode::STM(false, true, _, _) => { write!(f, "stmdb") },
+            // TODO: seems like these are backwards
             Opcode::STM(true, false, _, _) => { write!(f, "stm") },
             Opcode::STM(true, true, _, _) => { write!(f, "stmia") },
             Opcode::LDR => { write!(f, "ldr") },
@@ -496,6 +614,55 @@ impl Display for Opcode {
             Opcode::SMLAW(second) => {
                 write!(f, "smlaw{}", if *second { "t" } else { "b" })
             },
+            Opcode::TBB => { write!(f, "tbb") },
+            Opcode::TBH => { write!(f, "tbh") },
+            Opcode::UDF => { write!(f, "udf") },
+            Opcode::SVC => { write!(f, "svc") },
+            Opcode::WFE => { write!(f, "wfe") },
+            Opcode::WFI => { write!(f, "wfi") },
+            Opcode::SEV => { write!(f, "sev") },
+            Opcode::CSDB => { write!(f, "csdb") },
+            Opcode::YIELD => { write!(f, "yield") },
+            Opcode::HINT => { write!(f, "hint") },
+            Opcode::NOP => { write!(f, "nop") },
+            Opcode::LEAVEX => { write!(f, "leavex") },
+            Opcode::ENTERX => { write!(f, "enterx") },
+            Opcode::CLREX => { write!(f, "clrex") },
+            Opcode::DSB => { write!(f, "dsb") },
+            Opcode::DMB => { write!(f, "dmb") },
+            Opcode::ISB => { write!(f, "isb") },
+            Opcode::SXTH => { write!(f, "sxth") },
+            Opcode::UXTH => { write!(f, "uxth") },
+            Opcode::SXTB16 => { write!(f, "sxtb16") },
+            Opcode::UXTB16 => { write!(f, "uxtb16") },
+            Opcode::SXTB => { write!(f, "sxtb") },
+            Opcode::UXTB => { write!(f, "uxtb") },
+            Opcode::SXTAH => { write!(f, "sxtah") },
+            Opcode::UXTAH => { write!(f, "uxtah") },
+            Opcode::SXTAB16 => { write!(f, "sxtab16") },
+            Opcode::UXTAB16 => { write!(f, "uxtab16") },
+            Opcode::SXTAB => { write!(f, "sxtab") },
+            Opcode::UXTAB => { write!(f, "uxtab") },
+            Opcode::CBZ => { write!(f, "cbz") },
+            Opcode::CBNZ => { write!(f, "cbnz") },
+            Opcode::SETEND => { write!(f, "setend") },
+            Opcode::CPS(disable) => { write!(f, "cps{}", if *disable { "id" } else { "ie" }) },
+            Opcode::REV => { write!(f, "rev") },
+            Opcode::REV16 => { write!(f, "rev16") },
+            Opcode::REVSH => { write!(f, "revsh") },
+            Opcode::IT => { write!(f, "it") },
+            Opcode::PKHTB => { write!(f, "pkhtb") },
+            Opcode::PKHBT => { write!(f, "pkhbt") },
+            Opcode::ORN => { write!(f, "orn") },
+            Opcode::SSAT => { write!(f, "ssat") },
+            Opcode::SSAT16 => { write!(f, "ssat16") },
+            Opcode::SBFX => { write!(f, "sbfx") },
+            Opcode::USAT => { write!(f, "usat") },
+            Opcode::USAT16 => { write!(f, "usat16") },
+            Opcode::UBFX => { write!(f, "ubfx") },
+            Opcode::BFI => { write!(f, "bfi") },
+            Opcode::BFC => { write!(f, "bfc") },
+            Opcode::DBG => { write!(f, "dbg") },
         }
     }
 }
@@ -606,6 +773,57 @@ pub enum Opcode {
     QDADD,
     QSUB,
     QADD,
+
+    TBB,
+    TBH,
+    UDF,
+    SVC,
+    WFE,
+    WFI,
+    SEV,
+    CSDB,
+    YIELD,
+    HINT,
+    NOP,
+    LEAVEX,
+    ENTERX,
+    CLREX,
+    DSB,
+    DMB,
+    ISB,
+    SXTH,
+    UXTH,
+    SXTB16,
+    UXTB16,
+    SXTB,
+    UXTB,
+    SXTAH,
+    UXTAH,
+    SXTAB16,
+    UXTAB16,
+    SXTAB,
+    UXTAB,
+    CBZ,
+    CBNZ,
+    SETEND,
+    CPS(bool),
+    REV,
+    REV16,
+    REVSH,
+    IT,
+
+    PKHTB,
+    PKHBT,
+    ORN,
+    SSAT,
+    SSAT16,
+    SBFX,
+    USAT,
+    USAT16,
+    UBFX,
+    BFI,
+    BFC,
+    DBG,
 }
 
 static DATA_PROCESSING_OPCODES: [Opcode; 16] = [
@@ -635,6 +853,7 @@ pub struct RegShift {
 
 impl RegShift {
     fn into_shift(&self) -> RegShiftStyle {
+        // TODO: is this mask really off by one. should it be 0b10000??
         if self.data & 0b1000 == 0 {
             RegShiftStyle::RegImm(RegImmShift { data: self.data })
         } else {
@@ -1416,6 +1635,7 @@ pub struct InstDecoder {
     mode: DecodeMode,
     version: ARMVersion,
     should_is_must: bool,
+    thumb: bool,
 }
 
 impl Default for InstDecoder {
@@ -1424,16 +1644,31 @@ impl Default for InstDecoder {
             mode: DecodeMode::Any,
             version: ARMVersion::Any,
             should_is_must: true,
+            thumb: false,
         }
     }
 }
 
 impl InstDecoder {
+    pub fn set_thumb_mode(&mut self, thumb: bool) {
+        self.thumb = thumb;
+    }
+
+    pub fn with_thumb_mode(mut self, thumb: bool) -> Self {
+        self.set_thumb_mode(thumb);
+        self
+    }
+
+    pub fn default_thumb() -> Self {
+        Self::default().with_thumb_mode(true)
+    }
+
     pub fn armv4() -> Self {
         Self {
             mode: DecodeMode::Any,
             version: ARMVersion::v4,
             should_is_must: true,
+            thumb: false,
         }
     }
 
@@ -1442,6 +1677,7 @@ impl InstDecoder {
             mode: DecodeMode::Any,
             version: ARMVersion::v5,
             should_is_must: true,
+            thumb: false,
         }
     }
 
@@ -1450,6 +1686,7 @@ impl InstDecoder {
             mode: DecodeMode::Any,
             version: ARMVersion::v6,
             should_is_must: true,
+            thumb: false,
         }
     }
 
@@ -1458,6 +1695,16 @@ impl InstDecoder {
             mode: DecodeMode::Any,
             version: ARMVersion::v6t2,
             should_is_must: true,
+            thumb: false,
+        }
+    }
+
+    pub fn armv6t2_thumb() -> Self {
+        Self {
+            mode: DecodeMode::Any,
+            version: ARMVersion::v6t2,
+            should_is_must: true,
+            thumb: true,
         }
     }
 
@@ -1466,6 +1713,16 @@ impl InstDecoder {
             mode: DecodeMode::Any,
             version: ARMVersion::v7,
             should_is_must: true,
+            thumb: false,
+        }
+    }
+
+    pub fn armv7_thumb() -> Self {
+        Self {
+            mode: DecodeMode::Any,
+            version: ARMVersion::v7,
+            should_is_must: true,
+            thumb: true,
         }
     }
 
@@ -1474,6 +1731,16 @@ impl InstDecoder {
             mode: DecodeMode::Any,
             version: ARMVersion::v7ve,
             should_is_must: true,
+            thumb: false,
+        }
+    }
+
+    pub fn armv7ve_thumb() -> Self {
+        Self {
+            mode: DecodeMode::Any,
+            version: ARMVersion::v7ve,
+            should_is_must: true,
+            thumb: true,
         }
     }
 
@@ -1482,6 +1749,7 @@ impl InstDecoder {
             mode: DecodeMode::Any,
             version: ARMVersion::v7vese,
             should_is_must: true,
+            thumb: false,
         }
     }
 }
@@ -1491,6 +1759,10 @@ impl Decoder<Instruction> for InstDecoder {
     type Error = DecodeError;
 
     fn decode_into<T: IntoIterator<Item=u8>>(&self, inst: &mut Instruction, bytes: T) -> Result<(), Self::Error> {
+        if self.thumb {
+            return thumb::decode_into(&self, inst, bytes);
+        }
+
         fn read_word<T: IntoIterator<Item=u8>>(bytes: T) -> Result<u32, DecodeError> {
             let mut iter = bytes.into_iter();
             let instr: u32 =
