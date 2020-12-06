@@ -2876,10 +2876,84 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                             let op2 = op2.load::<u8>();
                             if op2 < 0b0100 {
                                 // `Parallel addition and subtraction, signed`
-                                return Err(DecodeError::Incomplete);
+                                let op1 = instr2[4..7].load::<usize>();
+                                let op2 = lower2[4..6].load::<usize>();
+                                if op1 == 0 || op1 > 0b100 || op2 == 0b11 {
+                                    return Err(DecodeError::InvalidOpcode);
+                                }
+
+                                let opcode_idx = (op1 - 1) * 3 + op2;
+
+                                let rn = instr2[0..4].load::<u8>();
+                                let rd = lower2[8..12].load::<u8>();
+                                let rm = lower2[0..4].load::<u8>();
+
+                                inst.opcode = [
+                                    Opcode::SADD16,
+                                    Opcode::QADD16,
+                                    Opcode::SHADD16,
+                                    Opcode::SASX,
+                                    Opcode::QASX,
+                                    Opcode::SHASX,
+                                    Opcode::SSAX,
+                                    Opcode::QSAX,
+                                    Opcode::SHSAX,
+                                    Opcode::SSUB16,
+                                    Opcode::QSUB16,
+                                    Opcode::SHSUB16,
+                                    Opcode::SADD8,
+                                    Opcode::QADD8,
+                                    Opcode::SHADD8,
+                                    Opcode::SSUB8,
+                                    Opcode::QSUB8,
+                                    Opcode::SHSUB8,
+                                ][opcode_idx];
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Reg(Reg::from_u8(rm)),
+                                    Operand::Nothing,
+                                ];
                             } else if op2 < 0b1000 {
                                 // `Parallel addition and subtraction, unsigned` (`A6-244`)
-                                return Err(DecodeError::Incomplete);
+                                let op1 = instr2[4..7].load::<usize>();
+                                let op2 = lower2[4..6].load::<usize>();
+                                if op1 > 0b100 || op2 == 0b11 {
+                                    return Err(DecodeError::InvalidOpcode);
+                                }
+
+                                let opcode_idx = (op1 - 1) * 3 + op2;
+
+                                let rn = instr2[0..4].load::<u8>();
+                                let rd = lower2[8..12].load::<u8>();
+                                let rm = lower2[0..4].load::<u8>();
+
+                                inst.opcode = [
+                                    Opcode::UADD16,
+                                    Opcode::UQADD16,
+                                    Opcode::UHADD16,
+                                    Opcode::UASX,
+                                    Opcode::UQASX,
+                                    Opcode::UHASX,
+                                    Opcode::USAX,
+                                    Opcode::UQSAX,
+                                    Opcode::UHSAX,
+                                    Opcode::USUB16,
+                                    Opcode::UQSUB16,
+                                    Opcode::UHSUB16,
+                                    Opcode::UADD8,
+                                    Opcode::UQADD8,
+                                    Opcode::UHADD8,
+                                    Opcode::USUB8,
+                                    Opcode::UQSUB8,
+                                    Opcode::UHSUB8,
+                                ][opcode_idx];
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(rn)),
+                                    Operand::Reg(Reg::from_u8(rm)),
+                                    Operand::Nothing,
+                                ];
                             } else if op2 < 0b1100 {
                                 // `Miscellaneous operations` (`A6-246`)
                                 let rn = instr2[0..4].load::<u8>();

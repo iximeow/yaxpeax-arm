@@ -365,6 +365,43 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
             Opcode::QDADD |
             Opcode::QDSUB |
 
+            Opcode::SADD16 |
+            Opcode::QADD16 |
+            Opcode::SHADD16 |
+            Opcode::SASX |
+            Opcode::QASX |
+            Opcode::SHASX |
+            Opcode::SSAX |
+            Opcode::QSAX |
+            Opcode::SHSAX |
+            Opcode::SSUB16 |
+            Opcode::QSUB16 |
+            Opcode::SHSUB16 |
+            Opcode::SADD8 |
+            Opcode::QADD8 |
+            Opcode::SHADD8 |
+            Opcode::SSUB8 |
+            Opcode::QSUB8 |
+            Opcode::SHSUB8 |
+            Opcode::UADD16 |
+            Opcode::UQADD16 |
+            Opcode::UHADD16 |
+            Opcode::UASX |
+            Opcode::UQASX |
+            Opcode::UHASX |
+            Opcode::USAX |
+            Opcode::UQSAX |
+            Opcode::UHSAX |
+            Opcode::USUB16 |
+            Opcode::UQSUB16 |
+            Opcode::UHSUB16 |
+            Opcode::UADD8 |
+            Opcode::UQADD8 |
+            Opcode::UHADD8 |
+            Opcode::USUB8 |
+            Opcode::UQSUB8 |
+            Opcode::UHSUB8 |
+
             Opcode::CLZ |
 
             Opcode::MUL |
@@ -667,6 +704,42 @@ impl Display for Opcode {
             Opcode::PLI => { write!(f, "pli") },
             Opcode::RBIT => { write!(f, "rbit") },
             Opcode::SEL => { write!(f, "sel") },
+            Opcode::SADD16 => { write!(f, "sadd16") },
+            Opcode::QADD16 => { write!(f, "qadd16") },
+            Opcode::SHADD16 => { write!(f, "shadd16") },
+            Opcode::SASX => { write!(f, "sasx") },
+            Opcode::QASX => { write!(f, "qasx") },
+            Opcode::SHASX => { write!(f, "shasx") },
+            Opcode::SSAX => { write!(f, "ssax") },
+            Opcode::QSAX => { write!(f, "qsax") },
+            Opcode::SHSAX => { write!(f, "shsax") },
+            Opcode::SSUB16 => { write!(f, "ssub16") },
+            Opcode::QSUB16 => { write!(f, "qsub16") },
+            Opcode::SHSUB16 => { write!(f, "shsub16") },
+            Opcode::SADD8 => { write!(f, "sadd8") },
+            Opcode::QADD8 => { write!(f, "qadd8") },
+            Opcode::SHADD8 => { write!(f, "shadd8") },
+            Opcode::SSUB8 => { write!(f, "ssub8") },
+            Opcode::QSUB8 => { write!(f, "qsub8") },
+            Opcode::SHSUB8 => { write!(f, "shsub8") },
+            Opcode::UADD16 => { write!(f, "uadd16") },
+            Opcode::UQADD16 => { write!(f, "uqadd16") },
+            Opcode::UHADD16 => { write!(f, "uhadd16") },
+            Opcode::UASX => { write!(f, "uasx") },
+            Opcode::UQASX => { write!(f, "uqasx") },
+            Opcode::UHASX => { write!(f, "uhasx") },
+            Opcode::USAX => { write!(f, "usax") },
+            Opcode::UQSAX => { write!(f, "uqsax") },
+            Opcode::UHSAX => { write!(f, "uhsax") },
+            Opcode::USUB16 => { write!(f, "usub16") },
+            Opcode::UQSUB16 => { write!(f, "uqsub16") },
+            Opcode::UHSUB16 => { write!(f, "uhsub16") },
+            Opcode::UADD8 => { write!(f, "uadd8") },
+            Opcode::UQADD8 => { write!(f, "uqadd8") },
+            Opcode::UHADD8 => { write!(f, "uhadd8") },
+            Opcode::USUB8 => { write!(f, "usub8") },
+            Opcode::UQSUB8 => { write!(f, "uqsub8") },
+            Opcode::UHSUB8 => { write!(f, "uhsub8") },
         }
     }
 }
@@ -831,6 +904,43 @@ pub enum Opcode {
     PLI,
     RBIT,
     SEL,
+
+    SADD16,
+    QADD16,
+    SHADD16,
+    SASX,
+    QASX,
+    SHASX,
+    SSAX,
+    QSAX,
+    SHSAX,
+    SSUB16,
+    QSUB16,
+    SHSUB16,
+    SADD8,
+    QADD8,
+    SHADD8,
+    SSUB8,
+    QSUB8,
+    SHSUB8,
+    UADD16,
+    UQADD16,
+    UHADD16,
+    UASX,
+    UQASX,
+    UHASX,
+    USAX,
+    UQSAX,
+    UHSAX,
+    USUB16,
+    UQSUB16,
+    UHSUB16,
+    UADD8,
+    UQADD8,
+    UHADD8,
+    USUB8,
+    UQSUB8,
+    UHSUB8,
 }
 
 static DATA_PROCESSING_OPCODES: [Opcode; 16] = [
