@@ -4,6 +4,7 @@ use std::fmt;
 
 use armv7::ConditionCode;
 use armv7::DecodeError;
+use armv7::CReg;
 use armv7::Reg;
 use armv7::RegShift;
 use armv7::Operand;
@@ -1025,8 +1026,9 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
             } else {
                 // `Coprocessor, Advanced SIMD, and Floating-point instructions` (`A6-249`)
                 // v6T2
-                eprintln!("TODO: coproc/simd/fp");
-                return Err(DecodeError::Incomplete);
+                // op1 == 01, op2 == 1xxxxxx
+                // this means `assert!(instr2[10])`
+                return decode_table_a6_30(decoder, inst, instr2, lower2);
             }
         } else if opword < 0b11111 {
             // op1 == 0b10
@@ -1253,6 +1255,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                 } else {
                     // `Data-processing (plain binary immediate)` (`A6-232`)
                     // v6T2
+                    // aka table `A6-12`
                     let op = instr2[4..9].load::<u8>();
                     let i = instr2[10..11].load::<u16>();
                     inst.s = false;
@@ -3028,7 +3031,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                     } else {
                         if op2[3] {
                             // `Long multiply, long multiply accumulate, and divide` (`A6-248`)
-                            return Err(DecodeError::Incomplete);
                             let op1 = instr2[4..7].load::<usize>();
                             let op2 = lower2[4..8].load::<usize>();
 
@@ -3302,13 +3304,15 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                                 }
 
                             }
-                            return Err(DecodeError::Incomplete);
                         }
                     }
                 }
             } else {
                 // `Coprocessor, Advanced SIMD, and Floating-point instructions` (`A6-249`)
-                return Err(DecodeError::Incomplete);
+                // v6T2
+                // op1 == 11, op2 == 1xxxxxx
+                // this means `assert!(instr2[10])`
+                return decode_table_a6_30(decoder, inst, instr2, lower2);
             }
         }
     } else {
@@ -4176,6 +4180,185 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                 Operand::Nothing,
                 Operand::Nothing,
             ];
+        }
+    }
+    Ok(())
+}
+
+fn decode_table_a6_30(decoder: &InstDecoder, inst: &mut Instruction, instr2: BitArray<Lsb0, [u16; 1]>, lower2: BitArray<Lsb0, [u16; 1]>) -> Result<(), DecodeError> {
+    // implementation of table `A6-30 Coprocessor, Advanced SIMD, and Floating-point instructions`
+    let op1 = instr2[4..10].load::<usize>();
+    if op1 & 0b11_1110 == 0b00_0000 {
+        inst.opcode = Opcode::UDF;
+        inst.operands = [
+            Operand::Nothing,
+            Operand::Nothing,
+            Operand::Nothing,
+            Operand::Nothing,
+        ];
+        return Err(DecodeError::InvalidOpcode);
+    } else if op1 & 0b110000 == 0b110000 {
+        // TODO: `Advanced SIMD data-processing instructions on A7-259`
+        return Err(DecodeError::Incomplete);
+    } else {
+        let coproc = lower2[8..12].load::<u8>();
+        if coproc & 0b1110 != 0b1010 {
+            // `not 101x` rows
+            if op1 == 0b000100 {
+                // `MCRR, MCRR2 on page A8-479`
+                let crm = lower2[0..4].load::<u8>();
+                let opc1 = lower2[4..8].load::<u8>();
+                let rt = lower2[12..16].load::<u8>();
+                let rt2 = instr2[0..4].load::<u8>();
+                if instr2[12] {
+                    inst.opcode = Opcode::MCRR2(coproc, opc1);
+                } else {
+                    inst.opcode = Opcode::MCRR(coproc, opc1);
+                }
+                inst.operands = [
+                    Operand::Reg(Reg::from_u8(rt)),
+                    Operand::Reg(Reg::from_u8(rt2)),
+                    Operand::CReg(CReg::from_u8(crm)),
+                    Operand::Nothing,
+                ];
+            } else if op1 == 0b000101 {
+                // `MRRC, MRRC2 on page A8-495`
+                let crm = lower2[0..4].load::<u8>();
+                let opc1 = lower2[4..8].load::<u8>();
+                let rt = lower2[12..16].load::<u8>();
+                let rt2 = instr2[0..4].load::<u8>();
+                // manual typo!! the manual spells the operands
+                // `<coproc>, <opc>, <Rt>, <Rt2>, <CRm>`
+                // but the operand name is `opc1`!
+                //
+                // this is a very uninteresting typo, but fun to spot nonetheless
+                if instr2[12] {
+                    inst.opcode = Opcode::MRRC2(coproc, opc1);
+                } else {
+                    inst.opcode = Opcode::MRRC(coproc, opc1);
+                }
+                inst.operands = [
+                    Operand::Reg(Reg::from_u8(rt)),
+                    Operand::Reg(Reg::from_u8(rt2)),
+                    Operand::CReg(CReg::from_u8(crm)),
+                    Operand::Nothing,
+                ];
+            } else {
+                if op1 & 1 == 0 {
+                    // `STC, STC2 on page A8-663`
+                    let p = instr2[8];
+                    let u = instr2[7];
+                    let w = instr2[5];
+                    let rn = instr2[0..4].load::<u8>();
+                    let crd = lower2[12..16].load::<u8>();
+                    let imm8 = lower2[0..8].load::<u16>();
+
+                    if instr2[12] {
+                        if instr2[6] {
+                            inst.opcode = Opcode::STC2L(coproc);
+                        } else {
+                            inst.opcode = Opcode::STC2(coproc);
+                        }
+                    } else {
+                        if instr2[6] {
+                            inst.opcode = Opcode::STCL(coproc);
+                        } else {
+                            inst.opcode = Opcode::STC(coproc);
+                        }
+                    }
+                    inst.operands = [
+                        Operand::CReg(CReg::from_u8(crd)),
+                        if p {
+                            Operand::RegDerefPreindexOffset(
+                                Reg::from_u8(rn),
+                                imm8 << 2,
+                                u,
+                                w,
+                            )
+                        } else {
+                            if w {
+                                Operand::RegDerefPostindexOffset(
+                                    Reg::from_u8(rn),
+                                    imm8 << 2,
+                                    u,
+                                    false, // TODO: wback? this is true? not true?
+                                )
+                            } else {
+                                Operand::RegDeref(Reg::from_u8(rn))
+                            }
+                        },
+                        if !p && !w {
+                            Operand::CoprocOption(imm8 as u8)
+                        } else {
+                            Operand::Nothing
+                        },
+                        Operand::Nothing,
+                    ];
+                } else {
+                    // `LDC, LDC2 (immediate or literal) on A8-393 or A8-395`
+                    let p = instr2[8];
+                    let u = instr2[7];
+                    let w = instr2[5];
+                    let rn = instr2[0..4].load::<u8>();
+                    let crd = lower2[12..16].load::<u8>();
+                    let imm8 = lower2[0..8].load::<u16>();
+
+                    if rn == 0b1111 {
+                        // `LDC, LDC2 (literal) on A8-395`
+                        // notable for rejecting writeback
+                        if w {
+                            decoder.unpredictable()?;
+                        }
+                    } else {
+                        // `LDC, LDC2 (immediate) on A8-393`
+                    }
+
+                    if instr2[12] {
+                        if instr2[6] {
+                            inst.opcode = Opcode::LDC2L(coproc);
+                        } else {
+                            inst.opcode = Opcode::LDC2(coproc);
+                        }
+                    } else {
+                        if instr2[6] {
+                            inst.opcode = Opcode::LDCL(coproc);
+                        } else {
+                            inst.opcode = Opcode::LDC(coproc);
+                        }
+                    }
+                    inst.operands = [
+                        Operand::CReg(CReg::from_u8(crd)),
+                        if p {
+                            Operand::RegDerefPreindexOffset(
+                                Reg::from_u8(rn),
+                                imm8 << 2,
+                                u,
+                                w,
+                            )
+                        } else {
+                            if w {
+                                Operand::RegDerefPostindexOffset(
+                                    Reg::from_u8(rn),
+                                    imm8 << 2,
+                                    u,
+                                    false, // TODO: wback? this is true? not true?
+                                )
+                            } else {
+                                Operand::RegDeref(Reg::from_u8(rn))
+                            }
+                        },
+                        if !p && !w {
+                            Operand::CoprocOption(imm8 as u8)
+                        } else {
+                            Operand::Nothing
+                        },
+                        Operand::Nothing,
+                    ];
+                }
+            }
+        } else {
+            // `101x` rows
+            return Err(DecodeError::Incomplete);
         }
     }
     Ok(())

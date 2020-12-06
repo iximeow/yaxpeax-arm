@@ -175,6 +175,32 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
                     _ => { unreachable!(); }
                 }
             },
+            Opcode::STCL(coproc) => {
+                write!(out, "stcl p{}", coproc)?;
+                let ops = self.operands.iter();
+                for op in ops {
+                    if let Operand::Nothing = op {
+                        break;
+                    }
+                    write!(out, ", ")?;
+                    op.colorize(colors, out)?;
+                }
+
+                Ok(())
+            }
+            Opcode::STC(coproc) => {
+                write!(out, "stc p{}", coproc)?;
+                let ops = self.operands.iter();
+                for op in ops {
+                    if let Operand::Nothing = op {
+                        break;
+                    }
+                    write!(out, ", ")?;
+                    op.colorize(colors, out)?;
+                }
+
+                Ok(())
+            }
             Opcode::STC2L(coproc) => {
                 write!(out, "stc2l p{}", coproc)?;
                 let ops = self.operands.iter();
@@ -190,6 +216,32 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
             }
             Opcode::STC2(coproc) => {
                 write!(out, "stc2 p{}", coproc)?;
+                let ops = self.operands.iter();
+                for op in ops {
+                    if let Operand::Nothing = op {
+                        break;
+                    }
+                    write!(out, ", ")?;
+                    op.colorize(colors, out)?;
+                }
+
+                Ok(())
+            }
+            Opcode::LDC(coproc) => {
+                write!(out, "ldc p{}", coproc)?;
+                let ops = self.operands.iter();
+                for op in ops {
+                    if let Operand::Nothing = op {
+                        break;
+                    }
+                    write!(out, ", ")?;
+                    op.colorize(colors, out)?;
+                }
+
+                Ok(())
+            }
+            Opcode::LDCL(coproc) => {
+                write!(out, "ldcl p{}", coproc)?;
                 let ops = self.operands.iter();
                 for op in ops {
                     if let Operand::Nothing = op {
@@ -535,14 +587,20 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
             Opcode::HVC |
             Opcode::SVC |
             Opcode::SMC |
+            Opcode::LDC(_) |
+            Opcode::LDCL(_) |
             Opcode::LDC2(_) |
             Opcode::LDC2L(_) |
+            Opcode::STC(_) |
+            Opcode::STCL(_) |
             Opcode::STC2(_) |
             Opcode::STC2L(_) |
             Opcode::MCRR2(_, _) |
             Opcode::MCR2(_, _, _) |
             Opcode::MRRC2(_, _) |
             Opcode::MRC2(_, _, _) |
+            Opcode::MCRR(_, _) |
+            Opcode::MRRC(_, _) |
             Opcode::CDP2(_, _, _) => { write!(out, "{}", colors.platform_op(self)) },
         }
     }
@@ -557,14 +615,20 @@ impl Display for Opcode {
             Opcode::LDRSBT => { write!(f, "ldrsbt") },
             Opcode::STRD => { write!(f, "strd") },
             Opcode::LDRD => { write!(f, "ldrd") },
+            Opcode::LDC(_) => { write!(f, "ldc") },
+            Opcode::LDCL(_) => { write!(f, "ldcl") },
             Opcode::LDC2(_) => { write!(f, "ldc2") },
             Opcode::LDC2L(_) => { write!(f, "ldc2l") },
+            Opcode::STC(_) => { write!(f, "stc") },
+            Opcode::STCL(_) => { write!(f, "stcl") },
             Opcode::STC2(_) => { write!(f, "stc2") },
             Opcode::STC2L(_) => { write!(f, "stc2l") },
             Opcode::MCRR2(_, _) => { write!(f, "mcrr2") },
             Opcode::MCR2(_, _, _) => { write!(f, "mcr2") },
             Opcode::MRRC2(_, _) => { write!(f, "mrrc2") },
             Opcode::MRC2(_, _, _) => { write!(f, "mrc2") },
+            Opcode::MCRR(_, _) => { write!(f, "mcrr") },
+            Opcode::MRRC(_, _) => { write!(f, "mrrc") },
             Opcode::CDP2(_, _, _) => { write!(f, "cdp2") },
             Opcode::SRS(p, u) => { write!(f, "srs{}{}", if *u { "i" } else { "d" }, if *p { "b" } else { "a" }) },
             Opcode::RFE(p, u) => { write!(f, "rfe{}{}", if *u { "i" } else { "d" }, if *p { "b" } else { "a" }) },
@@ -842,13 +906,19 @@ pub enum Opcode {
     LDRSBT,
     STRD,
     LDRD,
+    LDC(u8),
+    LDCL(u8),
     LDC2(u8),
     LDC2L(u8),
+    STC(u8),
+    STCL(u8),
     STC2(u8),
     STC2L(u8),
     MCRR2(u8, u8),
     MCR2(u8, u8, u8),
     MRRC2(u8, u8),
+    MCRR(u8, u8),
+    MRRC(u8, u8),
     MRC2(u8, u8, u8),
     CDP2(u8, u8, u8),
     SRS(bool, bool),

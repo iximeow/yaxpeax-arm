@@ -3394,3 +3394,560 @@ fn test_decode_ux_sx_cases() {
         "uxtb r2, r1"
     );
 }
+
+#[test]
+fn test_decode_ldr_32b_cases() {
+    test_display(
+        &[0x73, 0xe8, 0x7e, 0x5a],
+        "ldrd r5, r10, [r3], -0x1f8"
+    );
+    test_display(
+        &[0x93, 0xf8, 0x7e, 0x5a],
+        "ldrb.w r5, [r3, 0xa7e]"
+    );
+    test_display(
+        &[0xb3, 0xf8, 0x7e, 0x5a],
+        "ldrh.w r5, [r3, 0xa7e]"
+    );
+    test_display(
+        &[0xd3, 0xf8, 0x7e, 0x5a],
+        "ldr.w r5, [r3, 0xa7e]"
+    );
+    test_display(
+        &[0xf3, 0xe8, 0x7e, 0x5a],
+        "ldrd r5, r10, [r3], 0x1f8"
+    );
+    test_display(
+        &[0x53, 0xe9, 0x7e, 0x5a],
+        "ldrd r5, r10, [r3, -0x1f8]"
+    );
+    test_display(
+        &[0x73, 0xe9, 0x7e, 0x5a],
+        "ldrd r5, r10, [r3, -0x1f8]!"
+    );
+    test_display(
+        &[0x93, 0xf9, 0x7e, 0x5a],
+        "ldrsb.w r5, [r3, 0xa7e]"
+    );
+    test_display(
+        &[0xb3, 0xf9, 0x7e, 0x5a],
+        "ldrsh.w r5, [r3, 0xa7e]"
+    );
+    test_display(
+        &[0xd3, 0xe9, 0x7e, 0x5a],
+        "ldrd r5, r10, [r3, 0x1f8]"
+    );
+    test_display(
+        &[0xf3, 0xe9, 0x7e, 0x5a],
+        "ldrd r5, r10, [r3, 0x1f8]!"
+    );
+}
+
+#[test]
+fn test_decode_coproc_ld_32b_cases() {
+    test_display(
+        &[0x33, 0xfc, 0x7e, 0x54],
+        "ldc2 p4, c5, [r3], -0x1f8"
+    );
+    test_display(
+        &[0x73, 0xfc, 0x7e, 0x54],
+        "ldc2l p4, c5, [r3], -0x1f8"
+    );
+    test_display(
+        &[0x93, 0xfc, 0x7e, 0x54],
+        "ldc2 p4, c5, [r3], {0x7e}"
+    );
+    test_display(
+        &[0xb3, 0xfc, 0x7e, 0x54],
+        "ldc2 p4, c5, [r3], 0x1f8"
+    );
+    test_display(
+        &[0xd3, 0xfc, 0x7e, 0x54],
+        "ldc2l p4, c5, [r3], {0x7e}"
+    );
+    test_display(
+        &[0xf3, 0xfc, 0x7e, 0x54],
+        "ldc2l p4, c5, [r3], 0x1f8"
+    );
+    test_display(
+        &[0x13, 0xfd, 0x7e, 0x54],
+        "ldc2 p4, c5, [r3, -0x1f8]"
+    );
+    test_display(
+        &[0x33, 0xfd, 0x7e, 0x54],
+        "ldc2 p4, c5, [r3, -0x1f8]!"
+    );
+    test_display(
+        &[0x53, 0xfd, 0x7e, 0x54],
+        "ldc2l p4, c5, [r3, -0x1f8]"
+    );
+    test_display(
+        &[0x73, 0xfd, 0x7e, 0x54],
+        "ldc2l p4, c5, [r3, -0x1f8]!"
+    );
+    test_display(
+        &[0x93, 0xfd, 0x7e, 0x54],
+        "ldc2 p4, c5, [r3, 0x1f8]"
+    );
+    test_display(
+        &[0xb3, 0xfd, 0x7e, 0x54],
+        "ldc2 p4, c5, [r3, 0x1f8]!"
+    );
+    test_display(
+        &[0xd3, 0xfd, 0x7e, 0x54],
+        "ldc2l p4, c5, [r3, 0x1f8]"
+    );
+    test_display(
+        &[0xf3, 0xfd, 0x7e, 0x54],
+        "ldc2l p4, c5, [r3, 0x1f8]!"
+    );
+}
+#[test]
+fn test_decode_str_32b_cases() {
+    test_display(
+        &[0x43, 0xe8, 0x7e, 0x5a],
+        "strex r10, r5, [r3, 0x1f8]"
+    );
+    test_display(
+        &[0x63, 0xe8, 0x7e, 0x5a],
+        "strd r5, r10, [r3], -0x1f8"
+    );
+    test_display(
+        &[0x83, 0xf8, 0x7e, 0x5a],
+        "strb.w r5, [r3, 0xa7e]"
+    );
+    test_display(
+        &[0xa3, 0xf8, 0x7e, 0x5a],
+        "strh.w r5, [r3, 0xa7e]"
+    );
+    test_display(
+        &[0xc3, 0xe8, 0x7e, 0x5a],
+        "strexd lr, r5, r10, [r3]"
+    );
+    test_display(
+        &[0xc3, 0xf8, 0x7e, 0x5a],
+        "str.w r5, [r3, 0xa7e]"
+    );
+    test_display(
+        &[0xe3, 0xe8, 0x7e, 0x5a],
+        "strd r5, r10, [r3], 0x1f8"
+    );
+    test_display(
+        &[0x43, 0xe9, 0x7e, 0x5a],
+        "strd r5, r10, [r3, -0x1f8]"
+    );
+    test_display(
+        &[0x63, 0xe9, 0x7e, 0x5a],
+        "strd r5, r10, [r3, -0x1f8]!"
+    );
+    test_display(
+        &[0xc3, 0xe9, 0x7e, 0x5a],
+        "strd r5, r10, [r3, 0x1f8]"
+    );
+    test_display(
+        &[0xe3, 0xe9, 0x7e, 0x5a],
+        "strd r5, r10, [r3, 0x1f8]!"
+    );
+}
+
+#[test]
+fn test_decode_coproc_st_32b_cases() {
+    test_display(
+        &[0x23, 0xfc, 0x7e, 0x54],
+        "stc2 p4, c5, [r3], -0x1f8"
+    );
+    test_display(
+        &[0x63, 0xfc, 0x7e, 0x54],
+        "stc2l p4, c5, [r3], -0x1f8"
+    );
+    test_display(
+        &[0x83, 0xfc, 0x7e, 0x54],
+        "stc2 p4, c5, [r3], {0x7e}"
+    );
+    test_display(
+        &[0xa3, 0xfc, 0x7e, 0x54],
+        "stc2 p4, c5, [r3], 0x1f8"
+    );
+    test_display(
+        &[0xc3, 0xfc, 0x7e, 0x54],
+        "stc2l p4, c5, [r3], {0x7e}"
+    );
+    test_display(
+        &[0xe3, 0xfc, 0x7e, 0x54],
+        "stc2l p4, c5, [r3], 0x1f8"
+    );
+    test_display(
+        &[0x03, 0xfd, 0x7e, 0x54],
+        "stc2 p4, c5, [r3, -0x1f8]"
+    );
+    test_display(
+        &[0x23, 0xfd, 0x7e, 0x54],
+        "stc2 p4, c5, [r3, -0x1f8]!"
+    );
+    test_display(
+        &[0x43, 0xfd, 0x7e, 0x54],
+        "stc2l p4, c5, [r3, -0x1f8]"
+    );
+    test_display(
+        &[0x63, 0xfd, 0x7e, 0x54],
+        "stc2l p4, c5, [r3, -0x1f8]!"
+    );
+    test_display(
+        &[0x83, 0xfd, 0x7e, 0x54],
+        "stc2 p4, c5, [r3, 0x1f8]"
+    );
+    test_display(
+        &[0xa3, 0xfd, 0x7e, 0x54],
+        "stc2 p4, c5, [r3, 0x1f8]!"
+    );
+    test_display(
+        &[0xc3, 0xfd, 0x7e, 0x54],
+        "stc2l p4, c5, [r3, 0x1f8]"
+    );
+    test_display(
+        &[0xe3, 0xfd, 0x7e, 0x54],
+        "stc2l p4, c5, [r3, 0x1f8]!"
+    );
+}
+#[test]
+fn test_decode_stm_ldm_32b_cases() {
+    test_display(
+        &[0x83, 0xe8, 0x7e, 0x5a],
+        "stm.w r3, {r1, r2, r3, r4, r5, r6, sb, fp, ip, lr}"
+    );
+    test_display(
+        &[0xa3, 0xe8, 0x7e, 0x5a],
+        "stm.w r3!, {r1, r2, r3, r4, r5, r6, sb, fp, ip, lr}"
+    );
+    test_display(
+        &[0x03, 0xe9, 0x7e, 0x5a],
+        "stmdb r3, {r1, r2, r3, r4, r5, r6, sb, fp, ip, lr}"
+    );
+    test_display(
+        &[0x23, 0xe9, 0x7e, 0x5a],
+        "stmdb r3!, {r1, r2, r3, r4, r5, r6, sb, fp, ip, lr}"
+    );
+
+    test_display(
+        &[0x93, 0xe8, 0x7e, 0x5a],
+        "ldm.w r3, {r1, r2, r3, r4, r5, r6, sb, fp, ip, lr}"
+    );
+    test_display(
+        &[0xb3, 0xe8, 0x7e, 0x5a],
+        "ldm.w r3!, {r1, r2, r3, r4, r5, r6, sb, fp, ip, lr}"
+    );
+    test_display(
+        &[0x13, 0xe9, 0x7e, 0x5a],
+        "ldmdb r3, {r1, r2, r3, r4, r5, r6, sb, fp, ip, lr}"
+    );
+    test_display(
+        &[0x33, 0xe9, 0x7e, 0x5a],
+        "ldmdb r3!, {r1, r2, r3, r4, r5, r6, sb, fp, ip, lr}"
+    );
+}
+#[test]
+fn test_decode_sat_ext_32b_cases() {
+    test_display(
+        &[0x43, 0xf3, 0x7e, 0x5a],
+        "sbfx r10, r3, 0x15, 0x1f"
+    );
+    test_display(
+        &[0xc3, 0xf3, 0x7e, 0x5a],
+        "ubfx r10, r3, 0x15, 0x1f"
+    );
+    test_display(
+        &[0x43, 0xf7, 0x7e, 0x5a],
+        "sbfx r10, r3, 0x15, 0x1f"
+    );
+    test_display(
+        &[0xc3, 0xf7, 0x7e, 0x5a],
+        "ubfx r10, r3, 0x15, 0x1f"
+    );
+
+    test_display(
+        &[0x83, 0xf3, 0x7e, 0x5a],
+        "usat r10, 0x1e, r3, lsl 21"
+    );
+    test_display(
+        &[0xa3, 0xf3, 0x7e, 0x5a],
+        "usat r10, 0x1e, r3, asr 21"
+    );
+    test_display(
+        &[0x83, 0xf7, 0x7e, 0x5a],
+        "usat r10, 0x1e, r3, lsl 21"
+    );
+    test_display(
+        &[0xa3, 0xf7, 0x7e, 0x5a],
+        "usat r10, 0x1e, r3, asr 21"
+    );
+}
+#[test]
+fn test_decode_bitwise_32b_cases() {
+    test_display(
+        &[0x23, 0xf0, 0x7e, 0x5a],
+        "bic r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0x33, 0xf0, 0x7e, 0x5a],
+        "bics r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0x23, 0xea, 0x7e, 0x5a],
+        "bic.w r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0x33, 0xea, 0x7e, 0x5a],
+        "bics.w r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0x23, 0xf4, 0x7e, 0x5a],
+        "bic r10, r3, 0x3f80"
+    );
+    test_display(
+        &[0x33, 0xf4, 0x7e, 0x5a],
+        "bics r10, r3, 0x3f80"
+    );
+
+    test_display(
+        &[0x03, 0xf0, 0x7e, 0x5a],
+        "and r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0x13, 0xf0, 0x7e, 0x5a],
+        "ands r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0x03, 0xea, 0x7e, 0x5a],
+        "and.w r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0x13, 0xea, 0x7e, 0x5a],
+        "ands.w r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0x03, 0xf4, 0x7e, 0x5a],
+        "and r10, r3, 0x3f80"
+    );
+    test_display(
+        &[0x13, 0xf4, 0x7e, 0x5a],
+        "ands r10, r3, 0x3f80"
+    );
+
+    test_display(
+        &[0x43, 0xf0, 0x7e, 0x5a],
+        "orr r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0x53, 0xf0, 0x7e, 0x5a],
+        "orrs r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0x43, 0xea, 0x7e, 0x5a],
+        "orr.w r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0x53, 0xea, 0x7e, 0x5a],
+        "orrs.w r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0x43, 0xf4, 0x7e, 0x5a],
+        "orr r10, r3, 0x3f80"
+    );
+    test_display(
+        &[0x53, 0xf4, 0x7e, 0x5a],
+        "orrs r10, r3, 0x3f80"
+    );
+
+    test_display(
+        &[0x83, 0xf0, 0x7e, 0x5a],
+        "eor r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0x93, 0xf0, 0x7e, 0x5a],
+        "eors r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0x83, 0xea, 0x7e, 0x5a],
+        "eor.w r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0x93, 0xea, 0x7e, 0x5a],
+        "eors.w r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0x83, 0xf4, 0x7e, 0x5a],
+        "eor r10, r3, 0x3f80"
+    );
+    test_display(
+        &[0x93, 0xf4, 0x7e, 0x5a],
+        "eors r10, r3, 0x3f80"
+    );
+
+    test_display(
+        &[0x63, 0xf0, 0x7e, 0x5a],
+        "orn r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0x73, 0xf0, 0x7e, 0x5a],
+        "orns r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0x63, 0xea, 0x7e, 0x5a],
+        "orn r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0x73, 0xea, 0x7e, 0x5a],
+        "orns r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0x63, 0xf4, 0x7e, 0x5a],
+        "orn r10, r3, 0x3f80"
+    );
+    test_display(
+        &[0x73, 0xf4, 0x7e, 0x5a],
+        "orns r10, r3, 0x3f80"
+    );
+}
+#[test]
+fn test_decode_arithmetic_32b_cases() {
+    test_display(
+        &[0xa3, 0xf1, 0x7e, 0x5a],
+        "sub.w r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0xb3, 0xf1, 0x7e, 0x5a],
+        "subs.w r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0xa3, 0xf2, 0x7e, 0x5a],
+        "sub.w r10, r3, 0x57e"
+    );
+    test_display(
+        &[0xa3, 0xeb, 0x7e, 0x5a],
+        "sub.w r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0xb3, 0xeb, 0x7e, 0x5a],
+        "subs.w r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0xa3, 0xf6, 0x7e, 0x5a],
+        "sub.w r10, r3, 0xd7e"
+    );
+    test_display(
+        &[0xa3, 0xf5, 0x7e, 0x5a],
+        "sub.w r10, r3, 0x3f80"
+    );
+    test_display(
+        &[0xb3, 0xf5, 0x7e, 0x5a],
+        "subs.w r10, r3, 0x3f80"
+    );
+
+    test_display(
+        &[0x03, 0xf1, 0x7e, 0x5a],
+        "add.w r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0x13, 0xf1, 0x7e, 0x5a],
+        "adds.w r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0x03, 0xf2, 0x7e, 0x5a],
+        "add.w r10, r3, 0x57e"
+    );
+    test_display(
+        &[0x03, 0xeb, 0x7e, 0x5a],
+        "add.w r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0x13, 0xeb, 0x7e, 0x5a],
+        "adds.w r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0x03, 0xf5, 0x7e, 0x5a],
+        "add.w r10, r3, 0x3f80"
+    );
+    test_display(
+        &[0x13, 0xf5, 0x7e, 0x5a],
+        "adds.w r10, r3, 0x3f80"
+    );
+    test_display(
+        &[0x03, 0xf6, 0x7e, 0x5a],
+        "add.w r10, r3, 0xd7e"
+    );
+
+    test_display(
+        &[0x43, 0xf1, 0x7e, 0x5a],
+        "adc r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0x53, 0xf1, 0x7e, 0x5a],
+        "adcs r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0x43, 0xeb, 0x7e, 0x5a],
+        "adc.w r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0x53, 0xeb, 0x7e, 0x5a],
+        "adcs.w r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0x43, 0xf5, 0x7e, 0x5a],
+        "adc r10, r3, 0x3f80"
+    );
+    test_display(
+        &[0x53, 0xf5, 0x7e, 0x5a],
+        "adcs r10, r3, 0x3f80"
+    );
+
+    test_display(
+        &[0x63, 0xf1, 0x7e, 0x5a],
+        "sbc r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0x73, 0xf1, 0x7e, 0x5a],
+        "sbcs r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0x63, 0xeb, 0x7e, 0x5a],
+        "sbc.w r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0x73, 0xeb, 0x7e, 0x5a],
+        "sbcs.w r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0x63, 0xf5, 0x7e, 0x5a],
+        "sbc r10, r3, 0x3f80"
+    );
+    test_display(
+        &[0x73, 0xf5, 0x7e, 0x5a],
+        "sbcs r10, r3, 0x3f80"
+    );
+
+    test_display(
+        &[0xc3, 0xf1, 0x7e, 0x5a],
+        "rsb.w r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0xd3, 0xf1, 0x7e, 0x5a],
+        "rsbs.w r10, r3, 0x3f800000"
+    );
+    test_display(
+        &[0xc3, 0xeb, 0x7e, 0x5a],
+        "rsb r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0xd3, 0xeb, 0x7e, 0x5a],
+        "rsbs r10, r3, lr, ror 21"
+    );
+    test_display(
+        &[0xc3, 0xf5, 0x7e, 0x5a],
+        "rsb.w r10, r3, 0x3f80"
+    );
+    test_display(
+        &[0xd3, 0xf5, 0x7e, 0x5a],
+        "rsbs.w r10, r3, 0x3f80"
+    );
+}
