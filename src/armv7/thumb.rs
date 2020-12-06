@@ -961,17 +961,18 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
             }
         } else if opword < 0b11111 {
             // op1 == 0b10
+            // interpret `op1 == 0b10` lines in table `A6-9` on `A6-228`:
             if lower & 0x80 == 0 {
                 // op == 0
-                if !op2[4] {
+                if !op2[5] {
                     // `A6.3.1` `Data-processing (modified immediate)` (`A6-229`)
                     // see `A6.3.2` for `Modified immediate constants in Thumb instructions` on how
                     // to decode immediates
                     // v6T2
-                    let op = op2[..4].load::<u8>();
+                    let op = op2[1..5].load::<u8>();
                     let i = lower2[10..11].load::<u16>();
-                    let s = lower2[4];
-                    let rn = lower2[0..4].load::<u8>();
+                    let s = instr2[4];
+                    let rn = instr2[0..4].load::<u8>();
                     let imm3 = lower2[12..15].load::<u16>();
                     let rd = lower2[8..12].load::<u8>();
                     let imm8 = lower2[0..8].load::<u16>();
