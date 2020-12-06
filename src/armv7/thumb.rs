@@ -137,7 +137,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                     // TODO: double check
                     if op2[2] {
                         // `Load/store dual, load/store exclusive, table branch` (`A6-236`)
-                        let op1op2 = (instr2[5..7].load::<u8>() << 2) | instr2[4..6].load::<u8>();
+                        let op1op2 = (instr2[7..9].load::<u8>() << 2) | instr2[4..6].load::<u8>();
                         let imm8 = lower2[..8].load::<u16>();
                         let rd = lower2[8..12].load::<u8>();
                         let rt = lower2[12..16].load::<u8>();
@@ -436,8 +436,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                             0b1110 => {
                                 // `STRD (immediate)` (`A8-687`)
                                 // v6T2
-                                // bit 5 (w) == 1
-                                let w = true;
+                                let w = instr2[5];
                                 let u = instr2[7];
                                 let p = instr2[8];
                                 // `if P == '0' && W == '0' then SEE "Related encodings"` -> this
@@ -464,8 +463,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                             0b1111 => {
                                 // `LDRD (immediate)` (`A8-687`)
                                 // v6T2
-                                // bit 5 (w) == 1
-                                let w = true;
+                                let w = instr2[5];
                                 let u = instr2[7];
                                 let p = instr2[8];
                                 // `if P == '0' && W == '0' then SEE "Related encodings"` -> this
@@ -484,10 +482,10 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                                         Operand::Reg(Reg::from_u8(rt)),
                                         Operand::Reg(Reg::from_u8(rd)),
                                         if p {
-                                            Operand::RegDerefPostindexOffset(Reg::from_u8(rn), imm8 << 2, u, w)
+                                            Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8 << 2, u, w)
                                         } else {
                                             // p == 0 and w == 0 is impossible, would be tbb/tbh
-                                            Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8 << 2, u, false)
+                                            Operand::RegDerefPostindexOffset(Reg::from_u8(rn), imm8 << 2, u, false)
                                         },
                                         Operand::Nothing,
                                     ];
@@ -1012,6 +1010,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                         0b0001 => {
                             // `BIC` (`A8-338`)
                             // v6T2
+                            inst.set_w(false);
                             inst.opcode = Opcode::BIC;
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(rd)),
@@ -2178,17 +2177,549 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                             // (`A7-273`)
                         }
                     } else {
-                        // load {byte, halfword, word}
-                        let size_bits = (op2[1..].load::<u8>());
-                        if size_bits == 0b00 {
-                            // `Load byte, memory hints` (`A6-239`)
-                        } else if size_bits == 0b01 {
-                            // `Load halfword, memory hints` (`A6-238`)
-                        } else if size_bits == 0b10 {
-                            // `Load word` (`A6-237`)
-                        } else {
+                        // this section is a merger of three tables:
+                        // `A6.3.9 Load byte, memory hints`
+                        // `A6.3.8 Load halfword, memory hints`
+                        // `A6.3.7 Load word`
+                        // reached by the `00xx001`, `00xx011`, `00xx101` rows of table `A6-9`.
+
+                        let op2 = lower2[6..12].load::<u16>();
+                        let rt = lower2[12..16].load::<u8>();
+                        let rn = instr2[0..4].load::<u8>();
+                        let op1 = instr2[7..9].load::<u16>();
+
+                        // load {byte, halfword, word} in table `A6-9`
+                        let size = instr2[5..7].load::<usize>();
+                        if size == 0b11 {
                             // `UNDEFINED`
                             return Err(DecodeError::Undefined);
+                        }
+
+                        /*
+                         * trying to reorder tables a6-20, a6-19, and a6-18 to factor out operand
+                         * sizes where possible...
+                         *
+                         *  op1 |  op2 |  rn  |  rt  | size| `see`
+                         *   00 |000000|!=1111|!=1111|  00 |`LDRB (register) A8-423`
+                         *   00 |000000|!=1111|==1111|  00 |`PLD, PLDW (register) A8-529`
+                         *   00 |000000|!=1111|!=1111|  01 |`LDRH (register) A8-447`
+                         *   00 |000000|!=1111|==1111|  01 |`PLD, PLDW (register) A8-529`
+                         *   00 |000000|!=1111|------|  10 |`LDR (register, Thumb) A8-413`
+                         *
+                         *   00 |1100xx|!=1111|!=1111|  00 |`LDRB (immediate, Thumb) A8-417`
+                         *   00 |1100xx|!=1111|==1111|  00 |`PLD, PLDW (immediate) A8-525`
+                         *   00 |1100xx|!=1111|!=1111|  01 |`LDRH (immediate, Thumb) A8-441`
+                         *   00 |1100xx|!=1111|==1111|  01 |`PLD, PLDW (immediate) A8-525`
+                         *   00 |1100xx|!=1111|------|  10 |`LDR (immediate, Thumb) A8-407`
+                         *
+                         *   00 |1110xx|!=1111|------|  00 |`LDRBT A8-425`
+                         *   00 |1110xx|!=1111|------|  01 |`LDRHT A8-449`
+                         *   00 |1110xx|!=1111|------|  10 |`LDRT A8-467`
+                         *
+                         *   00 |1xx1xx|!=1111|------|  00 |`LDRB (immediate, Thumb) A8-417`
+                         *   00 |1xx1xx|!=1111|------|  01 |`LDRH (immediate, Thumb) A8-441`
+                         *   00 |1xx1xx|!=1111|------|  10 |`LDR (immediate, Thumb) A8-407`
+                         *
+                         *   01 |------|!=1111|!=1111|  00 |`LDRB (immediate, Thumb) A8-417`
+                         *   01 |------|!=1111|==1111|  00 |`PLD, PLDW (immediate) A8-525`
+                         *   01 |------|!=1111|!=1111|  01 |`LDRH (immediate, Thumb) A8-441`
+                         *   01 |------|!=1111|==1111|  01 |`PLD, PLDW (immediate) A8-525`
+                         *   01 |------|!=1111|------|  10 |`LDR (immediate, Thumb) A8-407`
+                         *
+                         *   0x |------|==1111|!=1111|  00 |`LDRB (literal) A8-421`
+                         *   0x |------|==1111|==1111|  00 |`PLD (literal) A8-527`
+                         *   0x |------|==1111|!=1111|  01 |`LDRH (literal) A8-445`
+                         *   0x |------|==1111|==1111|  01 |`PLD (literal) A8-527`
+                         *   0x |------|==1111|------|  10 |`LDR (literal) A8-411`
+                         *
+                         *   1x |------|------|------|  10 |`UNDEFINED (cite: A6.3.7)`
+                         *
+                         *   10 |000000|!=1111|!=1111|  00 |`LDRSB (register) A8-455`
+                         *   10 |000000|!=1111|!=1111|  01 |`LDRSH (register) A8-463`
+                         *   10 |000000|!=1111|==1111|  00 |`PLI (register) A8-553`
+                         *   10 |000000|!=1111|==1111|  01 |`Unallocated memory hint (treat as NOP)`
+                         *
+                         *   10 |1100xx|!=1111|!=1111|  00 |`LDRSB (immediate) A8-451`
+                         *   10 |1100xx|!=1111|==1111|  00 |`PLI (immediate, literal) A8-531`
+                         *   10 |1100xx|!=1111|!=1111|  01 |`LDRSH (immediate) A8-459`
+                         *   10 |1100xx|!=1111|==1111|  01 |`Unallocated memory hint (treat as NOP)`
+                         *
+                         *   10 |1110xx|!=1111|------|  00 |`LDRSBT A8-457`
+                         *   10 |1110xx|!=1111|------|  01 |`LDRSHT A8-465`
+                         *
+                         *   10 |1xx1xx|!=1111|------|  00 |`LDRSB (immediate) A8-451`
+                         *   10 |1xx1xx|!=1111|------|  01 |`LDRSH (immediate) A8-459`
+                         *
+                         *   11 |------|!=1111|!=1111|  00 |`LDRSB (immediate) A8-451`
+                         *   11 |------|!=1111|==1111|  00 |`PLI (immediate, literal) A8-531`
+                         *   11 |------|!=1111|!=1111|  01 |`LDRSH (immediate) A8-459`
+                         *   11 |------|!=1111|==1111|  01 |`Unallocated memory hint (treat as NOP)`
+                         *   1x |------|==1111|!=1111|  00 |`LDRSB (literal) A8-453`
+                         *   1x |------|==1111|==1111|  00 |`PLI (immediate, literal) A8-531`
+                         *   1x |------|==1111|!=1111|  01 |`LDRSH (literal) A8-461`
+                         *   1x |------|==1111|==1111|  01 |`Unallocated memory hint (treat as NOP)`
+                         */
+                        if op1 == 0b00 {
+                            // op1 == bits 7:8
+                            /*
+                             *  op1 |  op2 |  rn  |  rt  | size| `see`
+                             *   0x |------|==1111|!=1111|  00 |`LDRB (literal) A8-421`
+                             *   0x |------|==1111|==1111|  00 |`PLD (literal) A8-527`
+                             *   0x |------|==1111|!=1111|  01 |`LDRH (literal) A8-445`
+                             *   0x |------|==1111|==1111|  01 |`PLD (literal) A8-527`
+                             *   0x |------|==1111|------|  10 |`LDR (literal) A8-411`
+                             *
+                             *   00 |000000|!=1111|!=1111|  00 |`LDRB (register) A8-423`
+                             *   00 |000000|!=1111|==1111|  00 |`PLD, PLDW (register) A8-529`
+                             *   00 |000000|!=1111|!=1111|  01 |`LDRH (register) A8-447`
+                             *   00 |000000|!=1111|==1111|  01 |`PLD, PLDW (register) A8-529`
+                             *   00 |000000|!=1111|------|  10 |`LDR (register, Thumb) A8-413`
+                             *
+                             *   00 |1100xx|!=1111|!=1111|  00 |`LDRB (immediate, Thumb) A8-417`
+                             *   00 |1100xx|!=1111|==1111|  00 |`PLD, PLDW (immediate) A8-525`
+                             *   00 |1100xx|!=1111|!=1111|  01 |`LDRH (immediate, Thumb) A8-441`
+                             *   00 |1100xx|!=1111|==1111|  01 |`PLD, PLDW (immediate) A8-525`
+                             *   00 |1100xx|!=1111|------|  10 |`LDR (immediate, Thumb) A8-407`
+                             *
+                             *   00 |1110xx|!=1111|------|  00 |`LDRBT A8-425`
+                             *   00 |1110xx|!=1111|------|  01 |`LDRHT A8-449`
+                             *   00 |1110xx|!=1111|------|  10 |`LDRT A8-467`
+                             *
+                             *   00 |1xx1xx|!=1111|------|  00 |`LDRB (immediate, Thumb) A8-417`
+                             *   00 |1xx1xx|!=1111|------|  01 |`LDRH (immediate, Thumb) A8-441`
+                             *   00 |1xx1xx|!=1111|------|  10 |`LDR (immediate, Thumb) A8-407`
+                             */
+                            if rn == 0b1111 {
+                                // `(literal)`
+                                let opcode = if rt == 0b1111 {
+                                    [
+                                        Opcode::PLD,
+                                        Opcode::PLD,
+                                        Opcode::LDR,
+                                    ][size]
+                                } else {
+                                    [
+                                        Opcode::LDRB,
+                                        Opcode::LDRH,
+                                        Opcode::LDR,
+                                    ][size]
+                                };
+                                let u = false; // instr2[7], but known 0 here
+                                let imm12 = lower2[..12].load::<u16>();
+                                inst.opcode = opcode;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rt)),
+                                    Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm12, false, false), // no add, no wback
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                if op2 == 0b000000 {
+                                    // `(register, Thumb)`
+                                    let opcode = if rt == 0b1111 {
+                                        [
+                                            Opcode::PLD,
+                                            Opcode::PLD,
+                                            Opcode::LDR,
+                                        ][size]
+                                    } else {
+                                        [
+                                            Opcode::LDRB,
+                                            Opcode::LDRH,
+                                            Opcode::LDR,
+                                        ][size]
+                                    };
+                                    let rm = lower2[0..4].load::<u8>();
+                                    let imm2 = lower2[4..6].load::<u8>();
+                                    inst.opcode = opcode;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rt)),
+                                        Operand::RegDerefPreindexRegShift(
+                                            Reg::from_u8(rn),
+                                            RegShift::from_raw(
+                                                0b1000 |    // `RegImm`
+                                                rm as u16 |
+                                                ((0 /* lsl */) << 5)|
+                                                ((imm2 as u16) << 7)
+                                            ),
+                                            true,   // add
+                                            false,  // wback
+                                        ),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else if op2 & 0b111100 == 0b110000 {
+                                    // `(immediate, Thumb)`
+                                    let opcode = if rt == 0b1111 {
+                                        [
+                                            Opcode::PLD,
+                                            Opcode::PLD,
+                                            Opcode::LDR,
+                                        ][size]
+                                    } else {
+                                        [
+                                            Opcode::LDRB,
+                                            Opcode::LDRH,
+                                            Opcode::LDR,
+                                        ][size]
+                                    };
+                                    let w = lower2[8];
+                                    let u = lower2[9];
+                                    let p = lower2[10];
+                                    let imm8 = lower2[..8].load::<u16>();
+                                    inst.opcode = opcode;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rt)),
+                                        if p {
+                                            Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8, u, w)
+                                        } else {
+                                            Operand::RegDerefPostindexOffset(Reg::from_u8(rn), imm8, u, false)
+                                        },
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+
+                                } else if op2 & 0b111100 == 0b111000 {
+                                    // `(immediate, Thumb)`
+                                    let opcode = if rt == 0b1111 {
+                                        [
+                                            Opcode::PLD,
+                                            Opcode::PLD,
+                                            Opcode::LDRT,
+                                        ][size]
+                                    } else {
+                                        [
+                                            Opcode::LDRBT,
+                                            Opcode::LDRHT,
+                                            Opcode::LDRT,
+                                        ][size]
+                                    };
+                                    let w = lower2[8];
+                                    let u = lower2[9];
+                                    let p = lower2[10];
+                                    let imm8 = lower2[..8].load::<u16>();
+                                    inst.opcode = opcode;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rt)),
+                                        if p {
+                                            Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8, u, w)
+                                        } else {
+                                            Operand::RegDerefPostindexOffset(Reg::from_u8(rn), imm8, u, false)
+                                        },
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else if op2 & 0b100100 == 0b100100 {
+                                    // `(immediate, Thumb)`
+                                    let opcode = if rt == 0b1111 {
+                                        [
+                                            Opcode::PLD,
+                                            Opcode::PLD,
+                                            Opcode::LDR,
+                                        ][size]
+                                    } else {
+                                        [
+                                            Opcode::LDRB,
+                                            Opcode::LDRH,
+                                            Opcode::LDR,
+                                        ][size]
+                                    };
+                                    let w = lower2[8];
+                                    let u = lower2[9];
+                                    let p = lower2[10];
+                                    let imm8 = lower2[..8].load::<u16>();
+                                    inst.opcode = opcode;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rt)),
+                                        if p {
+                                            Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8, u, w)
+                                        } else {
+                                            Operand::RegDerefPostindexOffset(Reg::from_u8(rn), imm8, u, false)
+                                        },
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else {
+                                    // op2 =~ 0b1010xx or something?
+                                    // nothing to try decoding as for a `decoder.undefined()?`, so
+                                    // just error.
+                                    return Err(DecodeError::Undefined);
+                                }
+                            }
+                        } else if op1 == 0b01 {
+                            // op1 == bits 7:8
+                            /*
+                             *  op1 |  op2 |  rn  |  rt  | size| `see`
+                             *   0x |------|==1111|!=1111|  00 |`LDRB (literal) A8-421`
+                             *   0x |------|==1111|==1111|  00 |`PLD (literal) A8-527`
+                             *   0x |------|==1111|!=1111|  01 |`LDRH (literal) A8-445`
+                             *   0x |------|==1111|==1111|  01 |`PLD (literal) A8-527`
+                             *   0x |------|==1111|------|  10 |`LDR (literal) A8-411`
+                             *
+                             *   01 |------|!=1111|!=1111|  00 |`LDRB (immediate, Thumb) A8-417`
+                             *   01 |------|!=1111|==1111|  00 |`PLD, PLDW (immediate) A8-525`
+                             *   01 |------|!=1111|!=1111|  01 |`LDRH (immediate, Thumb) A8-441`
+                             *   01 |------|!=1111|==1111|  01 |`PLD, PLDW (immediate) A8-525`
+                             *   01 |------|!=1111|------|  10 |`LDR (immediate, Thumb) A8-407`
+                             */
+                            if rn == 0b1111 {
+                                let opcode = if rt == 0b1111 {
+                                    [
+                                        Opcode::PLD,
+                                        Opcode::PLD,
+                                        Opcode::LDR,
+                                    ][size]
+                                } else {
+                                    [
+                                        Opcode::LDRB,
+                                        Opcode::LDRH,
+                                        Opcode::LDR,
+                                    ][size]
+                                };
+                                let u = true; // instr2[7], but known 1 here
+                                let imm12 = lower2[..12].load::<u16>();
+                                inst.opcode = opcode;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rt)),
+                                    Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm12, true, false), // add, no wback
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                let opcode = if rt == 0b1111 {
+                                    [
+                                        Opcode::PLD,
+                                        Opcode::PLD,
+                                        Opcode::LDR,
+                                    ][size]
+                                } else {
+                                    [
+                                        Opcode::LDRB,   // encoding T2
+                                        Opcode::LDRH,   // encoding T2
+                                        Opcode::LDR,    // encoding T3
+                                    ][size]
+                                };
+                                let imm12 = lower2[..12].load::<u16>();
+                                inst.opcode = opcode;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rt)),
+                                    Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm12, true, false), // add, no wback
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            }
+                        } else if op1 == 0b10 {
+                            // op1 == bits 7:8
+                            if size == 0b10 {
+                                return Err(DecodeError::Undefined);
+                            }
+                            /*
+                             *  op1 |  op2 |  rn  |  rt  | size| `see`
+                             *   1x |------|------|------|  10 |`UNDEFINED (cite: A6.3.7)`
+                             *   1x |------|==1111|!=1111|  00 |`LDRSB (literal) A8-453`
+                             *   1x |------|==1111|==1111|  00 |`PLI (immediate, literal) A8-531`
+                             *   1x |------|==1111|!=1111|  01 |`LDRSH (literal) A8-461`
+                             *   1x |------|==1111|==1111|  01 |`Unallocated memory hint (treat as NOP)`
+                             *
+                             *   10 |000000|!=1111|!=1111|  00 |`LDRSB (register) A8-455`
+                             *   10 |000000|!=1111|!=1111|  01 |`LDRSH (register) A8-463`
+                             *   10 |000000|!=1111|==1111|  00 |`PLI (register) A8-553`
+                             *   10 |000000|!=1111|==1111|  01 |`Unallocated memory hint (treat as NOP)`
+                             *
+                             *   10 |1100xx|!=1111|!=1111|  00 |`LDRSB (immediate) A8-451`
+                             *   10 |1100xx|!=1111|==1111|  00 |`PLI (immediate, literal) A8-531`
+                             *   10 |1100xx|!=1111|!=1111|  01 |`LDRSH (immediate) A8-459`
+                             *   10 |1100xx|!=1111|==1111|  01 |`Unallocated memory hint (treat as NOP)`
+                             *
+                             *   10 |1110xx|!=1111|------|  00 |`LDRSBT A8-457`
+                             *   10 |1110xx|!=1111|------|  01 |`LDRSHT A8-465`
+                             *
+                             *   10 |1xx1xx|!=1111|------|  00 |`LDRSB (immediate) A8-451`
+                             *   10 |1xx1xx|!=1111|------|  01 |`LDRSH (immediate) A8-459`
+                             */
+                            if rn == 0b1111 {
+                                // (literal)
+                                let opcode = if rt == 0b1111 {
+                                    [
+                                        Opcode::PLI,
+                                        Opcode::NOP,
+                                    ][size]
+                                } else {
+                                    [
+                                        Opcode::LDRSB,
+                                        Opcode::LDRSH,
+                                    ][size]
+                                };
+                                let u = false; // instr[7] known false here
+                                let imm12 = lower2[..12].load::<u16>();
+                                inst.opcode = opcode;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rt)),
+                                    Operand::RegDerefPreindexOffset(Reg::from_u8(15), imm12, false, false), // add, no wback
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                if op2 == 0b000000 {
+                                    let opcode = if rt == 0b1111 {
+                                        [
+                                            Opcode::PLI,
+                                            Opcode::NOP,
+                                        ][size]
+                                    } else {
+                                        [
+                                            Opcode::LDRSB,  // encoding T2
+                                            Opcode::LDRSH,  // encoding T2
+                                        ][size]
+                                    };
+                                    let rm = lower2[0..4].load::<u8>();
+                                    let imm2 = lower2[4..6].load::<u8>();
+                                    inst.opcode = opcode;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rt)),
+                                        Operand::RegDerefPreindexRegShift(
+                                            Reg::from_u8(rn),
+                                            RegShift::from_raw(
+                                                0b1000 |    // `RegImm`
+                                                rm as u16 |
+                                                ((0 /* lsl */) << 5)|
+                                                ((imm2 as u16) << 7)
+                                            ),
+                                            true,   // add
+                                            false,  // wback
+                                        ),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else if op2 & 0b111100 == 0b110000 {
+                                    let opcode = if rt == 0b1111 {
+                                        [
+                                            Opcode::PLI,
+                                            Opcode::NOP,
+                                        ][size]
+                                    } else {
+                                        [
+                                            Opcode::LDRSB,  // encoding T2
+                                            Opcode::LDRSH,  // encoding T2
+                                        ][size]
+                                    };
+                                    let w = lower2[8];
+                                    let u = lower2[9];
+                                    let p = lower2[10];
+                                    let imm8 = lower2[..8].load::<u16>();
+                                    inst.opcode = opcode;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rt)),
+                                        if p {
+                                            Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8, u, w)
+                                        } else {
+                                            Operand::RegDerefPostindexOffset(Reg::from_u8(rn), imm8, u, false)
+                                        },
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else if op2 & 0b111100 == 0b111000 {
+                                    let opcode = [
+                                        Opcode::LDRSBT, // encoding T1
+                                        Opcode::LDRSHT, // encoding T1
+                                    ][size];
+                                    let imm8 = lower2[..8].load::<u16>();
+                                    inst.opcode = opcode;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rt)),
+                                        Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8, true, false), // add, no wback
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else if op2 & 0b100100 == 0b100100 {
+                                    let opcode = [
+                                        Opcode::LDRSB,  // encoding T2
+                                        Opcode::LDRSH,  // encoding T2
+                                    ][size];
+                                    let w = lower2[8];
+                                    let u = lower2[9];
+                                    let p = lower2[10];
+                                    let imm8 = lower2[..8].load::<u16>();
+                                    inst.opcode = opcode;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rt)),
+                                        if p {
+                                            Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8, u, w)
+                                        } else {
+                                            Operand::RegDerefPostindexOffset(Reg::from_u8(rn), imm8, u, false)
+                                        },
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else {
+                                    // op2 =~ 0b1010xx or something?
+                                    // nothing to try decoding as for a `decoder.undefined()?`, so
+                                    // just error.
+                                    return Err(DecodeError::Undefined);
+                                }
+                            }
+                        } else {
+                            // op1 == bits 7:8
+                            if size == 0b10 {
+                                return Err(DecodeError::Undefined);
+                            }
+                            // op1 == 0b11
+                            /*
+                             *   1x |------|------|------|  10 |`UNDEFINED (cite: A6.3.7)`
+                             *   1x |------|==1111|!=1111|  00 |`LDRSB (literal) A8-453`
+                             *   1x |------|==1111|==1111|  00 |`PLI (immediate, literal) A8-531`
+                             *   1x |------|==1111|!=1111|  01 |`LDRSH (literal) A8-461`
+                             *   1x |------|==1111|==1111|  01 |`Unallocated memory hint (treat as NOP)`
+                             *
+                             *   11 |------|!=1111|!=1111|  00 |`LDRSB (immediate) A8-451`
+                             *   11 |------|!=1111|==1111|  00 |`PLI (immediate, literal) A8-531`
+                             *   11 |------|!=1111|!=1111|  01 |`LDRSH (immediate) A8-459`
+                             *   11 |------|!=1111|==1111|  01 |`Unallocated memory hint (treat as NOP)`
+                             */
+                            if rn == 0b1111 {
+                                // (literal)
+                                let opcode = if rt == 0b1111 {
+                                    [
+                                        Opcode::PLI,
+                                        Opcode::NOP,
+                                    ][size]
+                                } else {
+                                    [
+                                        Opcode::LDRSB,
+                                        Opcode::LDRSH,
+                                    ][size]
+                                };
+                                let u = true; // instr[7] known true here
+                                let imm12 = lower2[..12].load::<u16>();
+                                inst.opcode = opcode;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rt)),
+                                    Operand::RegDerefPreindexOffset(Reg::from_u8(15), imm12, u, false), // add, no wback
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                // (immediate)
+                                let opcode = if rt == 0b1111 {
+                                    [
+                                        Opcode::PLI,
+                                        Opcode::NOP,
+                                    ][size]
+                                } else {
+                                    [
+                                        Opcode::LDRSB,  // encoding T1
+                                        Opcode::LDRSH,  // encoding T1
+                                    ][size]
+                                };
+                                let imm12 = lower2[..12].load::<u16>();
+                                inst.opcode = opcode;
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(rt)),
+                                    Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm12, true, false), // add, no wback
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            }
                         }
                     }
                 } else {

@@ -463,6 +463,8 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
 
             Opcode::HINT |
             Opcode::NOP |
+            Opcode::PLD |
+            Opcode::PLI |
             Opcode::ISB |
             Opcode::DMB |
             Opcode::DSB |
@@ -664,6 +666,8 @@ impl Display for Opcode {
             Opcode::BFI => { write!(f, "bfi") },
             Opcode::BFC => { write!(f, "bfc") },
             Opcode::DBG => { write!(f, "dbg") },
+            Opcode::PLD => { write!(f, "pld") },
+            Opcode::PLI => { write!(f, "pli") },
         }
     }
 }
@@ -825,6 +829,8 @@ pub enum Opcode {
     BFI,
     BFC,
     DBG,
+    PLD,
+    PLI,
 }
 
 static DATA_PROCESSING_OPCODES: [Opcode; 16] = [
