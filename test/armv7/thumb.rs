@@ -1,8 +1,9 @@
-use yaxpeax_arch::{Arch, Decoder, LengthedInstruction};
-use yaxpeax_arm::armv7::{ARMv7, Instruction, ConditionCode, DecodeError, Operand, Opcode, Reg, RegShift};
+use yaxpeax_arch::{Arch, Decoder};
+use yaxpeax_arm::armv7::{ARMv7, Instruction};
 
 type InstDecoder = <ARMv7 as Arch>::Decoder;
 
+#[allow(dead_code)]
 fn test_invalid_under(decoder: &InstDecoder, data: &[u8]) {
     match decoder.decode(data.to_vec()) {
         Err(_) => { },
@@ -16,6 +17,7 @@ fn test_invalid_under(decoder: &InstDecoder, data: &[u8]) {
     }
 }
 
+#[allow(dead_code)]
 fn test_display_under(decoder: &InstDecoder, data: [u8; 4], expected: &'static str) {
     let instr = decoder.decode(data.to_vec()).unwrap_or_else(|_| panic!("failed to decode {:#x?}", data));
     let displayed = format!("{}", instr);
@@ -27,6 +29,7 @@ fn test_display_under(decoder: &InstDecoder, data: [u8; 4], expected: &'static s
     );
 }
 
+#[allow(dead_code)]
 fn test_decode(data: &[u8], expected: Instruction) {
     let instr = InstDecoder::default_thumb().decode(data.to_vec()).unwrap();
     assert!(
@@ -37,6 +40,7 @@ fn test_decode(data: &[u8], expected: Instruction) {
     );
 }
 
+#[allow(dead_code)]
 fn test_invalid(data: &[u8]) {
    test_invalid_under(&InstDecoder::default(), data);
 }
@@ -3949,5 +3953,92 @@ fn test_decode_arithmetic_32b_cases() {
     test_display(
         &[0xd3, 0xf5, 0x7e, 0x5a],
         "rsbs.w r10, r3, 0x3f80"
+    );
+}
+#[ignore]
+#[test]
+fn test_decode_simd_32b_cases() {
+    test_display(
+        &[0x13, 0xed, 0x7e, 0x5a],
+        "vldr s10, [r3, -0x1f8]"
+    );
+    test_display(
+        &[0x53, 0xed, 0x7e, 0x5a],
+        "vldr s11, [r3, -0x1f8]"
+    );
+    test_display(
+        &[0x93, 0xed, 0x7e, 0x5a],
+        "vldr s10, [r3, 0x1f8]"
+    );
+    test_display(
+        &[0xd3, 0xed, 0x7e, 0x5a],
+        "vldr s11, [r3, 0x1f8]"
+    );
+
+    test_display(
+        &[0x03, 0xed, 0x7e, 0x5a],
+        "vstr s10, [r3, -0x1f8]"
+    );
+    test_display(
+        &[0x43, 0xed, 0x7e, 0x5a],
+        "vstr s11, [r3, -0x1f8]"
+    );
+    test_display(
+        &[0x83, 0xed, 0x7e, 0x5a],
+        "vstr s10, [r3, 0x1f8]"
+    );
+    test_display(
+        &[0xc3, 0xed, 0x7e, 0x5a],
+        "vstr s11, [r3, 0x1f8]"
+    );
+
+    test_display(
+        &[0x93, 0xec, 0x7e, 0x5a],
+        "vldmia r3, {s10, s11, s12, s13, s14, s15, s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31}"
+    );
+    test_display(
+        &[0xb3, 0xec, 0x7e, 0x5a],
+        "vldmia r3!, {s10, s11, s12, s13, s14, s15, s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31}"
+    );
+    test_display(
+        &[0xd3, 0xec, 0x7e, 0x5a],
+        "vldmia r3, {s11, s12, s13, s14, s15, s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31}"
+    );
+    test_display(
+        &[0xf3, 0xec, 0x7e, 0x5a],
+        "vldmia r3!, {s11, s12, s13, s14, s15, s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31}"
+    );
+    test_display(
+        &[0x33, 0xed, 0x7e, 0x5a],
+        "vldmdb r3!, {s10, s11, s12, s13, s14, s15, s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31}"
+    );
+    test_display(
+        &[0x73, 0xed, 0x7e, 0x5a],
+        "vldmdb r3!, {s11, s12, s13, s14, s15, s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31}"
+    );
+
+    test_display(
+        &[0x83, 0xec, 0x7e, 0x5a],
+        "vstmia r3, {s10, s11, s12, s13, s14, s15, s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31}"
+    );
+    test_display(
+        &[0xa3, 0xec, 0x7e, 0x5a],
+        "vstmia r3!, {s10, s11, s12, s13, s14, s15, s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31}"
+    );
+    test_display(
+        &[0xc3, 0xec, 0x7e, 0x5a],
+        "vstmia r3, {s11, s12, s13, s14, s15, s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31}"
+    );
+    test_display(
+        &[0xe3, 0xec, 0x7e, 0x5a],
+        "vstmia r3!, {s11, s12, s13, s14, s15, s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31}"
+    );
+    test_display(
+        &[0x23, 0xed, 0x7e, 0x5a],
+        "vstmdb r3!, {s10, s11, s12, s13, s14, s15, s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31}"
+    );
+    test_display(
+        &[0x63, 0xed, 0x7e, 0x5a],
+        "vstmdb r3!, {s11, s12, s13, s14, s15, s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31}"
     );
 }

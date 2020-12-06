@@ -1,5 +1,3 @@
-use std::fmt;
-
 // use yaxpeax_arch::{Arch, AddressDiff, Decoder, LengthedInstruction};
 
 use armv7::ConditionCode;
