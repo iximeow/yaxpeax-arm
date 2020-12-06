@@ -9,6 +9,7 @@ description = "arm decoders for the yaxpeax project"
 
 [dependencies]
 yaxpeax-arch = { version = "0.0.4", default-features = false, features = [] }
+bitvec = "0.19"
 "serde" = { version = "1.0", optional = true }
 "serde_derive" = { version = "1.0", optional = true }
 
