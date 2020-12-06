@@ -3029,8 +3029,279 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                         if op2[3] {
                             // `Long multiply, long multiply accumulate, and divide` (`A6-248`)
                             return Err(DecodeError::Incomplete);
+                            let op1 = instr2[4..7].load::<usize>();
+                            let op2 = lower2[4..8].load::<usize>();
+
+                            let rn = instr2[0..4].load::<u8>();
+                            let rdlo = lower2[12..16].load::<u8>();
+                            let rd = lower2[8..12].load::<u8>();
+                            let rm = lower2[0..4].load::<u8>();
+
+                            match op1 {
+                                0b000 => {
+                                    if op2 == 0b0000 {
+                                        inst.opcode = Opcode::SMULL;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rdlo)),
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rn)),
+                                            Operand::Reg(Reg::from_u8(rm)),
+                                        ];
+                                    } else {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                }
+                                0b001 => {
+                                    if op2 == 0b1111 {
+                                        inst.opcode = Opcode::SDIV;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rn)),
+                                            Operand::Reg(Reg::from_u8(rm)),
+                                            Operand::Nothing,
+                                        ];
+                                    } else {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                }
+                                0b010 => {
+                                    if op2 == 0b0000 {
+                                        inst.opcode = Opcode::UMULL;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rdlo)),
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rn)),
+                                            Operand::Reg(Reg::from_u8(rm)),
+                                        ];
+                                    } else {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                }
+                                0b011 => {
+                                    if op2 == 0b1111 {
+                                        inst.opcode = Opcode::UDIV;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rn)),
+                                            Operand::Reg(Reg::from_u8(rm)),
+                                            Operand::Nothing,
+                                        ];
+                                    } else {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                }
+                                0b100 => {
+                                    if op2 == 0b0000 {
+                                        inst.opcode = Opcode::SMLAL;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rdlo)),
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rn)),
+                                            Operand::Reg(Reg::from_u8(rm)),
+                                        ];
+                                    } else if op2 & 0b1100 == 0b1000 {
+                                        inst.opcode = Opcode::SMLAL_halfword(lower2[5], lower2[4]);
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rdlo)),
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rn)),
+                                            Operand::Reg(Reg::from_u8(rm)),
+                                        ];
+                                    } else if op2 & 0b1110 == 0b1100 {
+                                        inst.opcode = Opcode::SMLALD(lower2[4]);
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rdlo)),
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rn)),
+                                            Operand::Reg(Reg::from_u8(rm)),
+                                        ];
+                                    } else {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                }
+                                0b101 => {
+                                    if op2 == 0b1100 || op2 == 0b1101 {
+                                        inst.opcode = Opcode::SMLSLD(lower2[4]);
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rdlo)),
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rn)),
+                                            Operand::Reg(Reg::from_u8(rm)),
+                                        ];
+                                    } else {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                }
+                                0b110 => {
+                                    if op2 == 0b0000 {
+                                        inst.opcode = Opcode::UMLAL;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rdlo)),
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rn)),
+                                            Operand::Reg(Reg::from_u8(rm)),
+                                        ];
+                                    } else if op2 == 0b0110 {
+                                        inst.opcode = Opcode::UMAAL;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rdlo)),
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rn)),
+                                            Operand::Reg(Reg::from_u8(rm)),
+                                        ];
+                                    } else {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                }
+                                _ => {
+                                    return Err(DecodeError::InvalidOpcode);
+                                }
+                            }
                         } else {
                             // `Multiply, multiply accumulate, and absolute difference` (`A6-247`)
+                            let op1 = instr2[4..7].load::<usize>();
+                            let op2 = lower2[4..6].load::<usize>();
+                            let rm = lower2[0..4].load::<u8>();
+                            let rd = lower2[8..12].load::<u8>();
+                            let ra = lower2[12..16].load::<u8>();
+                            let rn = instr2[0..4].load::<u8>();
+
+                            if ra == 0b1111 {
+                                if op1 == 0b000 {
+                                    if op2 == 0b00 {
+                                        inst.opcode = Opcode::MUL;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rn)),
+                                            Operand::Reg(Reg::from_u8(rm)),
+                                            Operand::Nothing,
+                                        ];
+                                    } else if op2 == 0b01{
+                                        inst.opcode = Opcode::MLS;
+                                        // a == 15, unpredictable
+                                        decoder.unpredictable()?;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rn)),
+                                            Operand::Reg(Reg::from_u8(rm)),
+                                            Operand::Reg(Reg::from_u8(ra)),
+                                        ];
+                                    } else {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+
+                                } else if op1 == 0b001 {
+                                    // `SMULBB, SMULBT, SMULTB, SMULTT on page A8-645`
+                                    inst.opcode = Opcode::SMUL(lower2[5], lower2[4]);
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        Operand::Reg(Reg::from_u8(rn)),
+                                        Operand::Reg(Reg::from_u8(rm)),
+                                        Operand::Nothing,
+                                    ];
+                                } else if op1 == 0b011 {
+                                    if op2 >= 0b10 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                    inst.opcode = Opcode::SMULW(lower2[4]);
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        Operand::Reg(Reg::from_u8(rn)),
+                                        Operand::Reg(Reg::from_u8(rm)),
+                                        Operand::Nothing,
+                                    ];
+                                } else {
+                                    if op2 >= 0b10 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                    if op1 == 0b111 && op2 == 0b00 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                    if op1 == 0b110 {
+                                        decoder.unpredictable()?;
+                                    }
+                                    inst.opcode = [
+                                        Opcode::MUL, // already handled
+                                        Opcode::UDF, // already handled
+                                        Opcode::SMUAD,
+                                        Opcode::UDF, // already handled
+                                        Opcode::SMUSD,
+                                        Opcode::SMMUL,
+                                        Opcode::SMMLS,
+                                        Opcode::USAD8,
+                                    ][op1];
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        Operand::Reg(Reg::from_u8(rn)),
+                                        Operand::Reg(Reg::from_u8(rm)),
+                                        Operand::Nothing,
+                                    ];
+                                }
+                            } else {
+                                if op1 == 0b000 {
+                                    if op2 == 0b00 {
+                                        inst.opcode = Opcode::MLA;
+                                    } else if op2 == 0b01{
+                                        inst.opcode = Opcode::MLS;
+                                    } else {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        Operand::Reg(Reg::from_u8(rn)),
+                                        Operand::Reg(Reg::from_u8(rm)),
+                                        Operand::Reg(Reg::from_u8(ra)),
+                                    ];
+                                } else if op1 == 0b001 {
+                                    // `SMULBB, SMULBT, SMULTB, SMULTT on page A8-645`
+                                    inst.opcode = Opcode::SMLA(lower2[5], lower2[4]);
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        Operand::Reg(Reg::from_u8(rn)),
+                                        Operand::Reg(Reg::from_u8(rm)),
+                                        Operand::Reg(Reg::from_u8(ra)),
+                                    ];
+                                } else if op1 == 0b011 {
+                                    if op2 >= 0b10 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                    inst.opcode = Opcode::SMLAW(lower2[4]);
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        Operand::Reg(Reg::from_u8(rn)),
+                                        Operand::Reg(Reg::from_u8(rm)),
+                                        Operand::Reg(Reg::from_u8(ra)),
+                                    ];
+                                } else {
+                                    if op2 >= 0b10 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                    if op1 == 0b111 && op2 == 0b00 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                    if op1 == 0b110 {
+                                        decoder.unpredictable()?;
+                                    }
+                                    inst.opcode = [
+                                        Opcode::MUL, // already handled
+                                        Opcode::UDF, // already handled
+                                        Opcode::SMLAD,
+                                        Opcode::UDF, // already handled
+                                        Opcode::SMLSD,
+                                        Opcode::SMMLA,
+                                        Opcode::SMMLS,
+                                        Opcode::USADA8,
+                                    ][op1];
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        Operand::Reg(Reg::from_u8(rn)),
+                                        Operand::Reg(Reg::from_u8(rm)),
+                                        Operand::Reg(Reg::from_u8(ra)),
+                                    ];
+                                }
+
+                            }
                             return Err(DecodeError::Incomplete);
                         }
                     }

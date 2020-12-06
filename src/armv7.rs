@@ -410,6 +410,20 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
             Opcode::MLS |
             Opcode::UMULL |
             Opcode::UMLAL |
+            Opcode::SMLSD |
+            Opcode::SMMLA |
+            Opcode::SMMLS |
+            Opcode::USADA8 |
+            Opcode::USAD8 |
+            Opcode::SDIV |
+            Opcode::UDIV |
+            Opcode::SMLALD(_) |
+            Opcode::SMLSLD(_) |
+            Opcode::SMLAD |
+            Opcode::SMUSD |
+            Opcode::SMMUL |
+            Opcode::SMULW(_) |
+            Opcode::SMUAD |
             Opcode::SMULL |
             Opcode::SMUL(_, _) |
             Opcode::SMAL(_, _) |
@@ -628,6 +642,8 @@ impl Display for Opcode {
             Opcode::STRBT => { write!(f, "strbt") },
             Opcode::SWP => { write!(f, "swp") },
             Opcode::SWPB => { write!(f, "swpb") },
+            Opcode::SDIV => { write!(f, "sdiv") },
+            Opcode::UDIV => { write!(f, "udiv") },
             Opcode::MUL => { write!(f, "mul") },
             Opcode::MLA => { write!(f, "mla") },
             Opcode::UMAAL => { write!(f, "umaal") },
@@ -651,6 +667,24 @@ impl Display for Opcode {
             Opcode::SMLAW(second) => {
                 write!(f, "smlaw{}", if *second { "t" } else { "b" })
             },
+            Opcode::SMULW(second) => {
+                write!(f, "smulw{}", if *second { "t" } else { "b" })
+            },
+            Opcode::SMLALD(second) => {
+                write!(f, "smlald{}", if *second { "t" } else { "b" })
+            },
+            Opcode::SMLSLD(second) => {
+                write!(f, "smlsld{}", if *second { "t" } else { "b" })
+            },
+            Opcode::SMLSD => { write!(f, "smlsd") },
+            Opcode::SMMLA => { write!(f, "smmla") },
+            Opcode::SMMLS => { write!(f, "smmls") },
+            Opcode::USADA8 => { write!(f, "usada8") },
+            Opcode::USAD8 => { write!(f, "usad8") },
+            Opcode::SMLAD => { write!(f, "smlad") },
+            Opcode::SMUSD => { write!(f, "smusd") },
+            Opcode::SMMUL => { write!(f, "smmul") },
+            Opcode::SMUAD => { write!(f, "smuad") },
             Opcode::TBB => { write!(f, "tbb") },
             Opcode::TBH => { write!(f, "tbh") },
             Opcode::UDF => { write!(f, "udf") },
@@ -941,6 +975,21 @@ pub enum Opcode {
     USUB8,
     UQSUB8,
     UHSUB8,
+
+    SMLSD,
+    SMMLA,
+    SMMLS,
+    USADA8,
+    USAD8,
+    SMLAD,
+    SMUSD,
+    SMMUL,
+    SMULW(bool),
+    SMUAD,
+    SDIV,
+    UDIV,
+    SMLALD(bool),
+    SMLSLD(bool),
 }
 
 static DATA_PROCESSING_OPCODES: [Opcode; 16] = [
