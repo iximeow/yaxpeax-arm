@@ -128,10 +128,11 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
 
         if opword < 0b11110 {
             // op1 == 0b01
+            // interpret `op1 == 0b01` lines of table `A6-9`
             if !op2[6] {
                 // `op2` is `0b00.. ` or `0b01..`
                 if !op2[5] {
-                    // `Load/store`, either `multiple` or `dual`
+                    // `op2` is `00xxxxx`, and is `Load/store`, either `multiple` or `dual`
                     let rn = instr2[..4].load::<u8>();
                     // TODO: double check
                     if op2[2] {
@@ -696,9 +697,10 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                         }
                     }
                 } else {
+                    // op2 is `01xxxxx` and is:
                     // `Data-processing (shfited register)` (`A6-241`)
                     // v6T2
-                    let op = op2[0..4].load::<u8>();
+                    let op = op2[1..5].load::<u8>();
                     let s = instr2[4];
                     let rn = instr2[0..4].load::<u8>();
                     let rd = lower2[8..12].load::<u8>();
@@ -1179,8 +1181,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                     // v6T2
                     let op = instr2[4..9].load::<u8>();
                     let i = instr2[10..11].load::<u16>();
-                    let s = instr2[4];
-                    inst.s = s;
+                    inst.s = false;
                     let rn = instr2[0..4].load::<u8>();
                     let imm3 = lower2[12..15].load::<u16>();
                     let rd = lower2[8..12].load::<u8>();
@@ -1192,6 +1193,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                             if rn != 0b1111 {
                                 // `ADD` (`A8-304`)
                                 // v6T2
+                                // encoding T4
                                 inst.opcode = Opcode::ADD;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -1226,6 +1228,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                             if rn != 0b1111 {
                                 // `SUB` (`A8-709`)
                                 // v6T2
+                                // encoding T4
                                 inst.opcode = Opcode::SUB;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
