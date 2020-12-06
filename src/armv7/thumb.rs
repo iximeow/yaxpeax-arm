@@ -90,7 +90,7 @@ fn DecodeImmShift(reg: u8, ty: u8, imm5: u8) -> RegShift {
         }
     };
     RegShift::from_raw(
-        0b1000 |    // `RegImm`
+        0b00000 |    // `RegImm`
         reg as u16 |
         ((ty as u16) << 5)|
         ((imm as u16) << 7)
@@ -365,7 +365,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                                                 // want `<Rm>, LSL #1`, construct a raw shift
                                                 // ourselves
                                                 RegShift::from_raw(
-                                                    0b1000 |        // `RegImm`
+                                                    0b10000 |        // `RegImm`
                                                     rd as u16 |            // reg == rd
                                                     (0b00 << 5) |   // LSL
                                                     (1 << 7)        // shift == #1
@@ -709,7 +709,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                     let rm = lower2[0..4].load::<u16>();
 
                     let shift = RegShift::from_raw(
-                        0b1000 | // reg-imm shift. TODO: probably need to change the const
+                        0b00000 | // reg-imm shift. TODO: probably need to change the const
                         rm as u16 |
                         (imm2 << 7) | (imm3 << 9) |
                         tp << 5
@@ -1921,7 +1921,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                                                 Reg::from_u8(rn),
                                                 RegShift::from_raw(
                                                     // do things
-                                                    0b0000 |        // imm shift
+                                                    0b00000 |       // imm shift
                                                     (imm2 << 7) |   // imm
                                                     rm as u16 |            // shiftee
                                                     (0b00 << 5) // shift style (lsl)
@@ -2008,7 +2008,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                                                 Reg::from_u8(rn),
                                                 RegShift::from_raw(
                                                     // do things
-                                                    0b0000 |        // imm shift
+                                                    0b00000 |       // imm shift
                                                     (imm2 << 7) |   // imm
                                                     rm as u16 |            // shiftee
                                                     (0b00 << 5) // shift style (lsl)
@@ -2094,7 +2094,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                                                 Reg::from_u8(rn),
                                                 RegShift::from_raw(
                                                     // do things
-                                                    0b0000 |        // imm shift
+                                                    0b00000 |       // imm shift
                                                     (imm2 << 7) |   // imm
                                                     rm as u16 |            // shiftee
                                                     (0b00 << 5) // shift style (lsl)
@@ -2337,7 +2337,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                                         Operand::RegDerefPreindexRegShift(
                                             Reg::from_u8(rn),
                                             RegShift::from_raw(
-                                                0b1000 |    // `RegImm`
+                                                0b00000 |    // `RegImm`
                                                 rm as u16 |
                                                 ((0 /* lsl */) << 5)|
                                                 ((imm2 as u16) << 7)
@@ -2580,7 +2580,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                                         Operand::RegDerefPreindexRegShift(
                                             Reg::from_u8(rn),
                                             RegShift::from_raw(
-                                                0b1000 |    // `RegImm`
+                                                0b00000 |    // `RegImm`
                                                 rm as u16 |
                                                 ((0 /* lsl */) << 5)|
                                                 ((imm2 as u16) << 7)

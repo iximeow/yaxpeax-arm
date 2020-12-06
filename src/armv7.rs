@@ -860,8 +860,7 @@ pub struct RegShift {
 
 impl RegShift {
     fn into_shift(&self) -> RegShiftStyle {
-        // TODO: is this mask really off by one. should it be 0b10000??
-        if self.data & 0b1000 == 0 {
+        if self.data & 0b10000 == 0 {
             RegShiftStyle::RegImm(RegImmShift { data: self.data })
         } else {
             RegShiftStyle::RegReg(RegRegShift { data: self.data })
