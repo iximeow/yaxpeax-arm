@@ -175,9 +175,6 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
                     _ => { unreachable!(); }
                 }
             },
-            Opcode::Incomplete(word) => {
-                write!(out, "incomplete: {:#x}", word)
-            },
             Opcode::STC2L(coproc) => {
                 write!(out, "stc2l p{}", coproc)?;
                 let ops = self.operands.iter();
@@ -331,7 +328,6 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
 impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color, Y> for ConditionedOpcode {
     fn colorize(&self, colors: &Y, out: &mut T) -> fmt::Result {
         match self.0 {
-            Opcode::Incomplete(_) |
             Opcode::UDF |
             Opcode::Invalid => { write!(out, "{}", colors.invalid_op(self)) },
             Opcode::TBB |
@@ -528,7 +524,6 @@ impl Display for Opcode {
             Opcode::QSUB => { write!(f, "qsub") },
             Opcode::QDADD => { write!(f, "qdadd") },
             Opcode::QDSUB => { write!(f, "qdsub") },
-            Opcode::Incomplete(word) => { write!(f, "incomplete: {:#x}", word) },
             Opcode::Invalid => { write!(f, "invalid") },
             Opcode::POP => { write!(f, "pop") },
             Opcode::PUSH => { write!(f, "push") },
@@ -675,7 +670,6 @@ impl Display for Opcode {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
 pub enum Opcode {
-    Incomplete(u32),
     Invalid,
     /*
      * These two don't really have direct encodings, but are for the specific instances
@@ -2022,7 +2016,7 @@ impl Decoder<Instruction> for InstDecoder {
             } else {
                 // op1=0xxxxxxx, "Memory hints, Advanced SIMD instructions, and miscellaneous
                 // instructions on pge A5-215"
-                inst.opcode = Opcode::Incomplete(word);
+                return Err(DecodeError::Incomplete);
             }
             return Ok(());
         } else {
@@ -3429,8 +3423,7 @@ impl Decoder<Instruction> for InstDecoder {
                 // coprocessor instructions and supervisor call
                 // page A5-213
                 // low bit of 0b110 or 0b111 corresponds to high bit of op1
-                inst.opcode = Opcode::Incomplete(word);
-                return Ok(());
+                return Err(DecodeError::Incomplete);
             },
             _ => { unreachable!(); }
         }

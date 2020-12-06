@@ -2947,7 +2947,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                 }
                 0b100 => {
                     /* MOV on page A8-485 */
-
                     let imm8 = instr2[0..8].load::<u32>();
                     let rd = instr2[8..11].load::<u8>();
                     inst.opcode = Opcode::MOV;
