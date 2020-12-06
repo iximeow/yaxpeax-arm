@@ -23,31 +23,31 @@ fn ROR_C(x: u32, shift: u16) -> (u32, bool) {
 }
 
 #[allow(non_snake_case)]
-fn ThumbExpandImm_C(imm: u16) -> u32 {
+fn ThumbExpandImm_C(imm: u16) -> Result<u32, DecodeError> {
     if imm & 0b1100_0000_0000 == 0 {
         let ty = (imm >> 8) & 0b11;
         let imm_low = (imm & 0b11111111) as u32;
         match ty {
             0b00 => {
-                imm_low
+                Ok(imm_low)
             }
             0b01 => {
                 if imm_low == 0 {
-                    panic!("unpredictable");
+                    return Err(DecodeError::Unpredictable);
                 }
-                (imm_low << 16) | imm_low
+                Ok((imm_low << 16) | imm_low)
             }
             0b10 => {
                 if imm_low == 0 {
-                    panic!("unpredictable");
+                    return Err(DecodeError::Unpredictable);
                 }
-                (imm_low << 24) | (imm_low << 8)
+                Ok((imm_low << 24) | (imm_low << 8))
             }
             0b11 => {
                 if imm_low == 0 {
-                    panic!("unpredictable");
+                    return Err(DecodeError::Unpredictable);
                 }
-                (imm_low << 24) | (imm_low << 16) | (imm_low << 8) | imm_low
+                Ok((imm_low << 24) | (imm_low << 16) | (imm_low << 8) | imm_low)
             }
             _ => {
                 unreachable!("impossible bit pattern");
@@ -58,7 +58,7 @@ fn ThumbExpandImm_C(imm: u16) -> u32 {
         let rot = (imm >> 7) & 0b11111;
         // TODO: figure out what to do with carry_out
         let (imm32, _carry_out) = ROR_C(unrotated_value, rot);
-        imm32
+        Ok(imm32)
     }
 }
 
@@ -1049,7 +1049,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
 
                     inst.s = s;
 
-                    let imm = ThumbExpandImm_C(imm);
+                    let imm = ThumbExpandImm_C(imm)?;
 
                     match op {
                         0b0000 => {
