@@ -1591,14 +1591,42 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                                 if op1 != 0b000 {
                                     // `CPS (Thumb)` (`B9-1964`)
                                     // v6T2
-                                    let _mode = lower & 0b11111;
-                                    let _aif = (lower >> 5) & 0b111;
-                                    let _m = (lower >> 8) & 1;
-                                    let _imod = (lower >> 9) & 0b11;
-                                    // TODO: no CPS instruction? yet?
-                                    eprintln!("cps support is not complete");
-                                    return Err(DecodeError::Incomplete);
-                                    // inst.opcode = Opcode::CPS;
+                                    // encoding T2
+                                    let mode = lower2[0..5].load::<u16>();
+                                    let m = lower2[8];
+                                    let aif = lower2[5..8].load::<u16>();
+                                    let imod = lower2[9..11].load::<u8>();
+
+                                    if !m && imod == 0b00 {
+                                        // unreachable; would be a hint
+                                    }
+                                    if !m && mode != 0 {
+                                        decoder.unpredictable()?;
+                                    }
+                                    if imod < 0b10 {
+                                        if imod == 0b01 {
+                                            decoder.unpredictable()?;
+                                        }
+                                        inst.opcode = Opcode::CPS_modeonly;
+                                        inst.operands = [
+                                            Operand::Imm12(mode),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    } else {
+                                        inst.opcode = Opcode::CPS(imod == 0b11);
+                                        inst.operands = [
+                                            Operand::Imm12(aif),
+                                            if m {
+                                                Operand::Imm12(mode)
+                                            } else {
+                                                Operand::Nothing
+                                            },
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    }
                                 } else {
                                     if op2 >= 0b11110000 {
                                         // `DBG` (`A8-378`)
@@ -2385,7 +2413,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                                 inst.opcode = opcode;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rt)),
-                                    Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm12, false, false), // no add, no wback
+                                    Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm12, u, false), // no add, no wback
                                     Operand::Nothing,
                                     Operand::Nothing,
                                 ];
@@ -2557,7 +2585,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                                 inst.opcode = opcode;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rt)),
-                                    Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm12, true, false), // add, no wback
+                                    Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm12, u, false), // add, no wback
                                     Operand::Nothing,
                                     Operand::Nothing,
                                 ];
@@ -2631,7 +2659,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                                 inst.opcode = opcode;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rt)),
-                                    Operand::RegDerefPreindexOffset(Reg::from_u8(15), imm12, false, false), // add, no wback
+                                    Operand::RegDerefPreindexOffset(Reg::from_u8(15), imm12, u, false), // add, no wback
                                     Operand::Nothing,
                                     Operand::Nothing,
                                 ];
@@ -2842,7 +2870,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                                     ][op1];
 
                                     let rm = lower2[..4].load::<u8>();
-                                    let rotate = lower2[1..3].load::<u8>() << 2;;
+                                    let rotate = lower2[1..3].load::<u8>() << 2;
                                     let rd = lower2[8..12].load::<u8>();
 
                                     inst.opcode = op;
@@ -2863,7 +2891,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                                     ][op1];
 
                                     let rm = lower2[..4].load::<u8>();
-                                    let rotate = lower2[1..3].load::<u8>() << 2;;
+                                    let rotate = lower2[1..3].load::<u8>() << 2;
                                     let rd = lower2[8..12].load::<u8>();
 
                                     inst.opcode = op;

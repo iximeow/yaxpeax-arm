@@ -94,14 +94,18 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
             }
             Opcode::CPS(_) => {
                 if let Operand::Imm12(aif) = &self.operands[0] {
-                    return write!(
+                    write!(
                         out,
                         "{} {}{}{}",
                         &self.opcode,
                         if aif & 0b100 != 0 { "a" } else { "" },
                         if aif & 0b010 != 0 { "i" } else { "" },
                         if aif & 0b001 != 0 { "f" } else { "" },
-                    );
+                    )?;
+                    if let Operand::Imm12(mode) = &self.operands[1] {
+                       write!(out, ", #{:x}", mode)?;
+                    }
+                    return Ok(());
                 } else {
                     panic!("impossible cps operand");
                 }
@@ -136,7 +140,7 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
             Opcode::LDM(true, false, false, _usermode) => {
                 // TODO: what indicates usermode in the ARM syntax?
                 match self.operands {
-                    [Operand::RegWBack(Reg { bits: 13 }, wback), Operand::RegList(list), Operand::Nothing, Operand::Nothing] => {
+                    [Operand::RegWBack(Reg { bits: 13 }, true), Operand::RegList(list), Operand::Nothing, Operand::Nothing] => {
                         ConditionedOpcode(Opcode::POP, self.s(), self.w(), self.condition).colorize(colors, out)?;
                         write!(out, " ")?;
                         return format_reg_list(out, list, colors);
@@ -147,7 +151,7 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
             Opcode::STM(false, true, false, _usermode) => {
                 // TODO: what indicates usermode in the ARM syntax?
                 match self.operands {
-                    [Operand::RegWBack(Reg { bits: 13 }, wback), Operand::RegList(list), Operand::Nothing, Operand::Nothing] => {
+                    [Operand::RegWBack(Reg { bits: 13 }, true), Operand::RegList(list), Operand::Nothing, Operand::Nothing] => {
                         ConditionedOpcode(Opcode::PUSH, self.s(), self.w(), self.condition).colorize(colors, out)?;
                         write!(out, " ")?;
                         return format_reg_list(out, list, colors);
@@ -575,6 +579,7 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
 
             Opcode::DBG |
             Opcode::CPS(_) |
+            Opcode::CPS_modeonly |
             Opcode::SETEND |
             Opcode::ENTERX |
             Opcode::LEAVEX |
@@ -782,6 +787,7 @@ impl Display for Opcode {
             Opcode::CBNZ => { write!(f, "cbnz") },
             Opcode::SETEND => { write!(f, "setend") },
             Opcode::CPS(disable) => { write!(f, "cps{}", if *disable { "id" } else { "ie" }) },
+            Opcode::CPS_modeonly => { write!(f, "cps") },
             Opcode::REV => { write!(f, "rev") },
             Opcode::REV16 => { write!(f, "rev16") },
             Opcode::REVSH => { write!(f, "revsh") },
@@ -987,6 +993,7 @@ pub enum Opcode {
     CBNZ,
     SETEND,
     CPS(bool),
+    CPS_modeonly,
     REV,
     REV16,
     REVSH,
