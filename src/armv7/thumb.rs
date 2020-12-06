@@ -817,6 +817,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                             } else {
                                 // `ORN` (`A8-515`)
                                 // v6T2
+                                inst.set_w(false);
                                 inst.opcode = Opcode::ORN;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -939,6 +940,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                         }
                         0b1110 => {
                             // `RSB` (`A8-577`)
+                            inst.set_w(false);
                             inst.opcode = Opcode::RSB;
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(rd)),
@@ -970,7 +972,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                     // to decode immediates
                     // v6T2
                     let op = op2[1..5].load::<u8>();
-                    let i = lower2[10..11].load::<u16>();
+                    let i = instr2[10..11].load::<u16>();
                     let s = instr2[4];
                     let rn = instr2[0..4].load::<u8>();
                     let imm3 = lower2[12..15].load::<u16>();
@@ -998,6 +1000,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                             } else {
                                 // `AND` (`A8-322`)
                                 // v6T2
+                                inst.set_w(false);
                                 inst.opcode = Opcode::AND;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -1033,6 +1036,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                             } else {
                                 // `ORR` (`A8-517`)
                                 // v6T2
+                                inst.set_w(false);
                                 inst.opcode = Opcode::ORR;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -1056,6 +1060,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                             } else {
                                 // `ORN` (`A8-513`)
                                 // v6T2
+                                inst.set_w(false);
                                 inst.opcode = Opcode::ORN;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -1080,6 +1085,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                             } else {
                                 // `EOR` (`A8-383`)
                                 // v6T2
+                                inst.set_w(false);
                                 inst.opcode = Opcode::EOR;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -1116,6 +1122,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                         0b1010 => {
                             // `ADC` (`A8-298`)
                             // v6T2
+                            inst.set_w(false);
                             inst.opcode = Opcode::ADC;
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(rd)),
@@ -1127,6 +1134,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                         0b1011 => {
                             // `SBC` (`A8-593`)
                             // v6T2
+                            inst.set_w(false);
                             inst.opcode = Opcode::SBC;
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(rd)),
@@ -1181,6 +1189,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                     let op = instr2[4..9].load::<u8>();
                     let i = instr2[10..11].load::<u16>();
                     inst.s = false;
+                    inst.set_w(false);
                     let rn = instr2[0..4].load::<u8>();
                     let imm3 = lower2[12..15].load::<u16>();
                     let rd = lower2[8..12].load::<u8>();
@@ -1193,6 +1202,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                                 // `ADD` (`A8-304`)
                                 // v6T2
                                 // encoding T4
+                                inst.set_w(true);
                                 inst.opcode = Opcode::ADD;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -1215,6 +1225,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                         }
                         0b00100 => {
                             // `MOV` (`A8-485`)
+                            // encoding T3
                             inst.opcode = Opcode::MOV;
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(rd)),
@@ -1228,6 +1239,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                                 // `SUB` (`A8-709`)
                                 // v6T2
                                 // encoding T4
+                                inst.set_w(true);
                                 inst.opcode = Opcode::SUB;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -1301,9 +1313,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                         0b10100 => {
                             // `SBFX` (`A8-599`)
                             // v6T2
-
-                            // wide is implied
-                            inst.set_w(false);
 
                             inst.opcode = Opcode::SBFX;
                             let imm3_2 = ((lower >> 10) & 0b11100) | ((lower >> 6) & 0b11);
@@ -1384,9 +1393,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                         0b11100 => {
                             // `UBFX` (`A8-757`)
                             // v6T2
-
-                            // wide is implied
-                            inst.set_w(false);
 
                             inst.opcode = Opcode::UBFX;
                             let imm3_2 = ((lower >> 10) & 0b11100) | ((lower >> 6) & 0b11);
