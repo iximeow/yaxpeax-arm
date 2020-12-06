@@ -99,7 +99,12 @@ fn DecodeImmShift(reg: u8, ty: u8, imm5: u8) -> RegShift {
 
 #[allow(non_snake_case)]
 pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut Instruction, bytes: T) -> Result<(), DecodeError> {
-    inst.set_w(false);
+    // these are cleared in `armv7::InstDecoder::decode_into`.
+    // they must be reset when switching out of thumb decoding or decoding a new thumb instruction,
+    // which that `decode_into` is the entrypoint for in all cases.
+    // inst.set_w(false);
+    // inst.set_wide(false);
+    inst.set_thumb(true);
     let mut iter = bytes.into_iter();
     let instr: u16 =
         ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u16)      ) |
@@ -113,6 +118,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
     // `A6.1 Thumb instruction set encoding`
     if opword >= 0b11101 {
         inst.set_w(true);
+        inst.set_wide(true);
 
         // 32b instruction - `A6-228, 32-bit Thumb instruction encoding`
         // opword low bits 01, 10, and 11 correspond to `op1` in table `A6-9`
@@ -709,7 +715,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                     let rm = lower2[0..4].load::<u16>();
 
                     let shift = RegShift::from_raw(
-                        0b00000 | // reg-imm shift. TODO: probably need to change the const
+                        0b00000 | // reg-imm shift
                         rm as u16 |
                         (imm2 << 7) | (imm3 << 9) |
                         tp << 5
@@ -760,31 +766,92 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                                 let tp = (lower >> 4) & 0b11;
                                 let imm2 = (lower >> 6) & 0b11;
                                 let imm3 = (lower >> 12) & 0b111;
+                                let imm5 = (imm3 << 2) | imm2;
                                 match tp {
                                     0b00 => {
-                                        if imm2 | imm3 == 0 {
+                                        if imm5 == 0 {
                                             // `MOV (register, Thumb)` (`A8-487`)
-                                            return Err(DecodeError::Incomplete);
+                                            // encoding T3
+                                            inst.set_w(true);
+                                            let rm = lower2[..4].load::<u8>();
+                                            let rd = lower2[8..12].load::<u8>();
+                                            inst.opcode = Opcode::MOV;
+                                            inst.operands = [
+                                                Operand::Reg(Reg::from_u8(rd)),
+                                                Operand::Reg(Reg::from_u8(rm)),
+                                                Operand::Nothing,
+                                                Operand::Nothing,
+                                            ];
                                         } else {
                                             // `LSL (immediate)` (`A8-469`)
-                                            return Err(DecodeError::Incomplete);
+                                            // encoding T2
+                                            inst.set_w(true);
+                                            let rm = lower2[..4].load::<u8>();
+                                            let rd = lower2[8..12].load::<u8>();
+                                            inst.opcode = Opcode::LSL;
+                                            inst.operands = [
+                                                Operand::Reg(Reg::from_u8(rd)),
+                                                Operand::Reg(Reg::from_u8(rm)),
+                                                Operand::Imm12(imm5),
+                                                Operand::Nothing,
+                                            ];
                                         }
                                     },
                                     0b01 => {
                                         // `LSR (immediate)` (`A8-473`)
-                                        return Err(DecodeError::Incomplete);
+                                        // encoding T2
+                                        inst.set_w(true);
+                                        let rm = lower2[..4].load::<u8>();
+                                        let rd = lower2[8..12].load::<u8>();
+                                        inst.opcode = Opcode::LSR;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rm)),
+                                            Operand::Imm12(imm5),
+                                            Operand::Nothing,
+                                        ];
                                     }
                                     0b10 => {
                                         // `ASR (immediate)` (`A8-328`)
-                                        return Err(DecodeError::Incomplete);
+                                        // encoding T2
+                                        inst.set_w(true);
+                                        let rm = lower2[..4].load::<u8>();
+                                        let rd = lower2[8..12].load::<u8>();
+                                        inst.opcode = Opcode::ASR;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rm)),
+                                            Operand::Imm12(imm5),
+                                            Operand::Nothing,
+                                        ];
                                     }
                                     0b11 => {
-                                        if imm2 | imm3 == 0 {
+                                        if imm5 == 0 {
                                             // `RRX` (`A8-573`)
-                                            return Err(DecodeError::Incomplete);
+                                            // encoding T1
+                                            inst.set_w(false);
+                                            let rm = lower2[..4].load::<u8>();
+                                            let rd = lower2[8..12].load::<u8>();
+                                            inst.opcode = Opcode::RRX;
+                                            inst.operands = [
+                                                Operand::Reg(Reg::from_u8(rd)),
+                                                Operand::Reg(Reg::from_u8(rm)),
+                                                Operand::Nothing,
+                                                Operand::Nothing,
+                                            ];
                                         } else {
                                             // `ROR (immediate)` (`A8-569`)
-                                            return Err(DecodeError::Incomplete);
+                                            // encoding T1
+                                            inst.set_w(false);
+                                            let rm = lower2[..4].load::<u8>();
+                                            let rd = lower2[8..12].load::<u8>();
+                                            inst.opcode = Opcode::ASR;
+                                            inst.operands = [
+                                                Operand::Reg(Reg::from_u8(rd)),
+                                                Operand::Reg(Reg::from_u8(rm)),
+                                                Operand::Imm12(imm5),
+                                                Operand::Nothing,
+                                            ];
                                         }
                                     }
                                     _ => {

@@ -110,6 +110,8 @@ fn test_decode_str_ldr() {
             ],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
     test_decode(
@@ -125,6 +127,8 @@ fn test_decode_str_ldr() {
             ],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
     test_decode(
@@ -140,6 +144,8 @@ fn test_decode_str_ldr() {
             ],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
     test_decode(
@@ -155,6 +161,8 @@ fn test_decode_str_ldr() {
             ],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
     test_decode(
@@ -170,6 +178,8 @@ fn test_decode_str_ldr() {
             ],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
     test_decode(
@@ -185,6 +195,8 @@ fn test_decode_str_ldr() {
             ],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
     test_all([0x10, 0x00, 0x7f, 0xe5], "ldrb r0, [pc, -0x10]!");
@@ -350,6 +362,8 @@ fn test_decode_pop() {
             ],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
     test_display(
@@ -369,6 +383,8 @@ fn test_decode_pop() {
             ],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
     test_display(
@@ -388,6 +404,8 @@ fn test_decode_pop() {
             ],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
     test_display(
@@ -411,6 +429,8 @@ fn test_decode_mov() {
             ],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
     test_display([0x0d, 0x20, 0xa0, 0xe1], "mov r2, sp");
@@ -428,6 +448,8 @@ fn test_decode_mov() {
             ],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
 }
@@ -442,6 +464,8 @@ fn test_decode_arithmetic() {
             operands: [Operand::Reg(Reg::from_u8(1)), Operand::Reg(Reg::from_u8(0)), Operand::RegShift(RegShift::from_raw(0xd18)), Operand::Nothing],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
     test_display(
@@ -456,6 +480,8 @@ fn test_decode_arithmetic() {
             operands: [Operand::Reg(Reg::from_u8(3)), Operand::Reg(Reg::from_u8(15)), Operand::Reg(Reg::from_u8(3)), Operand::Nothing],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
     test_decode(
@@ -466,6 +492,8 @@ fn test_decode_arithmetic() {
             operands: [Operand::Reg(Reg::from_u8(3)), Operand::Reg(Reg::from_u8(6)), Operand::Reg(Reg::from_u8(3)), Operand::Nothing],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
     test_decode(
@@ -476,6 +504,8 @@ fn test_decode_arithmetic() {
             operands: [Operand::Reg(Reg::from_u8(3)), Operand::Reg(Reg::from_u8(0)), Operand::RegShift(RegShift::from_raw(0x143)), Operand::Nothing],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
     test_decode(
@@ -486,6 +516,8 @@ fn test_decode_arithmetic() {
             operands: [Operand::Reg(Reg::from_u8(5)), Operand::Reg(Reg::from_u8(3)), Operand::Imm32(1), Operand::Nothing],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
 }
@@ -553,6 +585,8 @@ fn test_decode_mul() {
             ],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
     test_decode(
@@ -568,6 +602,8 @@ fn test_decode_mul() {
             ],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
     test_decode(
@@ -583,6 +619,8 @@ fn test_decode_mul() {
             ],
             s: false,
             thumb_w: false,
+            thumb: false,
+            wide: false,
         }
     );
 }

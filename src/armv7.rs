@@ -1313,8 +1313,14 @@ pub struct Instruction {
     pub condition: ConditionCode,
     pub opcode: Opcode,
     pub operands: [Operand; 4],
+    /// does this instruction update flags, while variants that do not update flags exist?
     pub s: bool,
+    /// is this a 32-bit thumb instruction?
+    pub wide: bool,
+    /// and if it is a 32-bit thumb instruction, should the .w suffix be shown?
     pub thumb_w: bool,
+    /// and generally speaking, was this just a thumb-encoded instruction?
+    pub thumb: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -1363,6 +1369,8 @@ impl Default for Instruction {
             operands: [Operand::Nothing, Operand::Nothing, Operand::Nothing, Operand::Nothing],
             s: false,
             thumb_w: false,
+            wide: false,
+            thumb: false,
         }
     }
 }
@@ -1376,6 +1384,14 @@ impl Instruction {
         self.thumb_w = value;
     }
     pub fn w(&self) -> bool { self.thumb_w }
+    pub(crate) fn set_wide(&mut self, value: bool) {
+        self.wide = value;
+    }
+    pub fn wide(&self) -> bool { self.wide }
+    pub(crate) fn set_thumb(&mut self, value: bool) {
+        self.thumb = value;
+    }
+    pub fn thumb(&self) -> bool { self.thumb }
 }
 
 fn format_reg_list<T: fmt::Write, C: fmt::Display, Y: YaxColors<C>>(f: &mut T, mut list: u16, colors: &Y) -> Result<(), fmt::Error> {
@@ -1485,10 +1501,15 @@ impl Display for Instruction {
 impl LengthedInstruction for Instruction {
     type Unit = AddressDiff<<ARMv7 as Arch>::Address>;
     fn min_size() -> Self::Unit {
+        // TODO: this is contingent on the decoder mode...
         AddressDiff::from_const(4)
     }
     fn len(&self) -> Self::Unit {
-        AddressDiff::from_const(4)
+        if self.thumb && !self.wide {
+            AddressDiff::from_const(2)
+        } else {
+            AddressDiff::from_const(4)
+        }
     }
 }
 
@@ -1777,10 +1798,12 @@ impl Decoder<Instruction> for InstDecoder {
     type Error = DecodeError;
 
     fn decode_into<T: IntoIterator<Item=u8>>(&self, inst: &mut Instruction, bytes: T) -> Result<(), Self::Error> {
+        inst.set_w(false);
+        inst.set_wide(false);
         if self.thumb {
             return thumb::decode_into(&self, inst, bytes);
         } else {
-            inst.set_w(false);
+            inst.set_thumb(false);
         }
 
         fn read_word<T: IntoIterator<Item=u8>>(bytes: T) -> Result<u32, DecodeError> {
