@@ -453,6 +453,8 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color
             Opcode::UBFX |
             Opcode::BFI |
             Opcode::BFC |
+            Opcode::RBIT |
+            Opcode::SEL |
             Opcode::MOV |
             Opcode::MOVT |
             Opcode::MVN => { write!(out, "{}", colors.data_op(self)) },
@@ -663,6 +665,8 @@ impl Display for Opcode {
             Opcode::DBG => { write!(f, "dbg") },
             Opcode::PLD => { write!(f, "pld") },
             Opcode::PLI => { write!(f, "pli") },
+            Opcode::RBIT => { write!(f, "rbit") },
+            Opcode::SEL => { write!(f, "sel") },
         }
     }
 }
@@ -825,6 +829,8 @@ pub enum Opcode {
     DBG,
     PLD,
     PLI,
+    RBIT,
+    SEL,
 }
 
 static DATA_PROCESSING_OPCODES: [Opcode; 16] = [

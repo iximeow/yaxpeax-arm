@@ -2882,7 +2882,71 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                                 return Err(DecodeError::Incomplete);
                             } else if op2 < 0b1100 {
                                 // `Miscellaneous operations` (`A6-246`)
-                                return Err(DecodeError::Incomplete);
+                                let rn = instr2[0..4].load::<u8>();
+                                let rd = lower2[8..12].load::<u8>();
+                                let rm = lower2[0..4].load::<u8>();
+                                let op1 = instr2[4..6].load::<u8>();
+                                let op2 = lower2[4..6].load::<usize>();
+                                match op1 {
+                                    0b00 => {
+                                        inst.opcode = [
+                                            Opcode::QADD,
+                                            Opcode::QDADD,
+                                            Opcode::QSUB,
+                                            Opcode::QDSUB,
+                                        ][op2];
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rm)),
+                                            Operand::Reg(Reg::from_u8(rn)),
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                    0b01 => {
+                                        if rn != rm {
+                                            decoder.unpredictable()?;
+                                        }
+                                        inst.opcode = [
+                                            Opcode::REV,
+                                            Opcode::REV16,
+                                            Opcode::RBIT,
+                                            Opcode::REVSH,
+                                        ][op2];
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rm)),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                    0b10 => {
+                                        if op2 != 0 {
+                                            return Err(DecodeError::InvalidOpcode);
+                                        }
+                                        inst.opcode = Opcode::SEL;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rn)),
+                                            Operand::Reg(Reg::from_u8(rm)),
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                    0b11 => {
+                                        if op2 != 0 {
+                                            return Err(DecodeError::InvalidOpcode);
+                                        }
+                                        inst.opcode = Opcode::CLZ;
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(rd)),
+                                            Operand::Reg(Reg::from_u8(rm)),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                    _ => {
+                                        unreachable!("impossible bit pattern for op1");
+                                    }
+                                }
                             } else {
                                 return Err(DecodeError::Undefined);
                             }
