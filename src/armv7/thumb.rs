@@ -96,7 +96,8 @@ fn DecodeImmShift(reg: u8, ty: u8, imm5: u8) -> RegShift {
 }
 
 #[allow(non_snake_case)]
-pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut Instruction, bytes: T) -> Result<(), DecodeError> {
+pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut Instruction, bytes: T) -> Result<(), DecodeError> {
+    inst.set_w(false);
     let mut iter = bytes.into_iter();
     let instr: u16 =
         ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u16)      ) |
@@ -106,14 +107,17 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
 
     // `A6.1 Thumb instruction set encoding`
     if opword >= 0b11101 {
+        inst.set_w(true);
+
+        // 32b instruction - `A6-228, 32-bit Thumb instruction encoding`
+        // opword low bits 01, 10, and 11 correspond to `op1` in table `A6-9`
+
         let lower: u16 =
             ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u16)      ) |
             ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u16) << 8 );
 
         let op2 = (instr >> 5) & 0b1111111;
 
-        // 32b instruction - `A6-228, 32-bit Thumb instruction encoding`
-        // opword low bits 01, 10, and 11 correspond to `op1` in table `A6-9`
         if opword < 0b11110 {
             // op1 == 0b01
             if op2 < 0b1000000 {
@@ -130,15 +134,18 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                         let rd = ((lower >> 8) & 0b1111) as u8;
                         let rt = ((lower >> 12) & 0b1111) as u8;
 
+                        // all only-wide, no w suffix
+                        inst.set_w(false);
+
                         match op1op2 {
                             0b0000 => {
                                 // `STREX` (`A8-691`)
                                 // v6T2
                                 if rd == 13 || rd == 15 || rt == 13 || rt == 15 || rn == 15 {
-                                    todo!("UNPREDICTABLE");
+                                    decoder.unpredictable()?;
                                 }
                                 if rd == rn || rd == rt {
-                                    todo!("UNPREDICTABLE");
+                                    decoder.unpredictable()?;
                                 }
                                 inst.opcode = Opcode::STREX;
                                 inst.operands = [
@@ -159,7 +166,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                 // `LDREX` (`A8-433`)
                                 // v6T2
                                 if rt == 13 || rt == 15 || rn == 15 {
-                                    todo!("UNPREDICTABLE");
+                                    decoder.unpredictable()?;
                                 }
                                 // TODO: should_is_must()
                                 // rd == 0b1111
@@ -189,7 +196,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                 // `if P == '0' && W == '0' then SEE "Related encodings"` -> this
                                 // would imply tbb/tbh, should be unreachable
                                 if rn == 15 || rt == 13 || rt == 15 || rd == 13 || rd == 15 {
-                                    todo!("UNPREDICTABLE");
+                                    decoder.unpredictable()?;
                                 }
                                 inst.opcode = Opcode::STRD;
                                 inst.operands = [
@@ -214,10 +221,10 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                 // `if P == '0' && W == '0' then SEE "Related encodings"` -> this
                                 // would imply tbb/tbh, should be unreachable
                                 if rt == 13 || rt == 15 || rd == 13 || rd == 15 || rd == rt {
-                                    todo!("UNPREDICTABLE");
+                                    decoder.unpredictable()?;
                                 }
                                 if w && (rn == rt || rn == rd) {
-                                    todo!("UNPREDICTABLE");
+                                    decoder.unpredictable()?;
                                 }
                                 if rn != 0b1111 {
                                     // `LDRD (immediate)` (`A8-427`)
@@ -238,7 +245,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                     // `LDRD (literal)` (`A8-429`)
                                     // v6T2
                                     if w {
-                                        todo!("UNPREDICTABLE");
+                                        decoder.unpredictable()?;
                                     }
                                     // which because !(p == 0 && w == 0), we know p is true
                                     inst.opcode = Opcode::LDRD;
@@ -260,10 +267,10 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                     0b0100 => {
                                         // `STREXB` (`A8-693`)
                                         if rd == 13 || rd == 15 || rt == 13 || rt == 15 || rn == 15 {
-                                            todo!("UNPREDICTABLE");
+                                            decoder.unpredictable()?;
                                         }
                                         if rd == rn || rd == rt {
-                                            todo!("UNPREDICTABLE");
+                                            decoder.unpredictable()?;
                                         }
                                         // TODO: should_is_must()
                                         // rt2 == 0b1111
@@ -278,10 +285,10 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                     0b0101 => {
                                         // `STREXH` (`A8-693`)
                                         if rd == 13 || rd == 15 || rt == 13 || rt == 15 || rn == 15 {
-                                            todo!("UNPREDICTABLE");
+                                            decoder.unpredictable()?;
                                         }
                                         if rd == rn || rd == rt {
-                                            todo!("UNPREDICTABLE");
+                                            decoder.unpredictable()?;
                                         }
                                         // TODO: should_is_must()
                                         // rt2 == 0b1111
@@ -296,10 +303,10 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                     0b0111 => {
                                         // `STREXD` (`A8-693`)
                                         if rd == 13 || rd == 15 || rt == 13 || rt == 15 || rt2 == 13 || rt2 == 15 || rn == 15 {
-                                            todo!("UNPREDICTABLE");
+                                            decoder.unpredictable()?;
                                         }
                                         if rd == rn || rd == rt || rd == rt2 {
-                                            todo!("UNPREDICTABLE");
+                                            decoder.unpredictable()?;
                                         }
                                         inst.opcode = Opcode::STREXD;
                                         inst.operands = [
@@ -366,7 +373,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                     0b0100 => {
                                         // `LDREXB`
                                         if rt == 13 || rt == 15 || rn == 15 {
-                                            todo!("UNPREDICTABLE");
+                                            decoder.unpredictable()?;
                                         }
                                         // TODO: should_is_must()
                                         // rt2 == 0b1111
@@ -382,7 +389,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                     0b0101 => {
                                         // `LDREXH`
                                         if rt == 13 || rt == 15 || rn == 15 {
-                                            todo!("UNPREDICTABLE");
+                                            decoder.unpredictable()?;
                                         }
                                         // TODO: should_is_must()
                                         // rt2 == 0b1111
@@ -398,7 +405,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                     0b0110 => {
                                         // `LDREXD`
                                         if rt == 13 || rt == 15 || rt2 == 13 || rt2 == 15 || rn == 15 {
-                                            todo!("UNPREDICTABLE");
+                                            decoder.unpredictable()?;
                                         }
                                         // TODO: should_is_must()
                                         // rd == 0b1111
@@ -428,7 +435,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                 // `if P == '0' && W == '0' then SEE "Related encodings"` -> this
                                 // would imply tbb/tbh, should be unreachable
                                 if rn == 15 || rt == 13 || rt == 15 || rd == 13 || rd == 15 {
-                                    todo!("UNPREDICTABLE");
+                                    decoder.unpredictable()?;
                                 }
                                 inst.opcode = Opcode::STRD;
                                 inst.operands = [
@@ -456,10 +463,10 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                 // `if P == '0' && W == '0' then SEE "Related encodings"` -> this
                                 // would imply tbb/tbh, should be unreachable
                                 if rt == 13 || rt == 15 || rd == 13 || rd == 15 || rd == rt {
-                                    todo!("UNPREDICTABLE");
+                                    decoder.unpredictable()?;
                                 }
                                 if w && (rn == rt || rn == rd) {
-                                    todo!("UNPREDICTABLE");
+                                    decoder.unpredictable()?;
                                 }
                                 if rn != 0b1111 {
                                     // `LDRD (immediate)` (`A8-427`)
@@ -469,10 +476,10 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                         Operand::Reg(Reg::from_u8(rt)),
                                         Operand::Reg(Reg::from_u8(rd)),
                                         if p {
-                                            Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8 << 2, u, w)
+                                            Operand::RegDerefPostindexOffset(Reg::from_u8(rn), imm8 << 2, u, w)
                                         } else {
                                             // p == 0 and w == 0 is impossible, would be tbb/tbh
-                                            Operand::RegDerefPostindexOffset(Reg::from_u8(rn), imm8 << 2, u, false)
+                                            Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8 << 2, u, false)
                                         },
                                         Operand::Nothing,
                                     ];
@@ -480,7 +487,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                     // `LDRD (literal)` (`A8-429`)
                                     // v6T2
                                     if w {
-                                        todo!("UNPREDICTABLE");
+                                        decoder.unpredictable()?;
                                     }
                                     // which because !(p == 0 && w == 0), we know p is true
                                     inst.opcode = Opcode::LDRD;
@@ -517,14 +524,14 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                     // `STM (STMIA, STMEA)` (`A8-665`)
                                     // v6T2
                                     if rn == 15 || lower.count_ones() < 2 {
-                                        todo!("UNPREDICTABLE");
+                                        decoder.unpredictable()?;
                                     }
                                     if w && (lower & (1 << rn)) != 0 {
-                                        todo!("UNPREDICTABLE");
+                                        decoder.unpredictable()?;
                                     }
                                     inst.opcode = Opcode::STM(
                                         true, // add
-                                        true, // preincrement
+                                        false, // preincrement
                                         w, // wback
                                         true, // usermode
                                     );
@@ -538,11 +545,15 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                 0b10 => {
                                     // `STMDB`/`STMFD` (`A8-669`)
                                     // or `PUSH` (`A8-539`)
+
+                                    // implied by instruction?
+                                    inst.set_w(false);
+
                                     if w && rn == 0b1101 {
                                         // `PUSH`
                                         // v6T2
                                         if lower.count_ones() < 2 {
-                                            todo!("UNPREDICTABLE");
+                                            decoder.unpredictable()?;
                                         }
                                         inst.opcode = Opcode::PUSH;
                                         inst.operands = [
@@ -555,10 +566,10 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                         // `STMDB`
                                         // v6T2
                                         if rn == 15 || lower.count_ones() < 2 {
-                                            todo!("UNPREDICTABLE");
+                                            decoder.unpredictable()?;
                                         }
                                         if w && (lower & (1 << rn)) != 0 {
-                                            todo!("UNPREDICTABLE");
+                                            decoder.unpredictable()?;
                                         }
                                         inst.opcode = Opcode::STM(
                                             false, // decrement
@@ -596,7 +607,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                     // `RFE` (`B9-1986`)
                                     // v6T2
                                     if rn == 15 {
-                                        todo!("UNPREDICTABLE");
+                                        decoder.unpredictable()?;
                                     }
                                     inst.opcode = Opcode::RFE(false, true);
                                     inst.operands = [
@@ -611,7 +622,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                     if w && rn == 0b1101 {
                                         // `POP` (`A8-535`)
                                         if lower.count_ones() < 2 || (lower & 0xc000) == 0xc000 {
-                                            todo!("UNPREDICTABLE");
+                                            decoder.unpredictable()?;
                                         }
                                         inst.opcode = Opcode::POP;
                                         inst.operands = [
@@ -623,12 +634,12 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                     } else {
                                         // `LDM/LDMIA/LDMFD`
                                         if rn == 15 || lower.count_ones() < 2 {
-                                            todo!("UNPREDICTABLE");
+                                            decoder.unpredictable()?;
                                         }
                                         if w && (lower & (1 << rn)) != 0 {
-                                            todo!("UNPREDICTABLE");
+                                            decoder.unpredictable()?;
                                         }
-                                        inst.opcode = Opcode::LDM(true, true, w, true);
+                                        inst.opcode = Opcode::LDM(true, false, w, true);
                                         inst.operands = [
                                             Operand::RegWBack(Reg::from_u8(rn), w),
                                             Operand::RegList(lower),
@@ -639,11 +650,15 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                 }
                                 0b10 => {
                                     // `LDMDB/LDMEA` (`A8-403`)
+
+                                    // wide is implied
+                                    inst.set_w(false);
+
                                     if rn == 15 || lower.count_ones() < 2 {
-                                        todo!("UNPREDICTABLE");
+                                        decoder.unpredictable()?;
                                     }
                                     if w && (lower & (1 << rn)) != 0 {
-                                        todo!("UNPREDICTABLE");
+                                        decoder.unpredictable()?;
                                     }
                                     inst.opcode = Opcode::LDM(false, true, w, true);
                                     inst.operands = [
@@ -657,7 +672,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                     // `RFE` (`B9-1986`)
                                     // v6T2
                                     if rn == 15 {
-                                        todo!("UNPREDICTABLE");
+                                        decoder.unpredictable()?;
                                     }
                                     inst.opcode = Opcode::RFE(true, false);
                                     inst.operands = [
@@ -694,11 +709,14 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                     );
                     let shift = Operand::RegShift(shift);
 
+                    inst.s = s;
+
                     match op {
                         0b0000 => {
                             if rd == 0b1111 && s {
                                 // `TST` (`A8-747`)
                                 // v6T2
+                                inst.s = false;
                                 inst.opcode = Opcode::TST;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rn)),
@@ -709,7 +727,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             } else {
                                 // `AND` (`A8-324`)
                                 // v6T2
-                                // TODO: S
                                 inst.opcode = Opcode::AND;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -722,7 +739,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                         0b0001 => {
                             // `BIC` (`A8-340`)
                             // v6T2
-                            // TODO: S
                             inst.opcode = Opcode::BIC;
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(rd)),
@@ -771,7 +787,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             } else {
                                 // `ORR` (`A8-519`)
                                 // v6T2
-                                // TODO: S
                                 inst.opcode = Opcode::ORR;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -785,7 +800,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             if rn == 0b1111 {
                                 // `MVN` (`A8-507`)
                                 // v6T2
-                                // TODO: S
                                 inst.opcode = Opcode::MVN;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -796,7 +810,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             } else {
                                 // `ORN` (`A8-515`)
                                 // v6T2
-                                // TODO: S
                                 inst.opcode = Opcode::ORN;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -810,6 +823,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             if rd == 0b1111 && s {
                                 // `TEQ` (`A8-741`)
                                 // v6T2
+                                inst.s = false;
                                 inst.opcode = Opcode::TEQ;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rn)),
@@ -820,7 +834,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             } else {
                                 // `EOR` (`A8-385`)
                                 // v6T2
-                                // TODO: S
                                 inst.opcode = Opcode::EOR;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -835,7 +848,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             // v6T2
                             // TODO: fix shift
                             // TODO: check opcode
-                            // TODO: S
+                            inst.s = false;
                             inst.opcode = if lower & 0b10000 != 0 {
                                 Opcode::PKHTB
                             } else {
@@ -852,6 +865,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             if rd == 0b1111 && s {
                                 // `CMN` (`A8-364`)
                                 // v6T2
+                                inst.s = false;
                                 inst.opcode = Opcode::CMN;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rn)),
@@ -861,7 +875,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                 ];
                             } else {
                                 // `ADD` (`A8-308`)
-                                // TODO: S
                                 inst.opcode = Opcode::ADD;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -874,7 +887,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                         0b1010 => {
                             // `ADC` (`A8-300`)
                             // v6T2
-                            // TODO: S
                             inst.opcode = Opcode::ADC;
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(rd)),
@@ -886,7 +898,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                         0b1011 => {
                             // `SBC` (`A8-595`)
                             // v6T2
-                            // TODO: S
                             inst.opcode = Opcode::SBC;
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(rd)),
@@ -899,6 +910,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             if rd == 0b1111 && s {
                                 // `CMP` (`A8-370`)
                                 // v6T2
+                                inst.s = false;
                                 inst.opcode = Opcode::CMP;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rn)),
@@ -909,7 +921,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             } else {
                                 // `SUB` (`A8-713`)
                                 // v6T2
-                                // TODO: S
                                 inst.opcode = Opcode::SUB;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -959,6 +970,8 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                     let imm8 = lower & 0b11111111;
                     let imm = (i << 11) | (imm3 << 8) | imm8;
 
+                    inst.s = s;
+
                     let imm = ThumbExpandImm_C(imm);
 
                     match op {
@@ -966,6 +979,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             if rd == 0b1111 && s {
                                 // `TST` (`A8-745`)
                                 // v6T2
+                                inst.s = false;
                                 inst.opcode = Opcode::TST;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rn)),
@@ -976,7 +990,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             } else {
                                 // `AND` (`A8-322`)
                                 // v6T2
-                                // TODO: S
                                 inst.opcode = Opcode::AND;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -989,7 +1002,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                         0b0001 => {
                             // `BIC` (`A8-338`)
                             // v6T2
-                            // TODO: S
                             inst.opcode = Opcode::BIC;
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(rd)),
@@ -1002,7 +1014,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             if rn == 0b1111 {
                                 // `MOV` (`A8-485`)
                                 // v6T2
-                                // TODO: S
                                 inst.opcode = Opcode::MOV;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -1013,7 +1024,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             } else {
                                 // `ORR` (`A8-517`)
                                 // v6T2
-                                // TODO: S
                                 inst.opcode = Opcode::ORR;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -1027,7 +1037,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             if rn == 0b1111 {
                                 // `MVN` (`A8-505`)
                                 // v6T2
-                                // TODO: S
                                 inst.opcode = Opcode::MOV;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -1038,7 +1047,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             } else {
                                 // `ORN` (`A8-513`)
                                 // v6T2
-                                // TODO: S
                                 inst.opcode = Opcode::ORN;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -1052,7 +1060,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             if rd == 0b1111 && s {
                                 // `TEQ` (`A8-739`)
                                 // v6T2
-                                // TODO: S
+                                inst.s = false;
                                 inst.opcode = Opcode::TEQ;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rn)),
@@ -1063,7 +1071,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             } else {
                                 // `EOR` (`A8-383`)
                                 // v6T2
-                                // TODO: S
                                 inst.opcode = Opcode::EOR;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -1077,7 +1084,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             if rd == 0b1111 && s {
                                 // `CMN` (`A8-362`)
                                 // v6T2
-                                // TODO: S
+                                inst.s = false;
                                 inst.opcode = Opcode::CMN;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rn)),
@@ -1088,7 +1095,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             } else {
                                 // `ADD` (`A8-304`)
                                 // v6T2
-                                // TODO: S
                                 inst.opcode = Opcode::ADD;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -1101,7 +1107,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                         0b1010 => {
                             // `ADC` (`A8-298`)
                             // v6T2
-                            // TODO: S
                             inst.opcode = Opcode::ADC;
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(rd)),
@@ -1113,7 +1118,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                         0b1011 => {
                             // `SBC` (`A8-593`)
                             // v6T2
-                            // TODO: S
                             inst.opcode = Opcode::SBC;
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(rd)),
@@ -1126,7 +1130,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             if rd == 0b1111 && s {
                                 // `CMP` (`A8-368`)
                                 // v6T2
-                                // TODO: S
+                                inst.s = false;
                                 inst.opcode = Opcode::CMP;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rn)),
@@ -1137,7 +1141,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             } else {
                                 // `SUB` (`A8-709`)
                                 // v6T2
-                                // TODO: S
                                 inst.opcode = Opcode::SUB;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
@@ -1150,7 +1153,6 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                         0b1110 => {
                             // `RSB` (`A8-575`)
                             // v6T2
-                            // TODO: S
                             inst.opcode = Opcode::RSB;
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(rd)),
@@ -1289,6 +1291,10 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                         0b10100 => {
                             // `SBFX` (`A8-599`)
                             // v6T2
+
+                            // wide is implied
+                            inst.set_w(false);
+
                             inst.opcode = Opcode::SBFX;
                             let imm3_2 = ((lower >> 10) & 0b11100) | ((lower >> 6) & 0b11);
                             inst.operands = [
@@ -1334,7 +1340,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                             inst.opcode = Opcode::USAT;
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(rd)),
-                                Operand::Imm32((lower & 0b1111) as u32),
+                                Operand::Imm32((lower & 0b11111) as u32),
                                 Operand::RegShift(shift),
                                 Operand::Nothing,
                             ];
@@ -1349,7 +1355,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                 inst.opcode = Opcode::USAT;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
-                                    Operand::Imm32((lower & 0b1111) as u32),
+                                    Operand::Imm32((lower & 0b11111) as u32),
                                     Operand::RegShift(shift),
                                     Operand::Nothing,
                                 ];
@@ -1359,7 +1365,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                 inst.opcode = Opcode::USAT16;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
-                                    Operand::Imm32((lower & 0b1111) as u32),
+                                    Operand::Imm32((lower & 0b11111) as u32),
                                     Operand::Reg(Reg::from_u8(rn)),
                                     Operand::Nothing,
                                 ];
@@ -1368,6 +1374,10 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                         0b11100 => {
                             // `UBFX` (`A8-757`)
                             // v6T2
+
+                            // wide is implied
+                            inst.set_w(false);
+
                             inst.opcode = Opcode::UBFX;
                             let imm3_2 = ((lower >> 10) & 0b11100) | ((lower >> 6) & 0b11);
                             inst.operands = [
@@ -1432,7 +1442,10 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                             let mask = (lower >> 10) & 0b11;
                                             let spec_reg = match mask {
                                                 0b00 => {
-                                                    todo!("UNPREDICTABLE");
+                                                    // TODO: generally "unpredictable" is
+                                                    // overridden by DecodeMode::Any but there's
+                                                    // nothing to salvage here?
+                                                    return Err(DecodeError::Unpredictable);
                                                 }
                                                 0b01 => {
                                                     StatusRegMask::APSR_G
@@ -1920,13 +1933,22 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                         ];
                                     } else {
                                         // `STRB (immediate, Thumb)` (`A8-679`)
-                                        // encoding T3
+                                        // encoding T2/T3
                                         // v6T2
-                                        let imm8 = lower & 0b1111_1111;
-                                        let puw = (lower >> 8) & 0b111;
-                                        let p = puw & 0b100 != 0;
-                                        let u = puw & 0b010 != 0;
-                                        let w = puw & 0b001 != 0;
+                                        let (imm, p, u, w) = if has_imm12 {
+                                            let imm12 = lower & 0b1111_1111_1111;
+                                            let p = true;
+                                            let u = true;
+                                            let w = false;
+                                            (imm12, p, u, w)
+                                        } else {
+                                            let imm8 = lower & 0b1111_1111;
+                                            let puw = (lower >> 8) & 0b111;
+                                            let p = puw & 0b100 != 0;
+                                            let u = puw & 0b010 != 0;
+                                            let w = puw & 0b001 != 0;
+                                            (imm8, p, u, w)
+                                        };
                                         // assert!(puw != 0b110) // would be `strbt`
                                         let rt = ((lower >> 12) & 0b1111) as u8;
                                         inst.opcode = Opcode::STRB;
@@ -1936,14 +1958,14 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                             if p {
                                                 Operand::RegDerefPreindexOffset(
                                                     Reg::from_u8(rn),
-                                                    imm8,
+                                                    imm,
                                                     u, // add
                                                     w, // wback
                                                 )
                                             } else {
                                                 Operand::RegDerefPostindexOffset(
                                                     Reg::from_u8(rn),
-                                                    imm8,
+                                                    imm,
                                                     u, // add
                                                     w, // wback
                                                 )
@@ -1997,13 +2019,22 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                         ];
                                     } else {
                                         // `STRH (immediate, Thumb)` (`A8-699`)
-                                        // encoding T3
+                                        // encoding T2/T3
                                         // v6T2
-                                        let imm8 = lower & 0b1111_1111;
-                                        let puw = (lower >> 8) & 0b111;
-                                        let p = puw & 0b100 != 0;
-                                        let u = puw & 0b010 != 0;
-                                        let w = puw & 0b001 != 0;
+                                        let (imm, p, u, w) = if has_imm12 {
+                                            let imm12 = lower & 0b1111_1111_1111;
+                                            let p = true;
+                                            let u = true;
+                                            let w = false;
+                                            (imm12, p, u, w)
+                                        } else {
+                                            let imm8 = lower & 0b1111_1111;
+                                            let puw = (lower >> 8) & 0b111;
+                                            let p = puw & 0b100 != 0;
+                                            let u = puw & 0b010 != 0;
+                                            let w = puw & 0b001 != 0;
+                                            (imm8, p, u, w)
+                                        };
                                         // assert!(puw != 0b110) // would be `strbt`
                                         let rt = ((lower >> 12) & 0b1111) as u8;
                                         inst.opcode = Opcode::STRH;
@@ -2013,14 +2044,14 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                             if p {
                                                 Operand::RegDerefPreindexOffset(
                                                     Reg::from_u8(rn),
-                                                    imm8,
+                                                    imm,
                                                     u, // add
                                                     w, // wback
                                                 )
                                             } else {
                                                 Operand::RegDerefPostindexOffset(
                                                     Reg::from_u8(rn),
-                                                    imm8,
+                                                    imm,
                                                     u, // add
                                                     w, // wback
                                                 )
@@ -2074,13 +2105,22 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                         ];
                                     } else {
                                         // `STR (immediate, Thumb)` (`A8-673`)
-                                        // encoding T4
+                                        // encoding T3/T4
                                         // v6T2
-                                        let imm8 = lower & 0b1111_1111;
-                                        let puw = (lower >> 8) & 0b111;
-                                        let p = puw & 0b100 != 0;
-                                        let u = puw & 0b010 != 0;
-                                        let w = puw & 0b001 != 0;
+                                        let (imm, p, u, w) = if has_imm12 {
+                                            let imm12 = lower & 0b1111_1111_1111;
+                                            let p = true;
+                                            let u = true;
+                                            let w = false;
+                                            (imm12, p, u, w)
+                                        } else {
+                                            let imm8 = lower & 0b1111_1111;
+                                            let puw = (lower >> 8) & 0b111;
+                                            let p = puw & 0b100 != 0;
+                                            let u = puw & 0b010 != 0;
+                                            let w = puw & 0b001 != 0;
+                                            (imm8, p, u, w)
+                                        };
                                         // assert!(puw != 0b110) // would be `strbt`
                                         let rt = ((lower >> 12) & 0b1111) as u8;
                                         inst.opcode = Opcode::STR;
@@ -2090,14 +2130,14 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                                             if p {
                                                 Operand::RegDerefPreindexOffset(
                                                     Reg::from_u8(rn),
-                                                    imm8,
+                                                    imm,
                                                     u, // add
                                                     w, // wback
                                                 )
                                             } else {
                                                 Operand::RegDerefPostindexOffset(
                                                     Reg::from_u8(rn),
-                                                    imm8,
+                                                    imm,
                                                     u, // add
                                                     w, // wback
                                                 )
@@ -2211,24 +2251,30 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
                         } else {
                             if op2 < 0b0100 {
                                 // `Parallel addition and subtraction, signed`
+                                return Err(DecodeError::Incomplete);
                             } else if op2 < 0b1000 {
                                 // `Parallel addition and subtraction, unsigned` (`A6-244`)
+                                return Err(DecodeError::Incomplete);
                             } else if op2 < 0b1100 {
                                 // `Miscellaneous operations` (`A6-246`)
+                                return Err(DecodeError::Incomplete);
                             } else {
                                 return Err(DecodeError::Undefined);
                             }
                         }
                     } else {
-                        if op2 & 0b0001000 == 0 {
-                            // `Multiply, multiply accumulate, and absolute difference` (`A6-247`)
-                        } else {
+                        if op2 & 0b0001000 != 0 {
                             // `Long multiply, long multiply accumulate, and divide` (`A6-248`)
+                            return Err(DecodeError::Incomplete);
+                        } else {
+                            // `Multiply, multiply accumulate, and absolute difference` (`A6-247`)
+                            return Err(DecodeError::Incomplete);
                         }
                     }
                 }
             } else {
                 // `Coprocessor, Advanced SIMD, and Floating-point instructions` (`A6-249`)
+                return Err(DecodeError::Incomplete);
             }
         }
     } else {
@@ -3040,7 +3086,7 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(_decoder: &InstDecoder, inst: &mut 
             let rn = ((instr >> 8) & 0b111) as u8;
             let reglist = instr & 0b1111_1111;
             let w = (reglist & (1 << rn)) == 0;
-            inst.opcode = Opcode::LDM(true, true, false, true); // ldmia, no wback, yes usermode
+            inst.opcode = Opcode::LDM(true, false, false, true); // ldmia, no wback, yes usermode
             inst.operands = [
                 Operand::RegWBack(Reg::from_u8(rn), w),
                 Operand::RegList(reglist as u16),

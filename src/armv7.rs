@@ -11,11 +11,12 @@ use yaxpeax_arch::{Arch, AddressDiff, Colorize, Decoder, LengthedInstruction, No
 
 mod thumb;
 
-pub struct ConditionedOpcode(pub Opcode, pub bool, pub ConditionCode);
+// opcode, s, w, cond
+pub struct ConditionedOpcode(pub Opcode, pub bool, pub bool, pub ConditionCode);
 
 impl Display for ConditionedOpcode {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{}{}{}", self.0, if self.1 { "s" } else { "" }, self.2)
+        write!(f, "{}{}{}{}", self.0, if self.1 { "s" } else { "" }, if self.2 { ".w" } else { "" }, self.3)
     }
 }
 
@@ -116,7 +117,7 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
                 match self.operands {
                     // TODO: should this be PostindexOffset?
                     [Operand::Reg(Rt), Operand::RegDerefPostindexOffset(Reg { bits: 13 }, 4, true, false), Operand::Nothing, Operand::Nothing] => {
-                        ConditionedOpcode(Opcode::POP, self.s, self.condition).colorize(colors, out)?;
+                        ConditionedOpcode(Opcode::POP, self.s(), self.w(), self.condition).colorize(colors, out)?;
                         return write!(out, " {{{}}}", reg_name_colorize(Rt, colors));
                     },
                     _ => {}
@@ -126,7 +127,7 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
                 match self.operands {
                     // TODO: should this be PreindexOffset?
                     [Operand::Reg(Rt), Operand::RegDerefPreindexOffset(Reg { bits: 13 }, 4, false, true), Operand::Nothing, Operand::Nothing] => {
-                        ConditionedOpcode(Opcode::PUSH, self.s, self.condition).colorize(colors, out)?;
+                        ConditionedOpcode(Opcode::PUSH, self.s(), self.w(), self.condition).colorize(colors, out)?;
                         return write!(out, " {{{}}}", reg_name_colorize(Rt, colors));
                     },
                     _ => {}
@@ -136,7 +137,7 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
                 // TODO: what indicates usermode in the ARM syntax?
                 match self.operands {
                     [Operand::RegWBack(Reg { bits: 13 }, wback), Operand::RegList(list), Operand::Nothing, Operand::Nothing] => {
-                        ConditionedOpcode(Opcode::POP, self.s, self.condition).colorize(colors, out)?;
+                        ConditionedOpcode(Opcode::POP, self.s(), self.w(), self.condition).colorize(colors, out)?;
                         write!(out, " ")?;
                         return format_reg_list(out, list, colors);
                     }
@@ -147,7 +148,7 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
                 // TODO: what indicates usermode in the ARM syntax?
                 match self.operands {
                     [Operand::RegWBack(Reg { bits: 13 }, wback), Operand::RegList(list), Operand::Nothing, Operand::Nothing] => {
-                        ConditionedOpcode(Opcode::PUSH, self.s, self.condition).colorize(colors, out)?;
+                        ConditionedOpcode(Opcode::PUSH, self.s(), self.w(), self.condition).colorize(colors, out)?;
                         write!(out, " ")?;
                         return format_reg_list(out, list, colors);
                     }
@@ -163,7 +164,7 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
             Opcode::LDM(_add, _pre, _wback, _usermode) => {
                 match self.operands {
                     [Operand::RegWBack(Rr, wback), Operand::RegList(list), Operand::Nothing, Operand::Nothing] => {
-                        ConditionedOpcode(self.opcode, self.s, self.condition).colorize(colors, out)?;
+                        ConditionedOpcode(self.opcode, self.s(), self.w(), self.condition).colorize(colors, out)?;
                         write!(
                             out, " {}{}, ",
                             reg_name_colorize(Rr, colors),
@@ -301,7 +302,7 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
                 Ok(())
             }
             _ => {
-                ConditionedOpcode(self.opcode, self.s, self.condition).colorize(colors, out)?;
+                ConditionedOpcode(self.opcode, self.s(), self.w(), self.condition).colorize(colors, out)?;
                 let mut ops = self.operands.iter();
                 if let Some(first_op) = ops.next() {
                     if let Operand::Nothing = first_op {
@@ -1313,7 +1314,8 @@ pub struct Instruction {
     pub condition: ConditionCode,
     pub opcode: Opcode,
     pub operands: [Operand; 4],
-    pub s: bool
+    pub s: bool,
+    pub thumb_w: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -1324,6 +1326,7 @@ pub enum DecodeError {
     Incomplete,
     Nonconforming,
     Undefined,
+    Unpredictable,
 }
 
 impl fmt::Display for DecodeError {
@@ -1335,6 +1338,7 @@ impl fmt::Display for DecodeError {
             DecodeError::Incomplete => write!(f, "incomplete decoder"),
             DecodeError::Nonconforming => write!(f, "invalid reserved bits"),
             DecodeError::Undefined => write!(f, "undefined encoding"),
+            DecodeError::Unpredictable => write!(f, "unpredictable instruction"),
         }
     }
 }
@@ -1342,7 +1346,9 @@ impl fmt::Display for DecodeError {
 impl yaxpeax_arch::DecodeError for DecodeError {
     fn data_exhausted(&self) -> bool { self == &DecodeError::ExhaustedInput }
     fn bad_opcode(&self) -> bool { self == &DecodeError::InvalidOpcode }
-    fn bad_operand(&self) -> bool { self == &DecodeError::InvalidOperand }
+    fn bad_operand(&self) -> bool {
+        self == &DecodeError::InvalidOperand || self == &DecodeError::Unpredictable
+    }
 }
 
 impl yaxpeax_arch::Instruction for Instruction {
@@ -1356,7 +1362,8 @@ impl Default for Instruction {
             condition: ConditionCode::AL,
             opcode: Opcode::Invalid,
             operands: [Operand::Nothing, Operand::Nothing, Operand::Nothing, Operand::Nothing],
-            s: false
+            s: false,
+            thumb_w: false,
         }
     }
 }
@@ -1366,6 +1373,10 @@ impl Instruction {
         self.s = value;
     }
     pub fn s(&self) -> bool { self.s }
+    pub(crate) fn set_w(&mut self, value: bool) {
+        self.thumb_w = value;
+    }
+    pub fn w(&self) -> bool { self.thumb_w }
 }
 
 fn format_reg_list<T: fmt::Write, C: fmt::Display, Y: YaxColors<C>>(f: &mut T, mut list: u16, colors: &Y) -> Result<(), fmt::Error> {
@@ -1550,7 +1561,7 @@ impl ConditionCode {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[allow(dead_code)]
 enum DecodeMode {
     User,
@@ -1752,6 +1763,14 @@ impl InstDecoder {
             thumb: false,
         }
     }
+
+    fn unpredictable(&self) -> Result<(), DecodeError> {
+        if self.mode != DecodeMode::Any {
+            Err(DecodeError::Unpredictable)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 #[allow(non_snake_case)]
@@ -1761,6 +1780,8 @@ impl Decoder<Instruction> for InstDecoder {
     fn decode_into<T: IntoIterator<Item=u8>>(&self, inst: &mut Instruction, bytes: T) -> Result<(), Self::Error> {
         if self.thumb {
             return thumb::decode_into(&self, inst, bytes);
+        } else {
+            inst.set_w(false);
         }
 
         fn read_word<T: IntoIterator<Item=u8>>(bytes: T) -> Result<u32, DecodeError> {
