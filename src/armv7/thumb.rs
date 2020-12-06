@@ -1281,12 +1281,13 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                             } else {
                                 // `ADR` (`A8-320`)
                                 // v6T2
-                                // TODO: add = TRUE;
-                                inst.opcode = Opcode::ADR;
+                                // encoding T3
+                                // handle "add = TRUE" and "add = FALSE" by calling this add/sub
+                                inst.opcode = Opcode::ADD;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(15)),
                                     Operand::Imm32(imm as u32),
-                                    Operand::Nothing,
                                     Operand::Nothing,
                                 ];
                             }
@@ -1318,12 +1319,13 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
                             } else {
                                 // `ADR` (`A8-320`)
                                 // v6T2
-                                // TODO: add = FALSE;
-                                inst.opcode = Opcode::ADR;
+                                // encoding T2
+                                // handle "add = TRUE" and "add = FALSE" by calling this add/sub
+                                inst.opcode = Opcode::SUB;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
+                                    Operand::Reg(Reg::from_u8(15)),
                                     Operand::Imm32(imm as u32),
-                                    Operand::Nothing,
                                     Operand::Nothing,
                                 ];
                             }

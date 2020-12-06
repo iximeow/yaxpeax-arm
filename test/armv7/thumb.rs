@@ -454,6 +454,14 @@ fn test_decode_adr_cases() {
         &[0xff, 0xa7],
         "adr r7, 0x3fc"
     );
+    test_display(
+        &[0x0f, 0xf2, 0x4f, 0x56],
+        "add r6, pc, 0x54f"
+    );
+    test_display(
+        &[0xaf, 0xf2, 0x4f, 0x56],
+        "sub r6, pc, 0x54f"
+    );
 }
 #[test]
 fn test_decode_bcc_cases() {
