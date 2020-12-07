@@ -1,3 +1,31 @@
+## 0.0.5
+* add thumb/thumb2 decoders
+
+these decoders are considered "mostly correct" and "mostly complete". notably,
+system instructions are less well-tested (particularly `mrs`, `cps`, and
+similar), and the NEON extensions are still unsupported. NEON in particular
+yield `DecodeError::Incomplete`. if you, the user, see `Incomplete`, that is a
+`yaxpeax-arm` error!
+
+`yaxpeax-arm` differs from the ARM manual's assembly syntax in a few ways:
+* `.w` suffixes are best-effort.
+* `addw`/`subw` are written `add.w`/`sub.w` for consistency with other wide instructions.
+* `adr` with added/subtracted offset are shown as `add`/`sub`
+* testing is not as exhaustive as is possible for ARM; errors may yet exist
+
+at this time, if-then instructions (`IT`) are decoded, but the decoder has no
+notion of "in an `IT` block or not", so following conditional instructions are
+not yet conditional.
+
+this all said, for armv4/thumb decoding, the implementation here is probably
+close to correct. for armv6+/thumb2, aside from these notes, the implementation
+here is ... hopefully ... close to correct.
+
+* add clear rules by which `yaxpeax-arm` will be versioned 0.1 or 1.0. (see README)
+
+## 0.0.4
+* bump yaxpeax-arch, no functional change
+
 ## 0.0.3
 `Instruction`, `Opcode`, and `Operand` are now a useful model of decoded
 operations.
