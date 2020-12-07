@@ -13,17 +13,17 @@ for all ARMv7 instructions, `armv7::Instruction::s()` reports if the instruction
 0.1 and 1.0 versions are considered significant indicators of feature-completeness and stability. the specific guidelines by which `yaxpeax-arm` will be considered stable are listed below.
 
 ### 0.1 checklist
-[ ] support `NEON`
-[ ] adjust `yaxpeax-arch` so `min_length` can be contingent on the mode of `InstDecoder`
+- [ ] support `NEON`
+- [ ] adjust `yaxpeax-arch` so `min_length` can be contingent on the mode of `InstDecoder`
   - currently `min_length` is always 4, which is incorrect for `Thumb` modes.
     conversely, selecting "2" would be flagrantly wrong for `ARM` modes.
-[ ] address all in-tree TODO
+- [ ] address all in-tree TODO
 
 ### 1.0 checklist
-[ ] support per-version decode flags, so decoding an armv4, armv5, or armv7 instruction
-[ ] fully support `should_is_must` to control how pedantic decoding should be
-[ ] fully support reporting `unpredictable` encodings as `DecodeError::Unpredictable` if required
-[ ] exhaustively test armv7 and armv8 instructions against other decoders
+- [ ] support per-version decode flags, so decoding an armv4, armv5, or armv7 instruction
+- [ ] fully support `should_is_must` to control how pedantic decoding should be
+- [ ] fully support reporting `unpredictable` encodings as `DecodeError::Unpredictable` if required
+- [ ] exhaustively test armv7 and armv8 instructions against other decoders
   - existing thumb test suite is derived from enumerating thumb instructions,
     but is missing some
 
