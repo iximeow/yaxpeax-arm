@@ -22,7 +22,7 @@ impl Display for ConditionedOpcode {
 
 pub struct NoContext;
 
-fn reg_name_colorize<C: fmt::Display, Y: YaxColors<C>>(reg: Reg, colors: &Y) -> impl fmt::Display {
+fn reg_name_colorize<Y: YaxColors>(reg: Reg, colors: &Y) -> impl fmt::Display {
     match reg.number() {
         0 => colors.register("r0"),
         1 => colors.register("r1"),
@@ -45,7 +45,7 @@ fn reg_name_colorize<C: fmt::Display, Y: YaxColors<C>>(reg: Reg, colors: &Y) -> 
 }
 
 #[allow(non_snake_case)]
-impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u32, NoContext, Color, T, Y> for Instruction {
+impl <T: fmt::Write, Y: YaxColors> ShowContextual<u32, NoContext, T, Y> for Instruction {
     fn contextualize(&self, colors: &Y, _address: u32, _context: Option<&NoContext>, out: &mut T) -> fmt::Result {
         match self.opcode {
             Opcode::IT => {
@@ -381,7 +381,7 @@ impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u3
     }
 }
 
-impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color, Y> for ConditionedOpcode {
+impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for ConditionedOpcode {
     fn colorize(&self, colors: &Y, out: &mut T) -> fmt::Result {
         match self.0 {
             Opcode::UDF |
@@ -1464,7 +1464,7 @@ impl Display for Bank {
     }
 }
 
-impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> Colorize<T, Color, Y> for Operand {
+impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for Operand {
     fn colorize(&self, colors: &Y, f: &mut T) -> fmt::Result {
         match self {
             Operand::RegList(list) => {
@@ -1636,7 +1636,7 @@ impl Instruction {
     pub fn thumb(&self) -> bool { self.thumb }
 }
 
-fn format_reg_list<T: fmt::Write, C: fmt::Display, Y: YaxColors<C>>(f: &mut T, mut list: u16, colors: &Y) -> Result<(), fmt::Error> {
+fn format_reg_list<T: fmt::Write, Y: YaxColors>(f: &mut T, mut list: u16, colors: &Y) -> Result<(), fmt::Error> {
     write!(f, "{{")?;
     let mut i = 0;
     let mut tail = false;
@@ -1657,7 +1657,7 @@ fn format_reg_list<T: fmt::Write, C: fmt::Display, Y: YaxColors<C>>(f: &mut T, m
 }
 
 #[allow(non_snake_case)]
-fn format_shift<T: fmt::Write, C: fmt::Display, Y: YaxColors<C>>(f: &mut T, shift: RegShift, colors: &Y) -> Result<(), fmt::Error> {
+fn format_shift<T: fmt::Write, Y: YaxColors>(f: &mut T, shift: RegShift, colors: &Y) -> Result<(), fmt::Error> {
     match shift.into_shift() {
         RegShiftStyle::RegImm(imm_shift) => {
             if imm_shift.imm() == 0 && imm_shift.stype() == ShiftStyle::LSL {
@@ -1673,7 +1673,7 @@ fn format_shift<T: fmt::Write, C: fmt::Display, Y: YaxColors<C>>(f: &mut T, shif
 }
 
 #[allow(non_snake_case)]
-fn format_reg_shift_mem<T: fmt::Write, C: fmt::Display, Y: YaxColors<C>>(f: &mut T, Rd: Reg, shift: RegShift, add: bool, pre: bool, wback: bool, colors: &Y) -> Result<(), fmt::Error> {
+fn format_reg_shift_mem<T: fmt::Write, Y: YaxColors>(f: &mut T, Rd: Reg, shift: RegShift, add: bool, pre: bool, wback: bool, colors: &Y) -> Result<(), fmt::Error> {
     let op = if add { "" } else { "-" };
 
     match (pre, wback) {
@@ -1698,7 +1698,7 @@ fn format_reg_shift_mem<T: fmt::Write, C: fmt::Display, Y: YaxColors<C>>(f: &mut
 }
 
 #[allow(non_snake_case)]
-fn format_reg_imm_mem<T: fmt::Write, C: fmt::Display, Y: YaxColors<C>>(f: &mut T, Rn: Reg, imm: u16, add: bool, pre: bool, wback: bool, colors: &Y) -> Result<(), fmt::Error> {
+fn format_reg_imm_mem<T: fmt::Write, Y: YaxColors>(f: &mut T, Rn: Reg, imm: u16, add: bool, pre: bool, wback: bool, colors: &Y) -> Result<(), fmt::Error> {
     if imm != 0 {
         let op = if add { "" } else { "-" };
 

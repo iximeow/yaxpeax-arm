@@ -156,7 +156,7 @@ impl yaxpeax_arch::Instruction for Instruction {
 
 pub struct NoContext;
 
-impl <T: fmt::Write, Color: fmt::Display, Y: YaxColors<Color>> ShowContextual<u64, NoContext, Color, T, Y> for Instruction {
+impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, NoContext, T, Y> for Instruction {
     fn contextualize(&self, _colors: &Y, _address: u64, _context: Option<&NoContext>, out: &mut T) -> fmt::Result {
         write!(out, "{}", self)
     }
