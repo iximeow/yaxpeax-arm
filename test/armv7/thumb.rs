@@ -5,7 +5,8 @@ type InstDecoder = <ARMv7 as Arch>::Decoder;
 
 #[allow(dead_code)]
 fn test_invalid_under(decoder: &InstDecoder, data: &[u8]) {
-    match decoder.decode(data.to_vec()) {
+    let mut reader = yaxpeax_arch::U8Reader::new(&data[..]);
+    match decoder.decode(&mut reader) {
         Err(_) => { },
         Ok(inst) => {
             panic!(
@@ -19,7 +20,13 @@ fn test_invalid_under(decoder: &InstDecoder, data: &[u8]) {
 
 #[allow(dead_code)]
 fn test_display_under(decoder: &InstDecoder, data: [u8; 4], expected: &'static str) {
-    let instr = decoder.decode(data.to_vec()).unwrap_or_else(|_| panic!("failed to decode {:#x?}", data));
+    let mut reader = yaxpeax_arch::U8Reader::new(&data[..]);
+    let instr = match decoder.decode(&mut reader) {
+        Err(e) => {
+            panic!("failed to decode {:#x?}: {}", data, e)
+        }
+        Ok(instr) => instr,
+    };
     let displayed = format!("{}", instr);
     assert!(
         displayed == expected,
@@ -31,7 +38,13 @@ fn test_display_under(decoder: &InstDecoder, data: [u8; 4], expected: &'static s
 
 #[allow(dead_code)]
 fn test_decode(data: &[u8], expected: Instruction) {
-    let instr = InstDecoder::default_thumb().decode(data.to_vec()).unwrap();
+    let mut reader = yaxpeax_arch::U8Reader::new(data);
+    let instr = match InstDecoder::default_thumb().decode(&mut reader) {
+        Err(e) => {
+            panic!("failed to decode {:#x?}: {}", data, e)
+        }
+        Ok(instr) => instr,
+    };
     assert!(
         instr == expected,
         "decode error for {:#x?}:\n  decoded: {:?}\n expected: {:?}\n",
@@ -42,11 +55,17 @@ fn test_decode(data: &[u8], expected: Instruction) {
 
 #[allow(dead_code)]
 fn test_invalid(data: &[u8]) {
-   test_invalid_under(&InstDecoder::default(), data);
+   test_invalid_under(&InstDecoder::default_thumb(), data);
 }
 
 fn test_display(data: &[u8], expected: &'static str) {
-    let instr = InstDecoder::default_thumb().decode(data.to_vec()).unwrap();
+    let mut reader = yaxpeax_arch::U8Reader::new(data);
+    let instr = match InstDecoder::default_thumb().decode(&mut reader) {
+        Err(e) => {
+            panic!("failed to decode {:#x?}: {}", data, e)
+        }
+        Ok(instr) => instr,
+    };
     let text = format!("{}", instr);
     assert!(
         text == expected,

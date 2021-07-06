@@ -7,7 +7,7 @@
 
 use std::fmt::{self, Display, Formatter};
 
-use yaxpeax_arch::{Arch, AddressDiff, Colorize, Decoder, LengthedInstruction, NoColors, ShowContextual, YaxColors};
+use yaxpeax_arch::{Arch, AddressDiff, Colorize, Decoder, LengthedInstruction, Reader, ReadError, NoColors, ShowContextual, YaxColors};
 
 mod thumb;
 
@@ -1565,7 +1565,7 @@ pub struct Instruction {
     pub thumb: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum DecodeError {
     ExhaustedInput,
     InvalidOpcode,
@@ -1578,15 +1578,14 @@ pub enum DecodeError {
 
 impl fmt::Display for DecodeError {
     fn fmt(&self, f:  &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            DecodeError::ExhaustedInput => write!(f, "exhausted input"),
-            DecodeError::InvalidOpcode => write!(f, "invalid opcode"),
-            DecodeError::InvalidOperand => write!(f, "invalid operand"),
-            DecodeError::Incomplete => write!(f, "incomplete decoder"),
-            DecodeError::Nonconforming => write!(f, "invalid reserved bits"),
-            DecodeError::Undefined => write!(f, "undefined encoding"),
-            DecodeError::Unpredictable => write!(f, "unpredictable instruction"),
-        }
+        use yaxpeax_arch::DecodeError;
+        f.write_str(self.description())
+    }
+}
+
+impl From<ReadError> for DecodeError {
+    fn from(_e: ReadError) -> DecodeError {
+        DecodeError::ExhaustedInput
     }
 }
 
@@ -1595,6 +1594,17 @@ impl yaxpeax_arch::DecodeError for DecodeError {
     fn bad_opcode(&self) -> bool { self == &DecodeError::InvalidOpcode }
     fn bad_operand(&self) -> bool {
         self == &DecodeError::InvalidOperand || self == &DecodeError::Unpredictable
+    }
+    fn description(&self) -> &'static str {
+        match self {
+            DecodeError::ExhaustedInput => "exhausted input",
+            DecodeError::InvalidOpcode => "invalid opcode",
+            DecodeError::InvalidOperand => "invalid operand",
+            DecodeError::Incomplete => "incomplete decoder",
+            DecodeError::Nonconforming => "invalid reserved bits",
+            DecodeError::Undefined => "undefined encoding",
+            DecodeError::Unpredictable => "unpredictable instruction",
+        }
     }
 }
 
@@ -2036,30 +2046,19 @@ impl InstDecoder {
 }
 
 #[allow(non_snake_case)]
-impl Decoder<Instruction> for InstDecoder {
-    type Error = DecodeError;
-
-    fn decode_into<T: IntoIterator<Item=u8>>(&self, inst: &mut Instruction, bytes: T) -> Result<(), Self::Error> {
+impl Decoder<ARMv7> for InstDecoder {
+    fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(&self, inst: &mut Instruction, words: &mut T) -> Result<(), <ARMv7 as Arch>::DecodeError> {
         inst.set_w(false);
         inst.set_wide(false);
         if self.thumb {
-            return thumb::decode_into(&self, inst, bytes);
+            return thumb::decode_into(&self, inst, words);
         } else {
             inst.set_thumb(false);
         }
 
-        fn read_word<T: IntoIterator<Item=u8>>(bytes: T) -> Result<u32, DecodeError> {
-            let mut iter = bytes.into_iter();
-            let instr: u32 =
-                ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u32)      ) |
-                ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u32) << 8 ) |
-                ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u32) << 16) |
-                ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u32) << 24);
-
-            Ok(instr)
-        }
-
-        let word = read_word(bytes)?;
+        let mut word_bytes = [0u8; 4];
+        words.next_n(&mut word_bytes)?;
+        let word = u32::from_le_bytes(word_bytes);
 
         let (cond, opc_upper) = {
             let top_byte = word >> 24;
@@ -3696,16 +3695,13 @@ impl Decoder<Instruction> for InstDecoder {
     }
 }
 
-#[cfg(feature="use-serde")]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ARMv7;
-
-#[cfg(not(feature="use-serde"))]
+#[cfg_attr(feature="use-serde", derive(Serialize, Deserialize))]
 #[derive(Debug)]
 pub struct ARMv7;
 
 impl Arch for ARMv7 {
     type Address = u32;
+    type Word = u8;
     type Instruction = Instruction;
     type DecodeError = DecodeError;
     type Decoder = InstDecoder;

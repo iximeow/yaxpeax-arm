@@ -1,9 +1,12 @@
 // use yaxpeax_arch::{Arch, AddressDiff, Decoder, LengthedInstruction};
+use yaxpeax_arch::Arch;
 
+use armv7::ARMv7;
 use armv7::ConditionCode;
 use armv7::DecodeError;
 use armv7::CReg;
 use armv7::Reg;
+use armv7::Reader;
 use armv7::RegShift;
 use armv7::Operand;
 use armv7::Opcode;
@@ -97,20 +100,20 @@ fn DecodeImmShift(reg: u8, ty: u8, imm5: u8) -> RegShift {
 }
 
 #[allow(non_snake_case)]
-pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut Instruction, bytes: T) -> Result<(), DecodeError> {
+pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(decoder: &InstDecoder, inst: &mut Instruction, words: &mut T) -> Result<(), <ARMv7 as Arch>::DecodeError> {
     // these are cleared in `armv7::InstDecoder::decode_into`.
     // they must be reset when switching out of thumb decoding or decoding a new thumb instruction,
     // which that `decode_into` is the entrypoint for in all cases.
     // inst.set_w(false);
     // inst.set_wide(false);
     inst.set_thumb(true);
-    let mut iter = bytes.into_iter();
-    let instr: u16 =
-        ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u16)      ) |
-        ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u16) << 8 );
+    let mut word_bytes = [0u8; 2];
+    words.next_n(&mut word_bytes)?;
+    let word = u16::from_le_bytes(word_bytes);
+    let instr = word;
 
     let mut instr2 = bitarr![Lsb0, u16; 0u16; 16];
-    instr2[0..16].store(instr);
+    instr2[0..16].store(word);
 
     let opword = instr2[11..].load::<u16>();
 
@@ -122,9 +125,9 @@ pub fn decode_into<T: IntoIterator<Item=u8>>(decoder: &InstDecoder, inst: &mut I
         // 32b instruction - `A6-228, 32-bit Thumb instruction encoding`
         // opword low bits 01, 10, and 11 correspond to `op1` in table `A6-9`
 
-        let lower: u16 =
-            ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u16)      ) |
-            ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u16) << 8 );
+        let mut word_bytes = [0u8; 2];
+        words.next_n(&mut word_bytes)?;
+        let lower = u16::from_le_bytes(word_bytes);
 
         let mut lower2 = bitarr![Lsb0, u16; 0u16; 16];
         lower2[0..16].store(lower);

@@ -6,7 +6,8 @@ mod thumb;
 type InstDecoder = <ARMv7 as Arch>::Decoder;
 
 fn test_invalid_under(decoder: &InstDecoder, data: [u8; 4]) {
-    match decoder.decode(data.to_vec()) {
+    let mut reader = yaxpeax_arch::U8Reader::new(&data[..]);
+    match decoder.decode(&mut reader) {
         Err(_) => { },
         Ok(inst) => {
             panic!(
@@ -19,7 +20,13 @@ fn test_invalid_under(decoder: &InstDecoder, data: [u8; 4]) {
 }
 
 fn test_display_under(decoder: &InstDecoder, data: [u8; 4], expected: &'static str) {
-    let instr = decoder.decode(data.to_vec()).unwrap_or_else(|_| panic!("failed to decode {:02x}{:02x}{:02x}{:02x}", data[0], data[1], data[2], data[3]));
+    let mut reader = yaxpeax_arch::U8Reader::new(&data[..]);
+    let instr = match decoder.decode(&mut reader) {
+        Err(e) => {
+            panic!("failed to decode {:02x}{:02x}{:02x}{:02x}: {}", data[0], data[1], data[2], data[3], e)
+        },
+        Ok(instr) => instr,
+    };
     let displayed = format!("{}", instr);
     assert!(
         displayed == expected,
@@ -30,7 +37,8 @@ fn test_display_under(decoder: &InstDecoder, data: [u8; 4], expected: &'static s
 }
 
 fn test_decode(data: [u8; 4], expected: Instruction) {
-    let instr = InstDecoder::default().decode(data.to_vec()).unwrap();
+    let mut reader = yaxpeax_arch::U8Reader::new(&data[..]);
+    let instr = InstDecoder::default().decode(&mut reader).unwrap();
     assert!(
         instr == expected,
         "decode error for {:02x}{:02x}{:02x}{:02x}:\n  decoded: {:?}\n expected: {:?}\n",
@@ -76,7 +84,8 @@ fn test_arm_security_extensions(data: [u8; 4], expected: &'static str) {
 }
 
 fn test_nonconformant(data: [u8; 4]) {
-    let result = InstDecoder::default().decode(data.to_vec());
+    let mut reader = yaxpeax_arch::U8Reader::new(&data[..]);
+    let result = InstDecoder::default().decode(&mut reader);
     assert!(
         result == Err(DecodeError::Nonconforming),
         "got bad result: {:?} from {:#x?}", result, data
@@ -84,7 +93,8 @@ fn test_nonconformant(data: [u8; 4]) {
 }
 
 fn test_display(data: [u8; 4], expected: &'static str) {
-    let instr = InstDecoder::default().decode(data.to_vec()).unwrap();
+    let mut reader = yaxpeax_arch::U8Reader::new(&data[..]);
+    let instr = InstDecoder::default().decode(&mut reader).unwrap();
     let text = format!("{}", instr);
     assert!(
         text == expected,
@@ -693,7 +703,8 @@ static INSTRUCTION_BYTES: [u8; 4 * 60] = [
 fn test_decode_span() {
     let mut i = 0u32;
     while i < INSTRUCTION_BYTES.len() as u32 {
-        let instr = InstDecoder::default().decode(INSTRUCTION_BYTES[(i as usize)..].iter().cloned()).unwrap();
+        let mut reader = yaxpeax_arch::U8Reader::new(&INSTRUCTION_BYTES[(i as usize)..]);
+        let instr = InstDecoder::default().decode(&mut reader).unwrap();
         println!(
             "Decoded {:02x}{:02x}{:02x}{:02x}: {}", //{:?}\n  {}",
             INSTRUCTION_BYTES[i as usize],

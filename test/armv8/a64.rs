@@ -2,7 +2,8 @@ use yaxpeax_arch::{Arch, Decoder, LengthedInstruction};
 use yaxpeax_arm::armv8::a64::{ARMv8, Instruction, Operand, Opcode, SizeCode, ShiftStyle};
 
 fn test_decode(data: [u8; 4], expected: Instruction) {
-    let instr = <ARMv8 as Arch>::Decoder::default().decode(data.to_vec()).unwrap();
+    let mut reader = yaxpeax_arch::U8Reader::new(&data[..]);
+    let instr = <ARMv8 as Arch>::Decoder::default().decode(&mut reader).unwrap();
     assert!(
         instr == expected,
         "decode error for {:02x}{:02x}{:02x}{:02x}:\n  decoded: {:?}\n expected: {:?}\n",
@@ -12,7 +13,8 @@ fn test_decode(data: [u8; 4], expected: Instruction) {
 }
 
 fn test_display(data: [u8; 4], expected: &'static str) {
-    let instr = <ARMv8 as Arch>::Decoder::default().decode(data.to_vec()).unwrap();
+    let mut reader = yaxpeax_arch::U8Reader::new(&data[..]);
+    let instr = <ARMv8 as Arch>::Decoder::default().decode(&mut reader).unwrap();
     let text = format!("{}", instr);
     assert!(
         text == expected,
@@ -2313,7 +2315,8 @@ static INSTRUCTION_BYTES: [u8; 4 * 61] = [
 fn test_decode_span() {
     let mut i = 0u64;
     while i < INSTRUCTION_BYTES.len() as u64 {
-        let instr = <ARMv8 as Arch>::Decoder::default().decode(INSTRUCTION_BYTES[(i as usize)..].iter().cloned()).unwrap();
+        let mut reader = yaxpeax_arch::U8Reader::new(&INSTRUCTION_BYTES[i as usize..]);
+        let instr = <ARMv8 as Arch>::Decoder::default().decode(&mut reader).unwrap();
         println!(
             "Decoded {:02x}{:02x}{:02x}{:02x}: {}", //{:?}\n  {}",
             INSTRUCTION_BYTES[i as usize],

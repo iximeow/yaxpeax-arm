@@ -3,7 +3,7 @@
 
 use std::fmt::{self, Display, Formatter};
 
-use yaxpeax_arch::{Arch, AddressDiff, Decoder, LengthedInstruction, ShowContextual, YaxColors};
+use yaxpeax_arch::{Arch, AddressDiff, Decoder, LengthedInstruction, Reader, ReadError, ShowContextual, YaxColors};
 
 #[allow(non_snake_case)]
 mod docs {
@@ -135,11 +135,14 @@ pub enum DecodeError {
 
 impl fmt::Display for DecodeError {
     fn fmt(&self, f:  &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            DecodeError::ExhaustedInput => write!(f, "exhausted input"),
-            DecodeError::InvalidOpcode => write!(f, "invalid opcode"),
-            DecodeError::InvalidOperand => write!(f, "invalid operand"),
-        }
+        use yaxpeax_arch::DecodeError;
+        f.write_str(self.description())
+    }
+}
+
+impl From<ReadError> for DecodeError {
+    fn from(_e: ReadError) -> DecodeError {
+        DecodeError::ExhaustedInput
     }
 }
 
@@ -147,6 +150,13 @@ impl yaxpeax_arch::DecodeError for DecodeError {
     fn data_exhausted(&self) -> bool { self == &DecodeError::ExhaustedInput }
     fn bad_opcode(&self) -> bool { self == &DecodeError::InvalidOpcode }
     fn bad_operand(&self) -> bool { self == &DecodeError::InvalidOperand }
+    fn description(&self) -> &'static str {
+        match self {
+            DecodeError::ExhaustedInput => "exhausted input",
+            DecodeError::InvalidOpcode => "invalid opcode",
+            DecodeError::InvalidOperand => "invalid operand",
+        }
+    }
 }
 
 impl yaxpeax_arch::Instruction for Instruction {
@@ -171,6 +181,7 @@ pub struct ARMv8 { }
 pub struct ARMv8 { }
 
 impl Arch for ARMv8 {
+    type Word = u8;
     type Address = u64;
     type Instruction = Instruction;
     type DecodeError = DecodeError;
@@ -1014,22 +1025,12 @@ impl Display for Operand {
 pub struct InstDecoder {}
 
 #[allow(non_snake_case)]
-impl Decoder<Instruction> for InstDecoder {
-    type Error = DecodeError;
+impl Decoder<ARMv8> for InstDecoder {
+    fn decode_into<T: Reader<<ARMv8 as Arch>::Address, <ARMv8 as Arch>::Word>>(&self, inst: &mut Instruction, words: &mut T) -> Result<(), <ARMv8 as Arch>::DecodeError> {
+        let mut word_bytes = [0u8; 4];
+        words.next_n(&mut word_bytes)?;
+        let word = u32::from_le_bytes(word_bytes);
 
-    fn decode_into<T: IntoIterator<Item=u8>>(&self, inst: &mut Instruction, bytes: T) -> Result<(), Self::Error> {
-        fn read_word<T: IntoIterator<Item=u8>>(bytes: T) -> Result<u32, DecodeError> {
-            let mut iter = bytes.into_iter();
-            let instr: u32 =
-                ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u32)      ) |
-                ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u32) << 8 ) |
-                ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u32) << 16) |
-                ((iter.next().ok_or(DecodeError::ExhaustedInput)? as u32) << 24);
-
-            Ok(instr)
-        }
-
-        let word = read_word(bytes)?;
 
         #[derive(Copy, Clone, Debug)]
         enum Section {
