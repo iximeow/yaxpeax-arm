@@ -1,7 +1,7 @@
 [package]
 
 name = "yaxpeax-arm"
-version = "0.1.0"
+version = "0.1.1"
 authors = [ "iximeow <me@iximeow.net>" ]
 license = "0BSD"
 repository = "http://git.iximeow.net/yaxpeax-arm/"
@@ -19,6 +19,9 @@ name = "test"
 path = "test/test.rs"
 
 [features]
-default = ["use-serde"]
+default = ["std", "use-serde"]
+
+# opt-in for std-related Error impl - necessary to `?`-unwrap `DecodeError`.
+std = []
 
 use-serde = ["yaxpeax-arch/use-serde", "serde", "serde_derive"]

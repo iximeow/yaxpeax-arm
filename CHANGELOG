@@ -1,3 +1,10 @@
+## 0.1.1
+* fix incorrect `yaxpeax_arch::Arch` impl for `std`-enabled builds
+  (DecodeError did not implement `std::error::Error` in those build environments)
+
+## 0.1.0
+* target yaxpeax-arch 0.2.0
+
 ## 0.0.6
 * fix incorrect markdown in README.md
 

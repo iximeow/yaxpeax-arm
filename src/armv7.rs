@@ -5,7 +5,7 @@
 //#[cfg(feature="use-serde")]
 //use serde::{Serialize, Deserialize};
 
-use std::fmt::{self, Display, Formatter};
+use core::fmt::{self, Display, Formatter};
 
 use yaxpeax_arch::{Arch, AddressDiff, Colorize, Decoder, LengthedInstruction, Reader, ReadError, NoColors, ShowContextual, YaxColors};
 
@@ -1583,6 +1583,15 @@ impl fmt::Display for DecodeError {
     }
 }
 
+#[cfg(feature = "std")]
+extern crate std;
+#[cfg(feature = "std")]
+impl std::error::Error for DecodeError {
+    fn description(&self) -> &str {
+        <Self as yaxpeax_arch::DecodeError>::description(self)
+    }
+}
+
 impl From<ReadError> for DecodeError {
     fn from(_e: ReadError) -> DecodeError {
         DecodeError::ExhaustedInput
@@ -2399,7 +2408,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                     Operand::Reg(Reg::from_u8(R[1])),
                                 ];
                             }
-                            _ => { unreachable!(format!("mul upcode: {:x}", op)) }
+                            _ => { unreachable!("mul upcode: {:x}", op) }
                         }
                     } else {
                     // |c o n d|0 0 0 u|x x x x x x x x x x x x x x x x|1 u u 1|x x x x|
@@ -2539,7 +2548,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                          * high bit and mid-bits of op all being 0 was checked
                                          * before reaching here.
                                          */
-                                        unreachable!(format!("load/store flags: {:x}", flags));
+                                        unreachable!("load/store flags: {:x}", flags);
                                     }
                                 }
                             }

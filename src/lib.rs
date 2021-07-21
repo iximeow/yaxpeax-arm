@@ -1,3 +1,5 @@
+#![no_std]
+
 #[cfg(feature="use-serde")]
 #[macro_use] extern crate serde_derive;
 #[cfg(feature="use-serde")]

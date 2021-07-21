@@ -1,7 +1,7 @@
 //#[cfg(feature="use-serde")]
 //use serde::{Serialize, Deserialize};
 
-use std::fmt::{self, Display, Formatter};
+use core::fmt::{self, Display, Formatter};
 
 use yaxpeax_arch::{Arch, AddressDiff, Decoder, LengthedInstruction, Reader, ReadError, ShowContextual, YaxColors};
 
@@ -137,6 +137,15 @@ impl fmt::Display for DecodeError {
     fn fmt(&self, f:  &mut fmt::Formatter) -> fmt::Result {
         use yaxpeax_arch::DecodeError;
         f.write_str(self.description())
+    }
+}
+
+#[cfg(feature = "std")]
+extern crate std;
+#[cfg(feature = "std")]
+impl std::error::Error for DecodeError {
+    fn description(&self) -> &str {
+        <Self as yaxpeax_arch::DecodeError>::description(self)
     }
 }
 
@@ -1075,7 +1084,7 @@ impl Decoder<ARMv8> for InstDecoder {
             Section::DataProcessingSimd2,            // 1111
         ][(section_bits & 0x0f) as usize];
 
-        println!("word: {:#x}, bits: {:#b}", word, section_bits & 0xf);
+        // println!("word: {:#x}, bits: {:#b}", word, section_bits & 0xf);
 
         match section {
             Section::DataProcessingSimd |
@@ -1741,7 +1750,7 @@ impl Decoder<ARMv8> for InstDecoder {
                 let group_byte = word >> 23;
                 let group_bits = (group_byte & 0x03) | ((group_byte >> 1) & 0x04) | ((group_byte >> 2) & 0x18);
 
-                println!("Group byte: {:#b}, bits: {:#b}", group_byte, group_bits);
+                // println!("Group byte: {:#b}, bits: {:#b}", group_byte, group_bits);
                 match group_bits {
                     0b00000 => {
                         let Rt = (word & 0x1f) as u16;
@@ -2178,7 +2187,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         let Rn = ((word >> 5) & 0x1f) as u16;
                         let size_opc = ((word >> 22) & 0x03) | ((word >> 28) & 0x0c);
                         let category = (word >> 10) & 0x03;
-                        println!("load/store: size_opc: {:#b}, category: {:#b}", size_opc, category);
+                        // println!("load/store: size_opc: {:#b}, category: {:#b}", size_opc, category);
                         if word & 0x200000 != 0 {
                             if category != 0b10 {
                                 inst.opcode = Opcode::Invalid;
