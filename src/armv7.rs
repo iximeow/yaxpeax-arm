@@ -1728,10 +1728,7 @@ fn format_reg_imm_mem<T: fmt::Write, Y: YaxColors>(f: &mut T, Rn: Reg, imm: u16,
             (true, false) => {
                 write!(f, "[{}, {}{:#x}]", reg_name_colorize(Rn, colors), op, imm)
             },
-            (false, true) => {
-                unreachable!("I don't know how to render an operand with postindex and wback==true, this seems like it should be LDRT");
-            },
-            (false, false) => {
+            (false, _) => {
                 write!(f, "[{}], {}{:#x}", reg_name_colorize(Rn, colors), op, imm)
             }
         }
