@@ -2280,7 +2280,7 @@ impl Decoder<ARMv7> for InstDecoder {
                         }
                     }
                     _ => {
-                        unreachable!();
+                        unreachable!("op1 is two bits");
                     }
                 }
             } else {
@@ -2405,7 +2405,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                     Operand::Reg(Reg::from_u8(R[1])),
                                 ];
                             }
-                            _ => { unreachable!("mul upcode: {:x}", op) }
+                            _ => { unreachable!("mul opcode is only three bits, got: {:x}", op) }
                         }
                     } else {
                     // |c o n d|0 0 0 u|x x x x x x x x x x x x x x x x|1 u u 1|x x x x|
@@ -2894,7 +2894,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                     _ => { unreachable!("impossible bit pattern"); }
                                 }
                             }
-                            _ => { unreachable!(); }
+                            _ => { unreachable!("op is two bits"); }
                         }
                     }
                 } else {
@@ -3004,7 +3004,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                                 inst.operands[3] = Operand::Nothing;
                                             }
                                             _ => {
-                                                unreachable!();
+                                                unreachable!("opcode is masked to two bits here");
                                             }
                                         }
                                     }
@@ -3248,7 +3248,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                     return Ok(());
                                 }
                                 _ => {
-                                    unreachable!();
+                                    unreachable!("word masked to two bits");
                                 }
                             }
                         }
@@ -3695,7 +3695,7 @@ impl Decoder<ARMv7> for InstDecoder {
                 // low bit of 0b110 or 0b111 corresponds to high bit of op1
                 return Err(DecodeError::Incomplete);
             },
-            _ => { unreachable!(); }
+            _ => { unreachable!("opc category is three bits"); }
         }
         Ok(())
     }

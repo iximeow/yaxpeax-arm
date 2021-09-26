@@ -1,5 +1,6 @@
 use yaxpeax_arch::{Arch, Decoder, LengthedInstruction};
 use yaxpeax_arm::armv8::a64::{ARMv8, Instruction, Operand, Opcode, SizeCode, ShiftStyle};
+use yaxpeax_arm::armv8::a64::DecodeError;
 
 fn test_decode(data: [u8; 4], expected: Instruction) {
     let mut reader = yaxpeax_arch::U8Reader::new(&data[..]);
@@ -9,6 +10,17 @@ fn test_decode(data: [u8; 4], expected: Instruction) {
         "decode error for {:02x}{:02x}{:02x}{:02x}:\n  decoded: {:?}\n expected: {:?}\n",
         data[0], data[1], data[2], data[3],
         instr, expected
+    );
+}
+
+fn test_err(data: [u8; 4], err: DecodeError) {
+    let mut reader = yaxpeax_arch::U8Reader::new(&data[..]);
+    let result = <ARMv8 as Arch>::Decoder::default().decode(&mut reader);
+    assert_eq!(
+        result, Err(err),
+        "expected IncompleteDecoder error for {:02x}{:02x}{:02x}{:02x}:\n  decoded: {:?}\n",
+        data[0], data[1], data[2], data[3],
+        result,
     );
 }
 
@@ -23,6 +35,13 @@ fn test_display(data: [u8; 4], expected: &'static str) {
         instr,
         text, expected
     );
+}
+
+#[test]
+fn test_neon() {
+    // currently, NEON is incompletely implemented in yaxpeax-arm.
+    test_err([0x00, 0x01, 0x27, 0x1e], DecodeError::IncompleteDecoder);
+    test_display([0xe0, 0x03, 0x13, 0xaa], "mov x0, x19");
 }
 
 #[test]

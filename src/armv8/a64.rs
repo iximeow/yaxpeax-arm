@@ -131,6 +131,7 @@ pub enum DecodeError {
     ExhaustedInput,
     InvalidOpcode,
     InvalidOperand,
+    IncompleteDecoder,
 }
 
 impl fmt::Display for DecodeError {
@@ -164,6 +165,7 @@ impl yaxpeax_arch::DecodeError for DecodeError {
             DecodeError::ExhaustedInput => "exhausted input",
             DecodeError::InvalidOpcode => "invalid opcode",
             DecodeError::InvalidOperand => "invalid operand",
+            DecodeError::IncompleteDecoder => "incomplete decoder",
         }
     }
 }
@@ -1089,7 +1091,7 @@ impl Decoder<ARMv8> for InstDecoder {
         match section {
             Section::DataProcessingSimd |
             Section::DataProcessingSimd2 => {
-                unreachable!();
+                return Err(DecodeError::IncompleteDecoder);
             }
             Section::Unallocated => {
                 inst.opcode = Opcode::Invalid;
@@ -1165,7 +1167,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         },
                         0b001 => {
                             // Conditional compare (register/immediate)
-                            unimplemented!();
+                            return Err(DecodeError::IncompleteDecoder);
                         },
                         0b010 => {
                             // Conditional select
@@ -1243,7 +1245,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             if ((word >> 30) & 1) == 0 {
                                 // X0X11010_110XXXXX_XXXXXXXX_XXXXXXXX
                                 // Data-processing (2 source)
-                                unimplemented!();
+                                return Err(DecodeError::IncompleteDecoder);
                             } else {
                                 // X1X11010_110XXXXX_XXXXXXXX_XXXXXXXX
                                 // Data-processing (1 source)
@@ -1256,7 +1258,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 // however, PAC (added in v8.3) says otherwise.
                                 match opcode2 {
                                     0b00000 => {
-                                        unimplemented!();
+                                        return Err(DecodeError::IncompleteDecoder);
                                     }
                                     0b00001 => {
                                         match opcode {
@@ -1290,14 +1292,14 @@ impl Decoder<ARMv8> for InstDecoder {
                                         }
                                     }
                                     _ => {
-                                        unimplemented!();
+                                        return Err(DecodeError::IncompleteDecoder);
                                     }
                                 }
                             }
                         },
                         _ => {
                             // Data processing (3 source)
-                            unimplemented!();
+                            return Err(DecodeError::IncompleteDecoder);
                         }
                     }
                 } else {
@@ -1730,9 +1732,10 @@ impl Decoder<ARMv8> for InstDecoder {
                         } else {
                             inst.opcode = Opcode::Invalid;
                         }
-                        unimplemented!("decode Rd: {}, Rn: {}, imms: {}, Rm: {}, No0: {}", Rd, Rn, imms, Rm, No0);
+                        // eprintln!("decode Rd: {}, Rn: {}, imms: {}, Rm: {}, No0: {}", Rd, Rn, imms, Rm, No0);
+                        return Err(DecodeError::IncompleteDecoder);
                     }
-                    _ => { unreachable!() }
+                    _ => { unreachable!("group is three bits") }
                 }
             },
             Section::LoadStore => {
@@ -2058,7 +2061,8 @@ impl Decoder<ARMv8> for InstDecoder {
                         // load/store register pair (post-indexed)
                         // V == 1
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        unreachable!("C3.3.15 V==1, opc_L: {}", opc_L);
+                        // eprintln!("C3.3.15 V==1, opc_L: {}", opc_L);
+                        return Err(DecodeError::IncompleteDecoder);
                     },
                     0b10010 => {
                         // load/store register pair (offset)
