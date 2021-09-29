@@ -22,6 +22,6 @@ path = "test/test.rs"
 default = ["std", "use-serde"]
 
 # opt-in for std-related Error impl - necessary to `?`-unwrap `DecodeError`.
-std = []
+std = ["yaxpeax-arch/std"]
 
 use-serde = ["yaxpeax-arch/use-serde", "serde", "serde_derive"]
