@@ -2956,6 +2956,9 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                     return Err(DecodeError::InvalidOpcode);
                                 }
 
+                                if op1 == 0 {
+                                    return Err(DecodeError::InvalidOpcode);
+                                }
                                 let opcode_idx = (op1 - 1) * 3 + op2;
 
                                 let rn = instr2[0..4].load::<u8>();

@@ -7,6 +7,8 @@ use yaxpeax_arch::{Arch, AddressDiff, Decoder, LengthedInstruction, Reader, Read
 
 #[allow(non_snake_case)]
 mod docs {
+    use crate::armv8::a64::DecodeError;
+
     #[test]
     fn test_ones() {
         assert_eq!(Ones(0), 0x00);
@@ -77,9 +79,12 @@ mod docs {
     }
 
     // helper functions from the ARMv8 Architecture Reference Manual
-    pub fn DecodeBitMasks_32(immN: u8, imms: u8, immr: u8) -> (u32, u32) {
+    pub fn DecodeBitMasks_32(immN: u8, imms: u8, immr: u8) -> Result<(u32, u32), DecodeError> {
         // should the !imms be ~imms
         let len = HighestSetBit(7, ((immN << 6) | ((!imms) & 0x3f)) as u64);
+        if len == 0xff {
+            return Err(DecodeError::InvalidOperand);
+        }
 
         let levels = (Ones(len) & 0x3f) as u8; // should ZeroExtend to at least 6 bits, but this is u8.
 
@@ -93,12 +98,15 @@ mod docs {
         let telem = Ones(d + 1);
         let wmask = Replicate(ROR(welem, esize, R), esize, 32) as u32;
         let tmask = Replicate(telem, esize, 32) as u32;
-        (wmask, tmask)
+        Ok((wmask, tmask))
     }
 
-    pub fn DecodeBitMasks_64(immN: u8, imms: u8, immr: u8) -> (u64, u64) {
+    pub fn DecodeBitMasks_64(immN: u8, imms: u8, immr: u8) -> Result<(u64, u64), DecodeError> {
         // should the !imms be ~imms
         let len = HighestSetBit(7, ((immN << 6) | ((!imms) & 0x3f)) as u64);
+        if len == 0xff {
+            return Err(DecodeError::InvalidOperand);
+        }
 
         let levels = (Ones(len) & 0x3f) as u8; // should ZeroExtend to at least 6 bits, but this is u8.
 
@@ -112,7 +120,7 @@ mod docs {
         let telem = Ones(d + 1);
         let wmask = Replicate(ROR(welem, esize, R), esize, 64);
         let tmask = Replicate(telem, esize, 64);
-        (wmask, tmask)
+        Ok((wmask, tmask))
     }
 
     pub fn DecodeShift(op: u8) -> super::ShiftStyle {
@@ -1560,8 +1568,8 @@ impl Decoder<ARMv8> for InstDecoder {
                             Operand::Register(size, Rd),
                             Operand::Register(size, Rn),
                             match size {
-                                SizeCode::W => Operand::Immediate(docs::DecodeBitMasks_32(N as u8, imms as u8, immr as u8).0),
-                                SizeCode::X => Operand::Imm64(docs::DecodeBitMasks_64(N as u8, imms as u8, immr as u8).0)
+                                SizeCode::W => Operand::Immediate(docs::DecodeBitMasks_32(N as u8, imms as u8, immr as u8)?.0),
+                                SizeCode::X => Operand::Imm64(docs::DecodeBitMasks_64(N as u8, imms as u8, immr as u8)?.0)
                             },
                             Operand::Nothing
                         ];
@@ -1785,7 +1793,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Operand::Nothing,
                                     ];
                                 } else {
-                                    unreachable!("Lo checked for validity already");
+                                    return Err(DecodeError::InvalidOpcode);
                                 };
                                 if size == 0b00 {
                                     match (Lo1, o0) {
@@ -1949,7 +1957,8 @@ impl Decoder<ARMv8> for InstDecoder {
                                 SizeCode::X
                             }
                             0b11 => {
-                                unimplemented!("PRFM is not supported");
+                                // PRFM is not supported
+                                return Err(DecodeError::IncompleteDecoder);
                             }
                             _ => {
                                 unreachable!("opc is two bits");
@@ -1997,13 +2006,15 @@ impl Decoder<ARMv8> for InstDecoder {
                         // load/store no-allocate pair (offset)
                         // V == 0
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        unimplemented!("C3.3.7 V==0, opc_L: {}", opc_L);
+                        // eprintln!("C3.3.7 V==0, opc_L: {}", opc_L);
+                        return Err(DecodeError::IncompleteDecoder);
                     },
                     0b10100 => {
                         // load/store no-allocate pair (offset)
                         // V == 1
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        unimplemented!("C3.3.7 V==1, opc_L: {}", opc_L);
+                        // eprintln!("C3.3.7 V==1, opc_L: {}", opc_L);
+                        return Err(DecodeError::IncompleteDecoder);
                     },
                     0b10001 => {
                         // load/store register pair (post-indexed)
@@ -2120,7 +2131,8 @@ impl Decoder<ARMv8> for InstDecoder {
                         // load/store register pair (offset)
                         // V == 1
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        unimplemented!("C3.3.14 V==1, opc_L: {}", opc_L);
+                        // eprintln!("C3.3.14 V==1, opc_L: {}", opc_L);
+                        return Err(DecodeError::IncompleteDecoder);
                     },
                     0b10011 => {
                         // load/store register pair (pre-indexed)
@@ -2178,7 +2190,8 @@ impl Decoder<ARMv8> for InstDecoder {
                         // load/store register pair (pre-indexed)
                         // V == 1
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        unimplemented!("C3.3.16 V==1, opc_L: {}", opc_L);
+                        // eprintln!("C3.3.16 V==1, opc_L: {}", opc_L);
+                        return Err(DecodeError::IncompleteDecoder);
                     },
                     0b11000 |
                     0b11001 => {
@@ -2257,7 +2270,8 @@ impl Decoder<ARMv8> for InstDecoder {
                                         SizeCode::X
                                     },
                                     0b1110 => {
-                                        unimplemented!("PRFM is not supported yet");
+                                        // eprintln!("PRFM is not supported yet");
+                                        return Err(DecodeError::IncompleteDecoder);
 //                                        inst.opcode = Opcode::PRFM;
 //                                        SizeCode::X
                                     },
@@ -2371,7 +2385,8 @@ impl Decoder<ARMv8> for InstDecoder {
                                             SizeCode::X
                                         }
                                         0b1110 => {
-                                            unimplemented!("PRFUM not handled yet");
+                                            // eprintln!("PRFUM not handled yet");
+                                            return Err(DecodeError::IncompleteDecoder);
                                         },
                                         0b1111 => {
                                             inst.opcode = Opcode::Invalid;
@@ -2556,7 +2571,7 @@ impl Decoder<ARMv8> for InstDecoder {
                          * unprivileged, immediate pre-indexd, register offset}
                          * V == 1
                          */
-                        unimplemented!("load/store register (unscaled immediate), load/store register (immediate post-indexed), V==1");
+                        return Err(DecodeError::IncompleteDecoder);
                     }
                     0b11010 |
                     0b11011 => {
@@ -2686,7 +2701,8 @@ impl Decoder<ARMv8> for InstDecoder {
                                 ];
                             }
                             0b1110 => {
-                                unimplemented!("PRFM not yet supported");
+                                // PRFM not yet supported
+                                return Err(DecodeError::IncompleteDecoder);
                             }
                             0b1111 => { inst.opcode = Opcode::Invalid; }
                             _ => { unreachable!("size and opc are four bits"); }
@@ -2696,23 +2712,23 @@ impl Decoder<ARMv8> for InstDecoder {
                     0b11111 => {
                         // load/store register (unsigned immediate)
                         // V == 1
-                        unimplemented!("load/store register (unsigned immediate) V==1");
+                        return Err(DecodeError::IncompleteDecoder);
                     },
                     0b00100 => {
                         // AdvSIMD load/store multiple structures
-                        unimplemented!("AdvSIMD load/store multiple structures");
+                        return Err(DecodeError::IncompleteDecoder);
                     },
                     0b00101 => {
                         // AdvSIMD load/store multiple structures (post-indexed)
-                        unimplemented!("AdvSIMD load/store multiple structures (post-indexed)");
+                        return Err(DecodeError::IncompleteDecoder);
                     },
                     0b00110 => {
                         // AdvSIMD load/store single structure
-                        unimplemented!("AdvSIMD load/store single structure");
+                        return Err(DecodeError::IncompleteDecoder);
                     },
                     0b00111 => {
                         // AdvSIMD load/store single structure (post-indexed)
-                        unimplemented!("AdvSIMD load/store single structures (post-indexed)");
+                        return Err(DecodeError::IncompleteDecoder);
                     }
                     _ => {
                         inst.opcode = Opcode::Invalid;
@@ -2952,7 +2968,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 }
                                 0b001 => {
                                     inst.opcode = Opcode::SYS;
-                                    panic!("TODO");
+                                    return Err(DecodeError::IncompleteDecoder);
                                 }
                                 0b010 |
                                 0b011 => {
@@ -2963,7 +2979,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 }
                                 0b101 => {
                                     inst.opcode = Opcode::SYSL;
-                                    panic!("TODO");
+                                    return Err(DecodeError::IncompleteDecoder);
                                 }
                                 0b110 |
                                 0b111 => {
@@ -3047,7 +3063,7 @@ impl Decoder<ARMv8> for InstDecoder {
                     }
                     _ => {
                         // TODO: invalid
-                        panic!("Illegal instruction");
+                        return Err(DecodeError::InvalidOpcode);
                     }
                 }
             },

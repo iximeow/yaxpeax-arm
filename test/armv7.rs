@@ -106,6 +106,11 @@ fn test_display(data: [u8; 4], expected: &'static str) {
 }
 
 #[test]
+fn test_unpredictable_instructions() {
+    test_invalid([0x00, 0x02, 0x08, 0x01]); // msr with invalid machine register
+}
+
+#[test]
 fn test_decode_str_ldr() {
     test_decode(
         [0x24, 0xc0, 0x9f, 0xe5],

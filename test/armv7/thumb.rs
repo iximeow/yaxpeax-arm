@@ -77,6 +77,11 @@ fn test_display(data: &[u8], expected: &'static str) {
 }
 
 #[test]
+fn test_unpredictable_instructions() {
+    test_invalid(&[0x80, 0xfa, 0x40, 0x00]);
+}
+
+#[test]
 fn test_decode_add_cases() {
     test_display(
         &[0x01, 0x44],

@@ -1367,11 +1367,12 @@ pub enum StatusRegMask {
 }
 
 impl StatusRegMask {
-    fn from_raw(raw: u8) -> StatusRegMask {
+    fn from_raw(raw: u8) -> Result<StatusRegMask, DecodeError> {
         if raw == 0 {
-            panic!("invalid status reg mask value");
+            // invalid status reg mask value
+            return Err(DecodeError::InvalidOperand);
         }
-        [
+        Ok([
             StatusRegMask::CPSR_C, // actually unreachable
             StatusRegMask::CPSR_C,
             StatusRegMask::CPSR_X,
@@ -1404,7 +1405,7 @@ impl StatusRegMask {
             StatusRegMask::SPSR_FSC,
             StatusRegMask::SPSR_FSX,
             StatusRegMask::SPSR_FSXC,
-        ][raw as usize]
+        ][raw as usize])
     }
 }
 
@@ -2925,7 +2926,11 @@ impl Decoder<ARMv7> for InstDecoder {
                                                 }
                                             }
                                             inst.opcode = Opcode::MSR;
-                                            inst.operands[0] = Reg::from_sysm(R != 0, SYSm).expect("from_sysm works");
+                                            inst.operands[0] = if let Some(reg) = Reg::from_sysm(R != 0, SYSm) {
+                                                reg
+                                            } else {
+                                                return Err(DecodeError::InvalidOperand);
+                                            };
                                             inst.operands[1] = Operand::Reg(Reg::from_u8(word as u8 & 0b1111));
                                             inst.operands[2] = Operand::Nothing;
                                             inst.operands[3] = Operand::Nothing;
@@ -2937,7 +2942,11 @@ impl Decoder<ARMv7> for InstDecoder {
                                             }
                                             inst.opcode = Opcode::MRS;
                                             inst.operands[0] = Operand::Reg(Reg::from_u8((word >> 12) as u8 & 0b1111));
-                                            inst.operands[1] = Reg::from_sysm(R != 0, SYSm).expect("from_sysm works");
+                                            inst.operands[1] = if let Some(reg) = Reg::from_sysm(R != 0, SYSm) {
+                                                reg
+                                            } else {
+                                                return Err(DecodeError::InvalidOperand);
+                                            };
                                             inst.operands[2] = Operand::Nothing;
                                             inst.operands[3] = Operand::Nothing;
                                         }
@@ -2966,7 +2975,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                                 let mask = (word >> 16) & 0b1111;
                                                 if mask & 0b11 == 0 {
                                                     if self.mode.is_user() {
-                                                        inst.operands[0] = Operand::StatusRegMask(StatusRegMask::from_raw(mask as u8));
+                                                        inst.operands[0] = Operand::StatusRegMask(StatusRegMask::from_raw(mask as u8)?);
                                                         inst.operands[1] = Operand::Reg(Reg::from_u8(word as u8 & 0b1111));
                                                         inst.operands[2] = Operand::Nothing;
                                                         inst.operands[3] = Operand::Nothing;
@@ -2979,7 +2988,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                                     if self.mode.is_system() {
                                                         // bit 22 is the high bit of opcode, so..
                                                         let R = (word >> 22) as u8 & 1;
-                                                        inst.operands[0] = Operand::StatusRegMask(StatusRegMask::from_raw((R << 4) | mask as u8));
+                                                        inst.operands[0] = Operand::StatusRegMask(StatusRegMask::from_raw((R << 4) | mask as u8)?);
                                                         inst.operands[1] = Operand::Reg(Reg::from_u8(word as u8 & 0b1111));
                                                         inst.operands[2] = Operand::Nothing;
                                                         inst.operands[3] = Operand::Nothing;
@@ -2998,7 +3007,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                                 let mask = (word >> 16) & 0b1111;
                                                 // bit 22 is the high bit of opcode, so..
                                                 let R = (word >> 22) & 1;
-                                                inst.operands[0] = Operand::StatusRegMask(StatusRegMask::from_raw((R << 4) as u8 | mask as u8));
+                                                inst.operands[0] = Operand::StatusRegMask(StatusRegMask::from_raw((R << 4) as u8 | mask as u8)?);
                                                 inst.operands[1] = Operand::Reg(Reg::from_u8(word as u8 & 0b1111));
                                                 inst.operands[2] = Operand::Nothing;
                                                 inst.operands[3] = Operand::Nothing;
@@ -3397,7 +3406,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                         }
                                     }
                                     inst.operands = [
-                                        Operand::StatusRegMask(StatusRegMask::from_raw(op1 as u8)),
+                                        Operand::StatusRegMask(StatusRegMask::from_raw(op1 as u8)?),
                                         Operand::Imm32(word & 0xfff),
                                         Operand::Nothing,
                                         Operand::Nothing,
@@ -3414,7 +3423,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                 }
                             }
                             inst.operands = [
-                                Operand::StatusRegMask(StatusRegMask::from_raw((word >> 16) as u8 & 0b1111 | 0b10000)),
+                                Operand::StatusRegMask(StatusRegMask::from_raw((word >> 16) as u8 & 0b1111 | 0b10000)?),
                                 Operand::Imm32(word & 0xfff),
                                 Operand::Nothing,
                                 Operand::Nothing,

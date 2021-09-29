@@ -1,3 +1,7 @@
+## 0.1.2
+* fix some instructions in aarch64 decoding panicking with "unreachable"
+  instead of returning an `Err(DecodeError::Incomplete)`.
+
 ## 0.1.1
 * fix incorrect `yaxpeax_arch::Arch` impl for `std`-enabled builds
   (DecodeError did not implement `std::error::Error` in those build environments)

@@ -45,6 +45,13 @@ fn test_neon() {
 }
 
 #[test]
+fn test_unpredictable() {
+    // could be stx/ldx but Lo1 is `x1` and invalid.
+    test_err([0x00, 0x00, 0x20, 0x08], DecodeError::InvalidOpcode);
+    test_err([0x00, 0xfc, 0x00, 0x12], DecodeError::InvalidOperand);
+}
+
+#[test]
 fn test_display_misc() {
     test_display(
         [0xc0, 0x03, 0x5f, 0xd6],
