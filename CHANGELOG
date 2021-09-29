@@ -1,3 +1,6 @@
+## 0.1.3
+* same as 0.1.2, but fixes a few compilation warnings that snuck in too.
+
 ## 0.1.2
 * fix some instructions in aarch64 decoding panicking with "unreachable"
   instead of returning an `Err(DecodeError::Incomplete)`. similarly, some
@@ -5,6 +8,8 @@
   as they should.
 * fix some instructions in armv7 decoding or display panicking instead of
   displaying a valid instruction, or returning a decode error.
+
+... subsequently yanked because some compilation warnings ended up in this version.
 
 ## 0.1.1
 * fix incorrect `yaxpeax_arch::Arch` impl for `std`-enabled builds

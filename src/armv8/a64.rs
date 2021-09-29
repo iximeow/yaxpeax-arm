@@ -1717,10 +1717,10 @@ impl Decoder<ARMv8> for InstDecoder {
                     },
                     0b111 => {
                         // extract
-                        let Rd = word & 0x1f;
-                        let Rn = (word >> 5) & 0x1f;
+                        // let Rd = word & 0x1f;
+                        // let Rn = (word >> 5) & 0x1f;
                         let imms = (word >> 10) & 0x3f;
-                        let Rm = (word >> 16) & 0x1f;
+                        // let Rm = (word >> 16) & 0x1f;
                         let No0 = (word >> 21) & 0x3;
 
                         let sf_op21 = word >> 29;
@@ -2005,14 +2005,14 @@ impl Decoder<ARMv8> for InstDecoder {
                     0b10000 => {
                         // load/store no-allocate pair (offset)
                         // V == 0
-                        let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
+                        // let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
                         // eprintln!("C3.3.7 V==0, opc_L: {}", opc_L);
                         return Err(DecodeError::IncompleteDecoder);
                     },
                     0b10100 => {
                         // load/store no-allocate pair (offset)
                         // V == 1
-                        let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
+                        // let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
                         // eprintln!("C3.3.7 V==1, opc_L: {}", opc_L);
                         return Err(DecodeError::IncompleteDecoder);
                     },
@@ -2071,7 +2071,7 @@ impl Decoder<ARMv8> for InstDecoder {
                     0b10101 => {
                         // load/store register pair (post-indexed)
                         // V == 1
-                        let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
+                        // let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
                         // eprintln!("C3.3.15 V==1, opc_L: {}", opc_L);
                         return Err(DecodeError::IncompleteDecoder);
                     },
@@ -2130,7 +2130,7 @@ impl Decoder<ARMv8> for InstDecoder {
                     0b10110 => {
                         // load/store register pair (offset)
                         // V == 1
-                        let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
+                        // let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
                         // eprintln!("C3.3.14 V==1, opc_L: {}", opc_L);
                         return Err(DecodeError::IncompleteDecoder);
                     },
@@ -2189,7 +2189,7 @@ impl Decoder<ARMv8> for InstDecoder {
                     0b10111 => {
                         // load/store register pair (pre-indexed)
                         // V == 1
-                        let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
+                        // let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
                         // eprintln!("C3.3.16 V==1, opc_L: {}", opc_L);
                         return Err(DecodeError::IncompleteDecoder);
                     },
