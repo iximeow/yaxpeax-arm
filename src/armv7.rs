@@ -1741,10 +1741,7 @@ fn format_reg_imm_mem<T: fmt::Write, Y: YaxColors>(f: &mut T, Rn: Reg, imm: u16,
             (true, false) => {
                 write!(f, "[{}]", reg_name_colorize(Rn, colors))
             },
-            (false, true) => {
-                unreachable!("I don't know how to render an operand with pre==false and wback==true, this seems like it should be LDRT");
-            },
-            (false, false) => {
+            (false, _) => {
                 write!(f, "[{}]", reg_name_colorize(Rn, colors))
             }
         }

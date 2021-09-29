@@ -1,6 +1,10 @@
 ## 0.1.2
 * fix some instructions in aarch64 decoding panicking with "unreachable"
-  instead of returning an `Err(DecodeError::Incomplete)`.
+  instead of returning an `Err(DecodeError::Incomplete)`. similarly, some
+  instructions panicked instead of returning `InvalidOpcode` or `InvalidOperand`
+  as they should.
+* fix some instructions in armv7 decoding or display panicking instead of
+  displaying a valid instruction, or returning a decode error.
 
 ## 0.1.1
 * fix incorrect `yaxpeax_arch::Arch` impl for `std`-enabled builds

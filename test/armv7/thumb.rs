@@ -3588,6 +3588,10 @@ fn test_decode_str_32b_cases() {
         &[0x41, 0xf8, 0x04, 0x2b],
         "str.w r2, [r1], 0x4"
     );
+    test_display(
+        &[0x41, 0xf8, 0x00, 0x2b],
+        "str.w r2, [r1]"
+    );
 }
 
 #[test]
