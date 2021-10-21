@@ -641,6 +641,12 @@ impl Display for Instruction {
             Opcode::PACIZA => {
                 write!(fmt, "paciza")?;
             }
+            Opcode::CCMN => {
+                write!(fmt, "ccmn")?;
+            }
+            Opcode::CCMP => {
+                write!(fmt, "ccmp")?;
+            }
         };
 
         if self.operands[0] != Operand::Nothing {
@@ -808,6 +814,8 @@ pub enum Opcode {
     CSINV,
     PACIA,
     PACIZA,
+    CCMN,
+    CCMP,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -1175,7 +1183,46 @@ impl Decoder<ARMv8> for InstDecoder {
                         },
                         0b001 => {
                             // Conditional compare (register/immediate)
-                            return Err(DecodeError::IncompleteDecoder);
+                            let imm_or_reg = (word >> 11) & 0x01;
+
+                            let o3 = (word >> 4) & 0x01;
+                            let o2 = (word >> 10) & 0x01;
+                            let S = (word >> 29) & 0x01;
+                            let op = (word >> 30) & 0x01;
+                            let sf = (word >> 31) & 0x01;
+
+                            if S != 1 || o2 != 0 || o3 != 0 {
+                                inst.opcode = Opcode::Invalid;
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+
+                            let size = if sf == 1 {
+                                SizeCode::X
+                            } else {
+                                SizeCode::W
+                            };
+
+                            inst.opcode = if op == 1 {
+                                Opcode::CCMP
+                            } else {
+                                Opcode::CCMN
+                            };
+
+                            let Rn = ((word >> 5) & 0x1f) as u16;
+                            let Rm = ((word >> 16) & 0x1f) as u16;
+                            let cond = ((word >> 12) & 0x0f) as u8;
+                            let nzcv = (word & 0x0f) as u8;
+
+                            inst.operands = [
+                                Operand::Register(size, Rn),
+                                if imm_or_reg == 1 {
+                                    Operand::Immediate(Rm as u32)
+                                } else {
+                                    Operand::Register(size, Rm)
+                                },
+                                Operand::Immediate(nzcv as u32),
+                                Operand::ConditionCode(cond),
+                            ]
                         },
                         0b010 => {
                             // Conditional select

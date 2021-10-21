@@ -287,6 +287,14 @@ fn test_decode_mul() {
 }
 
 #[test]
+fn test_decode_ccm() {
+    test_display([0x00, 0xa8, 0x42, 0x3a], "ccmn w0, 0x2, 0x0, ge");
+    test_display([0x00, 0xa8, 0x42, 0xfa], "ccmp x0, 0x2, 0x0, ge");
+    test_display([0x00, 0xa0, 0x42, 0xfa], "ccmp x0, x2, 0x0, ge");
+    test_display([0x85, 0x80, 0x42, 0xfa], "ccmp x4, x2, 0x5, hi");
+}
+
+#[test]
 fn test_decode_chrome_entrypoint() {
     // 1400 instructions from the entrypoint of a chrome binary, sorted by
     // instruction word for no good reason.
