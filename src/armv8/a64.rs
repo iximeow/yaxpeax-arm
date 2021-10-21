@@ -647,6 +647,24 @@ impl Display for Instruction {
             Opcode::CCMP => {
                 write!(fmt, "ccmp")?;
             }
+            Opcode::RBIT => {
+                write!(fmt, "rbit")?;
+            }
+            Opcode::REV16 => {
+                write!(fmt, "rev16")?;
+            }
+            Opcode::REV => {
+                write!(fmt, "rev")?;
+            }
+            Opcode::REV32 => {
+                write!(fmt, "rev32")?;
+            }
+            Opcode::CLZ => {
+                write!(fmt, "clz")?;
+            }
+            Opcode::CLS => {
+                write!(fmt, "cls")?;
+            }
         };
 
         if self.operands[0] != Operand::Nothing {
@@ -816,6 +834,12 @@ pub enum Opcode {
     PACIZA,
     CCMN,
     CCMP,
+    RBIT,
+    REV16,
+    REV,
+    REV32,
+    CLZ,
+    CLS,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -1304,6 +1328,9 @@ impl Decoder<ARMv8> for InstDecoder {
                             } else {
                                 // X1X11010_110XXXXX_XXXXXXXX_XXXXXXXX
                                 // Data-processing (1 source)
+                                let sf = ((word >> 31) & 0x01) as u8;
+                                let S = ((word >> 29) & 0x01) as u8;
+
                                 let Rd = (word & 0x1f) as u16;
                                 let Rn = ((word >> 5) & 0x1f) as u16;
                                 let opcode = ((word >> 10) & 0x3f) as u8;
@@ -1313,9 +1340,42 @@ impl Decoder<ARMv8> for InstDecoder {
                                 // however, PAC (added in v8.3) says otherwise.
                                 match opcode2 {
                                     0b00000 => {
-                                        return Err(DecodeError::IncompleteDecoder);
+                                        if S != 0 {
+                                            return Err(DecodeError::InvalidOpcode);
+                                        }
+
+                                        let (opcode, size) = match (opcode << 1) | sf {
+                                            0b000000_0 => (Opcode::RBIT, SizeCode::W),
+                                            0b000000_1 => (Opcode::RBIT, SizeCode::X),
+                                            0b000001_0 => (Opcode::REV16, SizeCode::W),
+                                            0b000001_1 => (Opcode::REV16, SizeCode::X),
+                                            0b000010_0 => (Opcode::REV, SizeCode::W),
+                                            0b000010_1 => (Opcode::REV, SizeCode::X),
+                                            0b000011_0 => (Opcode::Invalid, SizeCode::W),
+                                            0b000011_1 => (Opcode::REV32, SizeCode::X),
+                                            0b000100_0 => (Opcode::CLZ, SizeCode::W),
+                                            0b000100_1 => (Opcode::CLZ, SizeCode::X),
+                                            0b000101_0 => (Opcode::CLS, SizeCode::W),
+                                            0b000101_1 => (Opcode::CLS, SizeCode::X),
+                                            _ => (Opcode::Invalid, SizeCode::W),
+                                        };
+
+                                        inst.opcode = opcode;
+                                        inst.operands = [
+                                            Operand::Register(size, Rd),
+                                            Operand::Register(size, Rn),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+
+                                        if opcode == Opcode::Invalid {
+                                            return Err(DecodeError::InvalidOpcode);
+                                        }
                                     }
                                     0b00001 => {
+                                        if S != 0 || sf != 1 {
+                                            return Err(DecodeError::InvalidOpcode);
+                                        }
                                         match opcode {
                                             0b000000 => {
                                                 inst.opcode = Opcode::PACIA;

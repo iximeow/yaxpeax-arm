@@ -295,6 +295,25 @@ fn test_decode_ccm() {
 }
 
 #[test]
+fn test_decode_data_processing_one_source() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x14, 0x02, 0xc0, 0x5a], "rbit w20, w16"),
+        ([0x14, 0x06, 0xc0, 0x5a], "rev16 w20, w16"),
+        ([0x14, 0x12, 0xc0, 0x5a], "clz w20, w16"),
+        ([0x14, 0x12, 0xc0, 0x5a], "clz w20, w16"),
+        ([0x14, 0x16, 0xc0, 0x5a], "cls w20, w16"),
+        ([0x14, 0x16, 0xc0, 0xda], "cls x20, x16"),
+        ([0x14, 0x0a, 0xc0, 0xda], "rev32 x20, x16"),
+    ];
+
+    for (bytes, instr) in TESTS {
+        test_display(*bytes, instr);
+    }
+
+    test_err([0x14, 0x0e, 0xc0, 0x5a], DecodeError::InvalidOpcode);
+}
+
+#[test]
 fn test_decode_chrome_entrypoint() {
     // 1400 instructions from the entrypoint of a chrome binary, sorted by
     // instruction word for no good reason.
