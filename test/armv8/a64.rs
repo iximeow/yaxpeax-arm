@@ -314,6 +314,29 @@ fn test_decode_data_processing_one_source() {
 }
 
 #[test]
+fn test_decode_data_processing_three_source() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x11, 0x01, 0x0f, 0x1b], "madd w17, w8, w15, w0"),
+        ([0x11, 0x81, 0x0f, 0x1b], "msub w17, w8, w15, w0"),
+        ([0x11, 0x81, 0x0f, 0x9b], "msub x17, x8, x15, x0"),
+        ([0x11, 0x89, 0x0f, 0x9b], "msub x17, x8, x15, x2"),
+
+        ([0x11, 0x09, 0x2f, 0x9b], "smaddl x17, w8, w15, x2"),
+        ([0x11, 0x89, 0x2f, 0x9b], "smsubl x17, w8, w15, x2"),
+        ([0x11, 0x09, 0x4f, 0x9b], "smulh x17, w8, w15, x2"),
+        ([0x11, 0x09, 0xaf, 0x9b], "umaddl x17, w8, w15, x2"),
+        ([0x11, 0x89, 0xaf, 0x9b], "umsubl x17, w8, w15, x2"),
+        ([0x11, 0x09, 0xcf, 0x9b], "umulh x17, x8, x15"),
+    ];
+
+    for (bytes, instr) in TESTS {
+        test_display(*bytes, instr);
+    }
+
+    test_err([0x11, 0x81, 0x0f, 0x3b], DecodeError::InvalidOpcode);
+}
+
+#[test]
 fn test_decode_chrome_entrypoint() {
     // 1400 instructions from the entrypoint of a chrome binary, sorted by
     // instruction word for no good reason.

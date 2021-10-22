@@ -134,7 +134,7 @@ mod docs {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum DecodeError {
     ExhaustedInput,
     InvalidOpcode,
@@ -665,6 +665,30 @@ impl Display for Instruction {
             Opcode::CLS => {
                 write!(fmt, "cls")?;
             }
+            Opcode::MADD => {
+                write!(fmt, "madd")?;
+            }
+            Opcode::MSUB => {
+                write!(fmt, "msub")?;
+            }
+            Opcode::SMADDL => {
+                write!(fmt, "smaddl")?;
+            }
+            Opcode::SMSUBL => {
+                write!(fmt, "smsubl")?;
+            }
+            Opcode::SMULH => {
+                write!(fmt, "smulh")?;
+            }
+            Opcode::UMADDL => {
+                write!(fmt, "umaddl")?;
+            }
+            Opcode::UMSUBL => {
+                write!(fmt, "umsubl")?;
+            }
+            Opcode::UMULH => {
+                write!(fmt, "umulh")?;
+            }
         };
 
         if self.operands[0] != Operand::Nothing {
@@ -840,6 +864,14 @@ pub enum Opcode {
     REV32,
     CLZ,
     CLS,
+    MADD,
+    MSUB,
+    SMADDL,
+    SMSUBL,
+    SMULH,
+    UMADDL,
+    UMSUBL,
+    UMULH,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -1414,7 +1446,63 @@ impl Decoder<ARMv8> for InstDecoder {
                         },
                         _ => {
                             // Data processing (3 source)
-                            return Err(DecodeError::IncompleteDecoder);
+                            let op0 = ((word >> 15) & 0x01) as u8;
+                            let op31 = ((word >> 21) & 0x07) as u8;
+                            let op54 = ((word >> 29) & 0x03) as u8;
+                            let op = op0 | (op31 << 1) | (op54 << 4);
+                            let sf = ((word >> 31) & 0x01) as u8;
+
+                            let Rd = ((word >> 0) & 0x1f) as u16;
+                            let Rn = ((word >> 5) & 0x1f) as u16;
+                            let Ra = ((word >> 10) & 0x1f) as u16;
+                            let Rm = ((word >> 16) & 0x1f) as u16;
+
+                            const DATA_PROCESSING_3_SOURCE: &[Result<(Opcode, SizeCode, SizeCode), DecodeError>] = &[
+                                Ok((Opcode::MADD, SizeCode::W, SizeCode::W)),
+                                Ok((Opcode::MADD, SizeCode::X, SizeCode::X)),
+                                Ok((Opcode::MSUB, SizeCode::W, SizeCode::W)),
+                                Ok((Opcode::MSUB, SizeCode::X, SizeCode::X)),
+                                Err(DecodeError::InvalidOpcode),
+                                Ok((Opcode::SMADDL, SizeCode::W, SizeCode::X)),
+                                Err(DecodeError::InvalidOpcode),
+                                Ok((Opcode::SMSUBL, SizeCode::W, SizeCode::X)),
+                                Err(DecodeError::InvalidOpcode),
+                                Ok((Opcode::SMULH, SizeCode::W, SizeCode::X)),
+                                Err(DecodeError::InvalidOpcode),
+                                Err(DecodeError::InvalidOpcode),
+                                Err(DecodeError::InvalidOpcode),
+                                Err(DecodeError::InvalidOpcode),
+                                Err(DecodeError::InvalidOpcode),
+                                Err(DecodeError::InvalidOpcode),
+                                Err(DecodeError::InvalidOpcode),
+                                Err(DecodeError::InvalidOpcode),
+                                Err(DecodeError::InvalidOpcode),
+                                Err(DecodeError::InvalidOpcode),
+                                Err(DecodeError::InvalidOpcode),
+                                Ok((Opcode::UMADDL, SizeCode::W, SizeCode::X)),
+                                Err(DecodeError::InvalidOpcode),
+                                Ok((Opcode::UMSUBL, SizeCode::W, SizeCode::X)),
+                                Err(DecodeError::InvalidOpcode),
+                                Ok((Opcode::UMULH, SizeCode::X, SizeCode::X)),
+                                Err(DecodeError::InvalidOpcode),
+                            ];
+
+                            let compound_idx = (op << 1) | sf;
+                            crate::armv8::a64::std::eprintln!("word: {:#08x}, compound_idx: {:x}", word, compound_idx);
+                            let (opcode, source_size, dest_size) = DATA_PROCESSING_3_SOURCE.get(compound_idx as usize)
+                                .map(std::borrow::ToOwned::to_owned)
+                                .unwrap_or(Err(DecodeError::InvalidOpcode))?;
+
+                            inst.opcode = opcode;
+                            inst.operands = [
+                                Operand::Register(dest_size, Rd),
+                                Operand::Register(source_size, Rn),
+                                Operand::Register(source_size, Rm),
+                                Operand::Register(dest_size, Ra), // in practice these match up with the corresponding operand.
+                            ];
+                            if opcode == Opcode::UMULH {
+                                inst.operands[3] = Operand::Nothing;
+                            }
                         }
                     }
                 } else {
