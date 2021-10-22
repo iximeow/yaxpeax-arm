@@ -1439,7 +1439,9 @@ impl Decoder<ARMv8> for InstDecoder {
                                         }
                                     }
                                     _ => {
-                                        return Err(DecodeError::IncompleteDecoder);
+                                        // Data-processing (1 source), op2 > 0b00001 is (currently
+                                        // as of v8.3) undefined.
+                                        return Err(DecodeError::InvalidOpcode);
                                     }
                                 }
                             }
