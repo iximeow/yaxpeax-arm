@@ -2,6 +2,8 @@ use yaxpeax_arch::{Arch, Decoder, LengthedInstruction};
 use yaxpeax_arm::armv8::a64::{ARMv8, Instruction, Operand, Opcode, SizeCode, ShiftStyle};
 use yaxpeax_arm::armv8::a64::DecodeError;
 
+use std::fmt;
+
 fn test_decode(data: [u8; 4], expected: Instruction) {
     let mut reader = yaxpeax_arch::U8Reader::new(&data[..]);
     let instr = <ARMv8 as Arch>::Decoder::default().decode(&mut reader).unwrap();

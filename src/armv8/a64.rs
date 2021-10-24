@@ -230,13 +230,41 @@ impl Display for Instruction {
                 write!(fmt, "invalid")?;
             },
             Opcode::MOVN => {
-                write!(fmt, "movn")?;
+                let imm = if let Operand::ImmShift(imm, shift) = self.operands[1] {
+                    !((imm as u64) << shift)
+                } else {
+                    unreachable!("movn operand 1 is always ImmShift");
+                };
+                let imm = if let Operand::Register(size, _) = self.operands[0] {
+                    if size == SizeCode::W {
+                        (imm as u32) as u64
+                    } else {
+                        imm
+                    }
+                } else {
+                    unreachable!("movn operand 0 is always Register");
+                };
+                return write!(fmt, "mov {}, {:#x}", self.operands[0], imm);
             },
             Opcode::MOVK => {
                 write!(fmt, "movk")?;
             },
             Opcode::MOVZ => {
-                write!(fmt, "movz")?;
+                let imm = if let Operand::ImmShift(imm, shift) = self.operands[1] {
+                    (imm as u64) << shift
+                } else {
+                    unreachable!("movz operand is always ImmShift");
+                };
+                let imm = if let Operand::Register(size, _) = self.operands[0] {
+                    if size == SizeCode::W {
+                        (imm as u32) as u64
+                    } else {
+                        imm
+                    }
+                } else {
+                    unreachable!("movn operand 0 is always Register");
+                };
+                return write!(fmt, "mov {}, {:#x}", self.operands[0], imm);
             },
             Opcode::ADC => {
                 write!(fmt, "adc")?;
@@ -265,11 +293,16 @@ impl Display for Instruction {
                         return write!(fmt, "mov {}, {}", self.operands[0], self.operands[1]);
                     } else if let Operand::RegShift(ShiftStyle::LSL, 0, size, r) = self.operands[2] {
                         return write!(fmt, "mov {}, {}", self.operands[0], Operand::Register(size, r));
+                    } else {
+                        return write!(fmt, "mov {}, {}", self.operands[0], self.operands[2]);
                     }
                 }
                 write!(fmt, "orr")?;
             },
             Opcode::ORN => {
+                if let Operand::Register(_, 31) = self.operands[1] {
+                    return write!(fmt, "mvn {}, {}", self.operands[0], self.operands[2]);
+                }
                 write!(fmt, "orn")?;
             },
             Opcode::EOR => {
@@ -279,6 +312,9 @@ impl Display for Instruction {
                 write!(fmt, "eon")?;
             },
             Opcode::ANDS => {
+                if let Operand::Register(_, 31) = self.operands[0] {
+                    return write!(fmt, "tst {}, {}", self.operands[1], self.operands[2]);
+                }
                 write!(fmt, "ands")?;
             },
             Opcode::ADDS => {
@@ -300,10 +336,15 @@ impl Display for Instruction {
             Opcode::SUBS => {
                 if let Operand::Register(_, 31) = self.operands[0] {
                     return write!(fmt, "cmp {}, {}", self.operands[1], self.operands[2])
+                } else if let Operand::Register(_, 31) = self.operands[1] {
+                    return write!(fmt, "negs {}, {}", self.operands[0], self.operands[2])
                 }
                 write!(fmt, "subs")?;
             },
             Opcode::SUB => {
+                if let Operand::Register(_, 31) = self.operands[1] {
+                    return write!(fmt, "neg {}, {}", self.operands[0], self.operands[2])
+                }
                 write!(fmt, "sub")?;
             },
             Opcode::BFM => {
@@ -1027,7 +1068,7 @@ impl Display for Operand {
                         write!(fmt, "{:#x}", i)
                     },
                     _ => {
-                        write!(fmt, "{:#x}, lsl {}", i, shift * 16)
+                        write!(fmt, "{:#x}, lsl {}", i, shift)
                     }
                 }
             },
@@ -1635,7 +1676,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             let imm = ((word >> 3) & 0x1ffffc) | ((word >> 29) & 0x3);
                             inst.operands = [
                                 Operand::Register(SizeCode::X, (word & 0x1f) as u16),
-                                Operand::Immediate(imm * 0x1000),
+                                Operand::Immediate(imm.overflowing_mul(0x1000).0),
                                 Operand::Nothing,
                                 Operand::Nothing
                             ];
@@ -1828,7 +1869,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
                         inst.operands = [
                             Operand::Register(size, Rd as u16),
-                            Operand::ImmShift(imm16 as u16, hw as u8),
+                            Operand::ImmShift(imm16 as u16, hw as u8 * 16),
                             Operand::Nothing,
                             Operand::Nothing
                         ];
