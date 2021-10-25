@@ -736,6 +736,13 @@ impl Display for Instruction {
                 write!(fmt, "csel")?;
             }
             Opcode::CSNEG => {
+                if let (Operand::Register(size, rn), Operand::Register(_size, rm), Operand::ConditionCode(cond)) = (self.operands[1], self.operands[2], self.operands[3]) {
+                    if rn == rm {
+                        return write!(fmt, "cneg {}, {}, {}", self.operands[0], self.operands[2], Operand::ConditionCode(cond ^ 0x01));
+                    }
+                } else {
+                    unreachable!("operands 2 and 3 are always registers");
+                }
                 write!(fmt, "csneg")?;
             }
             Opcode::CSINC => {
@@ -758,6 +765,8 @@ impl Display for Instruction {
                     (Operand::Register(_, n), Operand::Register(_, m), Operand::ConditionCode(cond)) => {
                         if n == m && n != 31 && cond < 0b1110 {
                             return write!(fmt, "cinv {}, {}, {}", self.operands[0], self.operands[1], Operand::ConditionCode(cond ^ 0x01))
+                        } else if n == m && n == 31 {
+                            return write!(fmt, "csetm {}, {}", self.operands[0], Operand::ConditionCode(cond ^ 0x01));
                         }
                     }
                     _ => {}
