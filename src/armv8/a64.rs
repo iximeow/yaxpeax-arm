@@ -958,8 +958,8 @@ pub enum Operand {
     SIMDRegister(SIMDSizeCode, u16),
     RegisterOrSP(SizeCode, u16),
     ConditionCode(u8),
-    Offset(u32),
-    PCOffset(u32),
+    Offset(i32),
+    PCOffset(i32),
     Immediate(u32),
     Imm64(u64),
     Imm16(u16),
@@ -1048,10 +1048,18 @@ impl Display for Operand {
                 }
             }
             Operand::Offset(offs) => {
-                write!(fmt, "$+{:#x}", offs)
+                if *offs < 0 {
+                    write!(fmt, "$-{:#x}", offs.wrapping_neg())
+                } else {
+                    write!(fmt, "$+{:#x}", offs)
+                }
             }
             Operand::PCOffset(offs) => {
-                write!(fmt, "$+{:#x}", offs)
+                if *offs < 0 {
+                    write!(fmt, "$-{:#x}", offs.wrapping_neg())
+                } else {
+                    write!(fmt, "$+{:#x}", offs)
+                }
             }
             Operand::Immediate(i) => {
                 write!(fmt, "{:#x}", i)
@@ -2179,7 +2187,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         // V == 0
                         let opc = (word >> 30) & 0x3;
                         let Rt = (word & 0x1f) as u16;
-                        let imm19 = (word >> 5) & 0x7fff;
+                        let imm19 = ((((word >> 5) & 0x7ffff) as i32) << 13) >> 13;
 
                         let size = match opc {
                             0b00 => {
@@ -2192,7 +2200,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             }
                             0b10 => {
                                 inst.opcode = Opcode::LDRSW;
-                                SizeCode::X
+                                SizeCode::W
                             }
                             0b11 => {
                                 // PRFM is not supported
@@ -2205,7 +2213,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
                         inst.operands = [
                             Operand::Register(size, Rt),
-                            Operand::PCOffset(imm19 * 4),
+                            Operand::PCOffset(imm19 << 2),
                             Operand::Nothing,
                             Operand::Nothing,
                         ];
@@ -2216,7 +2224,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         // V == 1
                         let opc = (word >> 30) & 0x3;
                         let Rt = (word & 0x1f) as u16;
-                        let imm19 = (word >> 5) & 0x7fff;
+                        let imm19 = ((((word >> 5) & 0x7ffff) as i32) << 13) >> 13;
 
                         let size_code = match opc {
                             0b00 => SIMDSizeCode::S,
@@ -2235,7 +2243,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         inst.opcode = Opcode::LDR;
                         inst.operands = [
                             Operand::SIMDRegister(size_code, Rt),
-                            Operand::PCOffset(imm19 * 4),
+                            Operand::PCOffset(imm19 << 2),
                             Operand::Nothing,
                             Operand::Nothing,
                         ];
@@ -2980,9 +2988,11 @@ impl Decoder<ARMv8> for InstDecoder {
                     0b00001 |
                     0b00010 |
                     0b00011 => { // unconditional branch (imm)
+                        let offset = ((word & 0x03ff_ffff) << 2) as i32;
+                        let extended_offset = (offset << 4) >> 4;
                         inst.opcode = Opcode::B;
                         inst.operands = [
-                            Operand::Offset((word & 0x01ffffff) << 2),
+                            Operand::Offset(extended_offset),
                             Operand::Nothing,
                             Operand::Nothing,
                             Operand::Nothing
@@ -2990,62 +3000,68 @@ impl Decoder<ARMv8> for InstDecoder {
                     },
                     0b00100 => { // compare branch (imm)
                         inst.opcode = Opcode::CBZ;
-                        let imm = (word >> 3) & 0x001ffffc;
+                        let offset = (word as i32 & 0x00ff_ffe0) >> 3;
+                        let extended_offset = (offset << 11) >> 11;
                         let Rt = word & 0x1f;
                         inst.operands = [
                             Operand::Register(SizeCode::W, Rt as u16),
-                            Operand::Offset(imm),
+                            Operand::Offset(extended_offset),
                             Operand::Nothing,
                             Operand::Nothing
                         ];
                     },
                     0b00101 => { // compare branch (imm)
                         inst.opcode = Opcode::CBNZ;
-                        let imm = (word >> 3) & 0x001ffffc;
+                        let offset = (word as i32 & 0x00ff_ffe0) >> 3;
+                        let extended_offset = (offset << 11) >> 11;
                         let Rt = word & 0x1f;
                         inst.operands = [
                             Operand::Register(SizeCode::W, Rt as u16),
-                            Operand::Offset(imm),
+                            Operand::Offset(extended_offset),
                             Operand::Nothing,
                             Operand::Nothing
                         ];
                     },
                     0b00110 => { // test branch (imm)
-                        let imm = (word >> 3) & 0x0003fffc;
+                        let offset = (word as i32 & 0x0007_ffe0) >> 3;
+                        let extended_offset = (offset << 16) >> 16;
                         let b = (word >> 19) & 0x1f;
                         let Rt = word & 0x1f;
                         inst.opcode = Opcode::TBZ;
                         inst.operands = [
                             Operand::Register(SizeCode::W, Rt as u16),
                             Operand::Imm16(b as u16),
-                            Operand::Offset(imm),
+                            Operand::Offset(extended_offset),
                             Operand::Nothing
                         ];
                     },
                     0b00111 => { // test branch (imm)
-                        let imm = (word >> 3) & 0x0003fffc;
+                        let offset = (word as i32 & 0x0007_ffe0) >> 3;
+                        let extended_offset = (offset << 16) >> 16;
                         let b = (word >> 19) & 0x1f;
                         let Rt = word & 0x1f;
                         inst.opcode = Opcode::TBNZ;
                         inst.operands = [
                             Operand::Register(SizeCode::W, Rt as u16),
                             Operand::Imm16(b as u16),
-                            Operand::Offset(imm),
+                            Operand::Offset(extended_offset),
                             Operand::Nothing
                         ];
                     },
                     0b01000 => { // conditional branch (imm)
-                        let imm = (word >> 3) & 0x001ffffc;
+                        let offset = (word as i32 & 0x00ff_ffe0) >> 3;
+                        let extended_offset = (offset << 11) >> 11;
                         let cond = word & 0x0f;
                         inst.opcode = Opcode::Bcc(cond as u8);
                         inst.operands = [
-                            Operand::Offset(imm),
+                            Operand::Offset(extended_offset),
                             Operand::Nothing,
                             Operand::Nothing,
                             Operand::Nothing
                         ];
                     }
                     0b01001 => { // conditional branch (imm)
+                        return Err(DecodeError::IncompleteDecoder);
                         inst.opcode = Opcode::Invalid;
                     }
                     /* 0b01010 to 0b01111 seem all invalid? */
@@ -3053,9 +3069,11 @@ impl Decoder<ARMv8> for InstDecoder {
                     0b10001 |
                     0b10010 |
                     0b10011 => { // unconditional branch (imm)
+                        let offset = ((word & 0x03ff_ffff) << 2) as i32;
+                        let extended_offset = (offset << 4) >> 4;
                         inst.opcode = Opcode::BL;
                         inst.operands = [
-                            Operand::Offset((word & 0x01ffffff) << 2),
+                            Operand::Offset(extended_offset),
                             Operand::Nothing,
                             Operand::Nothing,
                             Operand::Nothing
@@ -3063,47 +3081,51 @@ impl Decoder<ARMv8> for InstDecoder {
                     },
                     0b10100 => { // compare branch (imm)
                         inst.opcode = Opcode::CBZ;
-                        let imm = (word >> 3) & 0x001ffffc;
+                        let offset = (word as i32 & 0x00ff_ffe0) >> 3;
+                        let extended_offset = (offset << 11) >> 11;
                         let Rt = word & 0x1f;
                         inst.operands = [
                             Operand::Register(SizeCode::X, Rt as u16),
-                            Operand::Offset(imm),
+                            Operand::Offset(extended_offset),
                             Operand::Nothing,
                             Operand::Nothing
                         ];
                     },
                     0b10101 => { // compare branch (imm)
                         inst.opcode = Opcode::CBNZ;
-                        let imm = (word >> 3) & 0x001ffffc;
+                        let offset = (word as i32 & 0x00ff_ffe0) >> 3;
+                        let extended_offset = (offset << 11) >> 11;
                         let Rt = word & 0x1f;
                         inst.operands = [
                             Operand::Register(SizeCode::X, Rt as u16),
-                            Operand::Offset(imm),
+                            Operand::Offset(extended_offset),
                             Operand::Nothing,
                             Operand::Nothing
                         ];
                     },
                     0b10110 => { // test branch (imm)
-                        let imm = (word >> 3) & 0x0003fffc;
+                        let offset = (word as i32 & 0x0007_ffe0) >> 3;
+                        let extended_offset = (offset << 16) >> 16;
                         let b = (word >> 19) & 0x1f;
                         let Rt = word & 0x1f;
                         inst.opcode = Opcode::TBZ;
                         inst.operands = [
                             Operand::Register(SizeCode::X, Rt as u16),
                             Operand::Imm16((b as u16) | 0x20),
-                            Operand::Offset(imm),
+                            Operand::Offset(extended_offset),
                             Operand::Nothing
                         ];
                     },
                     0b10111 => { // test branch (imm)
-                        let imm = (word >> 3) & 0x0003fffc;
+                        let offset = (word as i32 & 0x0007_ffe0) >> 3;
+                        let extended_offset = (offset << 16) >> 16;
                         let b = (word >> 19) & 0x1f;
                         let Rt = word & 0x1f;
                         inst.opcode = Opcode::TBNZ;
                         inst.operands = [
                             Operand::Register(SizeCode::X, Rt as u16),
                             Operand::Imm16((b as u16) | 0x20),
-                            Operand::Offset(imm),
+                            Operand::Offset(extended_offset),
                             Operand::Nothing
                         ];
                     },
