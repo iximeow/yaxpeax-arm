@@ -1586,7 +1586,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
                         let Rd = (word & 0x1f) as u16;
                         let Rn = ((word >> 5) & 0x1f) as u16;
-                        let imm6 = ((word >> 10) & 0x13) as u8;
+                        let imm6 = ((word >> 10) & 0x3f) as u8;
                         let Rm = ((word >> 16) & 0x1f) as u16;
 
                         inst.operands[0] = Operand::Register(size, Rd);
