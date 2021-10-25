@@ -1686,7 +1686,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         let size = if sf { SizeCode::X } else { SizeCode::W };
 
                         // and operands are contingent on bit 21
-                        if (word & 0x20000) != 0 {
+                        if (word & 0x20_0000) != 0 {
                             // extended form
                             // opt (bits 22, 23) must be 0
 
