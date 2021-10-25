@@ -958,8 +958,8 @@ pub enum Operand {
     SIMDRegister(SIMDSizeCode, u16),
     RegisterOrSP(SizeCode, u16),
     ConditionCode(u8),
-    Offset(i32),
-    PCOffset(i32),
+    Offset(i64),
+    PCOffset(i64),
     Immediate(u32),
     Imm64(u64),
     Imm16(u16),
@@ -1681,19 +1681,21 @@ impl Decoder<ARMv8> for InstDecoder {
                         // PC-rel addressing
                         if word >= 0x80000000 {
                             inst.opcode = Opcode::ADRP;
-                            let imm = ((word >> 3) & 0x1ffffc) | ((word >> 29) & 0x3);
+                            let offset = (((word >> 3) & 0x1ffffc) | ((word >> 29) & 0x3)) as i32;
+                            let extended_offset = (offset << 11) >> 11;
                             inst.operands = [
                                 Operand::Register(SizeCode::X, (word & 0x1f) as u16),
-                                Operand::Immediate(imm.overflowing_mul(0x1000).0),
+                                Operand::Offset((extended_offset as i64) << 12),
                                 Operand::Nothing,
                                 Operand::Nothing
                             ];
                         } else {
                             inst.opcode = Opcode::ADR;
-                            let imm = ((word >> 3) & 0x1ffffc) | ((word >> 29) & 0x3);
+                            let offset = (((word >> 3) & 0x1ffffc) | ((word >> 29) & 0x3)) as i32;
+                            let extended_offset = (offset << 11) >> 11;
                             inst.operands = [
                                 Operand::Register(SizeCode::X, (word & 0x1f) as u16),
-                                Operand::Immediate(imm),
+                                Operand::Offset(extended_offset as i64),
                                 Operand::Nothing,
                                 Operand::Nothing
                             ];
@@ -2213,7 +2215,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
                         inst.operands = [
                             Operand::Register(size, Rt),
-                            Operand::PCOffset(imm19 << 2),
+                            Operand::PCOffset((imm19 << 2) as i64),
                             Operand::Nothing,
                             Operand::Nothing,
                         ];
@@ -2243,7 +2245,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         inst.opcode = Opcode::LDR;
                         inst.operands = [
                             Operand::SIMDRegister(size_code, Rt),
-                            Operand::PCOffset(imm19 << 2),
+                            Operand::PCOffset((imm19 << 2) as i64),
                             Operand::Nothing,
                             Operand::Nothing,
                         ];
@@ -2992,7 +2994,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         let extended_offset = (offset << 4) >> 4;
                         inst.opcode = Opcode::B;
                         inst.operands = [
-                            Operand::Offset(extended_offset),
+                            Operand::Offset(extended_offset as i64),
                             Operand::Nothing,
                             Operand::Nothing,
                             Operand::Nothing
@@ -3005,7 +3007,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         let Rt = word & 0x1f;
                         inst.operands = [
                             Operand::Register(SizeCode::W, Rt as u16),
-                            Operand::Offset(extended_offset),
+                            Operand::Offset(extended_offset as i64),
                             Operand::Nothing,
                             Operand::Nothing
                         ];
@@ -3017,7 +3019,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         let Rt = word & 0x1f;
                         inst.operands = [
                             Operand::Register(SizeCode::W, Rt as u16),
-                            Operand::Offset(extended_offset),
+                            Operand::Offset(extended_offset as i64),
                             Operand::Nothing,
                             Operand::Nothing
                         ];
@@ -3031,7 +3033,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         inst.operands = [
                             Operand::Register(SizeCode::W, Rt as u16),
                             Operand::Imm16(b as u16),
-                            Operand::Offset(extended_offset),
+                            Operand::Offset(extended_offset as i64),
                             Operand::Nothing
                         ];
                     },
@@ -3044,7 +3046,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         inst.operands = [
                             Operand::Register(SizeCode::W, Rt as u16),
                             Operand::Imm16(b as u16),
-                            Operand::Offset(extended_offset),
+                            Operand::Offset(extended_offset as i64),
                             Operand::Nothing
                         ];
                     },
@@ -3054,7 +3056,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         let cond = word & 0x0f;
                         inst.opcode = Opcode::Bcc(cond as u8);
                         inst.operands = [
-                            Operand::Offset(extended_offset),
+                            Operand::Offset(extended_offset as i64),
                             Operand::Nothing,
                             Operand::Nothing,
                             Operand::Nothing
@@ -3073,7 +3075,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         let extended_offset = (offset << 4) >> 4;
                         inst.opcode = Opcode::BL;
                         inst.operands = [
-                            Operand::Offset(extended_offset),
+                            Operand::Offset(extended_offset as i64),
                             Operand::Nothing,
                             Operand::Nothing,
                             Operand::Nothing
@@ -3086,7 +3088,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         let Rt = word & 0x1f;
                         inst.operands = [
                             Operand::Register(SizeCode::X, Rt as u16),
-                            Operand::Offset(extended_offset),
+                            Operand::Offset(extended_offset as i64),
                             Operand::Nothing,
                             Operand::Nothing
                         ];
@@ -3098,7 +3100,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         let Rt = word & 0x1f;
                         inst.operands = [
                             Operand::Register(SizeCode::X, Rt as u16),
-                            Operand::Offset(extended_offset),
+                            Operand::Offset(extended_offset as i64),
                             Operand::Nothing,
                             Operand::Nothing
                         ];
@@ -3112,7 +3114,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         inst.operands = [
                             Operand::Register(SizeCode::X, Rt as u16),
                             Operand::Imm16((b as u16) | 0x20),
-                            Operand::Offset(extended_offset),
+                            Operand::Offset(extended_offset as i64),
                             Operand::Nothing
                         ];
                     },
@@ -3125,7 +3127,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         inst.operands = [
                             Operand::Register(SizeCode::X, Rt as u16),
                             Operand::Imm16((b as u16) | 0x20),
-                            Operand::Offset(extended_offset),
+                            Operand::Offset(extended_offset as i64),
                             Operand::Nothing
                         ];
                     },
