@@ -351,24 +351,103 @@ impl Display for Instruction {
                 write!(fmt, "bfm")?;
             },
             Opcode::UBFM => {
+                if let Operand::Immediate(0) = self.operands[2] {
+                    let newdest = if let Operand::Register(_size, destnum) = self.operands[0] {
+                        Operand::Register(SizeCode::W, destnum)
+                    } else {
+                        unreachable!("operand 1 is always a register");
+                    };
+                    let newsrc = if let Operand::Register(_size, srcnum) = self.operands[1] {
+                        Operand::Register(SizeCode::W, srcnum)
+                    } else {
+                        unreachable!("operand 1 is always a register");
+                    };
+                    if let Operand::Immediate(7) = self.operands[3] {
+                        return write!(fmt, "uxtb {}, {}", newdest, newsrc);
+                    } else if let Operand::Immediate(15) = self.operands[3] {
+                        return write!(fmt, "uxth {}, {}", newdest, newsrc);
+                    }
+                }
+                if let Operand::Immediate(imms) = self.operands[3] {
+                    let size = if let Operand::Register(size, _) = self.operands[0] {
+                        size
+                    } else {
+                        unreachable!("operand 0 is a register");
+                    };
+                    match (imms, size) {
+                        (63, SizeCode::X) |
+                        (31, SizeCode::W) => {
+                            return write!(fmt, "lsr {}, {}, {}", self.operands[0], self.operands[1], self.operands[2]);
+                        },
+                        _ => {
+                            let size = if size == SizeCode::X {
+                                64
+                            } else {
+                                32
+                            };
+                            let immr = if let Operand::Immediate(immr) = self.operands[2] {
+                                immr
+                            } else {
+                                unreachable!("operand 3 is a register");
+                            };
+                            if imms + 1 == immr {
+                                return write!(fmt, "lsl {}, {}, {:#x}", self.operands[0], self.operands[1], size - imms - 1);
+                            }
+                            if imms < immr {
+                                return write!(fmt, "ubfiz {}, {}, {:#x}, {:#x}",
+                                    self.operands[0],
+                                    self.operands[1],
+                                    size - immr,
+                                    imms + 1,
+                                );
+                            }
+                        }
+                    }
+                }
                 write!(fmt, "ubfm")?;
             },
             Opcode::SBFM => {
                 if let Operand::Immediate(0) = self.operands[2] {
+                    let newsrc = if let Operand::Register(_size, srcnum) = self.operands[1] {
+                        Operand::Register(SizeCode::W, srcnum)
+                    } else {
+                        unreachable!("operand 1 is always a register");
+                    };
                     if let Operand::Immediate(7) = self.operands[3] {
-                        return write!(fmt, "sxtb {}, {}", self.operands[0], self.operands[1]);
+                        return write!(fmt, "sxtb {}, {}", self.operands[0], newsrc);
                     } else if let Operand::Immediate(15) = self.operands[3] {
-                        return write!(fmt, "sxth {}, {}", self.operands[0], self.operands[1]);
+                        return write!(fmt, "sxth {}, {}", self.operands[0], newsrc);
                     } else if let Operand::Immediate(31) = self.operands[3] {
-                        return write!(fmt, "sxtw {}, {}", self.operands[0], self.operands[1]);
+                        return write!(fmt, "sxtw {}, {}", self.operands[0], newsrc);
                     }
-                } else if let Operand::Immediate(63) = self.operands[3] {
+                }
+                if let Operand::Immediate(63) = self.operands[3] {
                     if let Operand::Register(SizeCode::X, _) = self.operands[0] {
                         return write!(fmt, "asr {}, {}, {}", self.operands[0], self.operands[1], self.operands[2]);
                     }
-                } else if let Operand::Immediate(31) = self.operands[3] {
+                }
+                if let Operand::Immediate(31) = self.operands[3] {
                     if let Operand::Register(SizeCode::W, _) = self.operands[0] {
                         return write!(fmt, "asr {}, {}, {}", self.operands[0], self.operands[1], self.operands[2]);
+                    }
+                }
+                if let (Operand::Immediate(imms), Operand::Immediate(immr)) = (self.operands[2], self.operands[3]) {
+                    if immr < imms {
+                        let size = if let Operand::Register(size, _) = self.operands[0] {
+                            if size == SizeCode::W {
+                                32
+                            } else {
+                                64
+                            }
+                        } else {
+                            unreachable!("operand 0 is always a register");
+                        };
+                        return write!(fmt, "sbfiz {}, {}, {:#x}, {:#x}",
+                            self.operands[0],
+                            self.operands[1],
+                            size - imms,
+                            immr + 1,
+                        );
                     }
                 }
                 write!(fmt, "sbfm")?;
@@ -1933,7 +2012,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             }
                             0b101 => {
                                 if N == 1 {
-                                    inst.opcode = Opcode::SBFM;
+                                    inst.opcode = Opcode::BFM;
                                 } else {
                                     inst.opcode = Opcode::Invalid;
                                 }
@@ -1941,7 +2020,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             }
                             0b110 => {
                                 if N == 1 {
-                                    inst.opcode = Opcode::SBFM;
+                                    inst.opcode = Opcode::UBFM;
                                 } else {
                                     inst.opcode = Opcode::Invalid;
                                 }
@@ -2136,7 +2215,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             _ => {
                                 unreachable!("size is two bits");
                             }
-                        }
+                        };
                     },
                     0b00001 => {
                         let Rt = (word & 0x1f) as u16;
