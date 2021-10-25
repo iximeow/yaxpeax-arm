@@ -2454,196 +2454,107 @@ impl Decoder<ARMv8> for InstDecoder {
                         let category = (word >> 10) & 0x03;
                         // println!("load/store: size_opc: {:#b}, category: {:#b}", size_opc, category);
                         if word & 0x200000 != 0 {
-                            if category != 0b10 {
-                                inst.opcode = Opcode::Invalid;
-                                return Err(DecodeError::InvalidOpcode);
-                            } else {
-                                // Load/store register (register offset)
-                                // C3.3.10
-                                let size = match size_opc {
-                                    0b0000 => {
-                                        inst.opcode = Opcode::STRB;
-                                        SizeCode::W
-                                    },
-                                    0b0001 => {
-                                        inst.opcode = Opcode::LDRB;
-                                        SizeCode::W
-                                    },
-                                    0b0010 => {
-                                        inst.opcode = Opcode::LDRSB;
-                                        SizeCode::X
-                                    },
-                                    0b0011 => {
-                                        inst.opcode = Opcode::LDRSB;
-                                        SizeCode::W
-                                    },
-                                    0b0100 => {
-                                        inst.opcode = Opcode::STRH;
-                                        SizeCode::W
-                                    },
-                                    0b0101 => {
-                                        inst.opcode = Opcode::LDRH;
-                                        SizeCode::W
-                                    },
-                                    0b0110 => {
-                                        inst.opcode = Opcode::LDRSH;
-                                        SizeCode::X
-                                    },
-                                    0b0111 => {
-                                        inst.opcode = Opcode::LDRSH;
-                                        SizeCode::W
-                                    },
-                                    0b1000 => {
-                                        inst.opcode = Opcode::STR;
-                                        SizeCode::W
-                                    },
-                                    0b1001 => {
-                                        inst.opcode = Opcode::LDR;
-                                        SizeCode::W
-                                    },
-                                    0b1010 => {
-                                        inst.opcode = Opcode::LDRSW;
-                                        SizeCode::X
-                                    },
-                                    0b1011 => {
-                                        inst.opcode = Opcode::Invalid;
-                                        SizeCode::X
-                                    },
-                                    0b1100 => {
-                                        inst.opcode = Opcode::STR;
-                                        SizeCode::X
-                                    },
-                                    0b1101 => {
-                                        inst.opcode = Opcode::LDR;
-                                        SizeCode::X
-                                    },
-                                    0b1110 => {
-                                        // eprintln!("PRFM is not supported yet");
-                                        return Err(DecodeError::IncompleteDecoder);
-//                                        inst.opcode = Opcode::PRFM;
-//                                        SizeCode::X
-                                    },
-                                    0b1111 => {
-                                        inst.opcode = Opcode::Invalid;
-                                        SizeCode::X
-                                    },
-                                    _ => { unreachable!("size and opc are four bits"); }
-                                };
+                            match category {
+                                0b00 => {
+                                    // Atomic memory operations
+                                    // V==1
+                                    return Err(DecodeError::IncompleteDecoder);
+                                }
+                                0b01 |
+                                0b11 => {
+                                    // Load/store register (pac)
+                                    // V==1
+                                    return Err(DecodeError::IncompleteDecoder);
+                                }
+                                0b10 => {
+                                    // Load/store register (register offset)
+                                    // C3.3.10
+                                    const OPCODES: &[Result<(Opcode, SizeCode, u8), DecodeError>] = &[
+                                        Ok((Opcode::STRB, SizeCode::W, 1)),
+                                        Ok((Opcode::LDRB, SizeCode::W, 1)),
+                                        Ok((Opcode::LDRSB, SizeCode::X, 1)),
+                                        Ok((Opcode::LDRSB, SizeCode::W, 1)),
+                                        Ok((Opcode::STRH, SizeCode::W, 1)),
+                                        Ok((Opcode::LDRH, SizeCode::W, 1)),
+                                        Ok((Opcode::LDRSH, SizeCode::X, 1)),
+                                        Ok((Opcode::LDRSH, SizeCode::W, 1)),
+                                        Ok((Opcode::STR, SizeCode::W, 2)),
+                                        Ok((Opcode::LDR, SizeCode::W, 2)),
+                                        Ok((Opcode::LDRSW, SizeCode::X, 2)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Ok((Opcode::STR, SizeCode::X, 3)),
+                                        Ok((Opcode::LDR, SizeCode::X, 3)),
+                                        Err(DecodeError::IncompleteDecoder), // PRFM is not supported yet
+                                        Err(DecodeError::InvalidOpcode),
+                                    ];
 
-                                let S = ((word >> 12) & 0x1) as u8;
-                                let option = ((word >> 13) & 0x07) as u8;
-                                let Rm = ((word >> 16) & 0x1f) as u16;
+                                    let (opcode, size, shamt) = OPCODES[size_opc as usize]?;
+                                    inst.opcode = opcode;
 
-                                let index_size = match option & 0x3 {
-                                    0b00 |
-                                    0b01 => {
-                                        inst.opcode = Opcode::Invalid;
-                                        return Err(DecodeError::InvalidOpcode);
-                                    },
-                                    0b10 => { SizeCode::W }
-                                    0b11 => { SizeCode::X }
-                                    _ => { unreachable!("option is two bits"); }
-                                };
+                                    let S = ((word >> 12) & 0x1) as u8;
+                                    let option = ((word >> 13) & 0x07) as u8;
+                                    let Rm = ((word >> 16) & 0x1f) as u16;
 
-                                let shift_style = match option {
-                                    0b000 |
-                                    0b001 => {
-                                        inst.opcode = Opcode::Invalid;
-                                        return Err(DecodeError::InvalidOpcode);
-                                    },
-                                    0b010 => { ShiftStyle::UXTW },
-                                    0b011 => { ShiftStyle::LSL },
-                                    0b100 |
-                                    0b101 => {
-                                        inst.opcode = Opcode::Invalid;
-                                        return Err(DecodeError::InvalidOpcode);
-                                    },
-                                    0b110 => { ShiftStyle::SXTW },
-                                    0b111 => { ShiftStyle::SXTX },
-                                    _ => { unreachable!("option is three bits"); }
-                                };
+                                    let index_size = match option & 0x3 {
+                                        0b00 |
+                                        0b01 => {
+                                            inst.opcode = Opcode::Invalid;
+                                            return Err(DecodeError::InvalidOpcode);
+                                        },
+                                        0b10 => { SizeCode::W }
+                                        0b11 => { SizeCode::X }
+                                        _ => { unreachable!("option is two bits"); }
+                                    };
 
-                                inst.operands = [
-                                    Operand::Register(size, Rt),
-                                    Operand::RegRegOffset(Rn, index_size, Rm, shift_style, S),
-                                    Operand::Nothing,
-                                    Operand::Nothing,
-                                ];
+                                    const SHIFT_STYLES: &[Result<ShiftStyle, DecodeError>] = &[
+                                        Err(DecodeError::InvalidOperand),
+                                        Err(DecodeError::InvalidOperand),
+                                        Ok(ShiftStyle::UXTW),
+                                        Ok(ShiftStyle::LSL),
+                                        Err(DecodeError::InvalidOperand),
+                                        Err(DecodeError::InvalidOperand),
+                                        Ok(ShiftStyle::SXTW),
+                                        Ok(ShiftStyle::SXTX),
+                                    ];
+                                    let shift_style = SHIFT_STYLES[option as usize]?;
+
+                                    inst.operands = [
+                                        Operand::Register(size, Rt),
+                                        Operand::RegRegOffset(Rn, index_size, Rm, shift_style, S * shamt),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                _ => {
+                                    unreachable!("category is two bits");
+                                }
                             }
                         } else {
                             let imm9 = ((((word >> 12) & 0x1ff) as i16) << 7) >> 7;
                             match category {
                                 0b00 => {
                                     // Load/store register (unscaled immediate)
-                                    let size = match size_opc {
-                                        0b0000 => {
-                                            inst.opcode = Opcode::STURB;
-                                            SizeCode::W
-                                        }
-                                        0b0001 => {
-                                            inst.opcode = Opcode::LDURB;
-                                            SizeCode::W
-                                        }
-                                        0b0010 => {
-                                            inst.opcode = Opcode::LDURSB;
-                                            SizeCode::X
-                                        }
-                                        0b0011 => {
-                                            inst.opcode = Opcode::LDURSB;
-                                            SizeCode::W
-                                        }
-                                        0b0100 => {
-                                            inst.opcode = Opcode::STURH;
-                                            SizeCode::W
-                                        }
-                                        0b0101 => {
-                                            inst.opcode = Opcode::LDURH;
-                                            SizeCode::W
-                                        }
-                                        0b0110 => {
-                                            inst.opcode = Opcode::LDURSH;
-                                            SizeCode::X
-                                        }
-                                        0b0111 => {
-                                            inst.opcode = Opcode::LDURSH;
-                                            SizeCode::W
-                                        }
-                                        0b1000 => {
-                                            inst.opcode = Opcode::STUR;
-                                            SizeCode::W
-                                        }
-                                        0b1001 => {
-                                            inst.opcode = Opcode::LDUR;
-                                            SizeCode::W
-                                        }
-                                        0b1010 => {
-                                            inst.opcode = Opcode::LDURSW;
-                                            SizeCode::X
-                                        }
-                                        0b1011 => {
-                                            inst.opcode = Opcode::Invalid;
-                                            SizeCode::W
-                                        }
-                                        0b1100 => {
-                                            inst.opcode = Opcode::STUR;
-                                            SizeCode::X
-                                        }
-                                        0b1101 => {
-                                            inst.opcode = Opcode::LDUR;
-                                            SizeCode::X
-                                        }
-                                        0b1110 => {
-                                            // eprintln!("PRFUM not handled yet");
-                                            return Err(DecodeError::IncompleteDecoder);
-                                        },
-                                        0b1111 => {
-                                            inst.opcode = Opcode::Invalid;
-                                            SizeCode::W
-                                        }
-                                        _ => {
-                                            unreachable!("size and opc are four bits");
-                                        }
-                                    };
+                                    const OPCODES: &[Result<(Opcode, SizeCode), DecodeError>] = &[
+                                        Ok((Opcode::STURB, SizeCode::W)),
+                                        Ok((Opcode::LDURB, SizeCode::W)),
+                                        Ok((Opcode::LDURSB, SizeCode::X)),
+                                        Ok((Opcode::LDURSB, SizeCode::W)),
+                                        Ok((Opcode::STURH, SizeCode::W)),
+                                        Ok((Opcode::LDURH, SizeCode::W)),
+                                        Ok((Opcode::LDURSH, SizeCode::X)),
+                                        Ok((Opcode::LDURSH, SizeCode::W)),
+                                        Ok((Opcode::STUR, SizeCode::W)),
+                                        Ok((Opcode::LDUR, SizeCode::W)),
+                                        Ok((Opcode::LDURSW, SizeCode::X)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Ok((Opcode::STUR, SizeCode::X)),
+                                        Ok((Opcode::LDUR, SizeCode::X)),
+                                        Err(DecodeError::IncompleteDecoder), // PRFM is not supported yet
+                                        Err(DecodeError::InvalidOpcode),
+                                    ];
+
+                                    let (opcode, size) = OPCODES[size_opc as usize]?;
+                                    inst.opcode = opcode;
 
                                     inst.operands = [
                                         Operand::Register(size, Rt),
@@ -2654,73 +2565,27 @@ impl Decoder<ARMv8> for InstDecoder {
                                 }
                                 0b10 => {
                                     // Load/store register (unprivileged)
+                                    const OPCODES: &[Result<(Opcode, SizeCode), DecodeError>] = &[
+                                        Ok((Opcode::STTRB, SizeCode::W)),
+                                        Ok((Opcode::LDTRB, SizeCode::W)),
+                                        Ok((Opcode::LDTRSB, SizeCode::X)),
+                                        Ok((Opcode::LDTRSB, SizeCode::W)),
+                                        Ok((Opcode::STTRH, SizeCode::W)),
+                                        Ok((Opcode::LDTRH, SizeCode::W)),
+                                        Ok((Opcode::LDTRSH, SizeCode::X)),
+                                        Ok((Opcode::LDTRSH, SizeCode::W)),
+                                        Ok((Opcode::STTR, SizeCode::W)),
+                                        Ok((Opcode::LDTR, SizeCode::W)),
+                                        Ok((Opcode::LDTRSW, SizeCode::X)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Ok((Opcode::STUR, SizeCode::X)),
+                                        Ok((Opcode::LDTR, SizeCode::X)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                    ];
 
-                                    let size = match size_opc {
-                                        0b0000 => {
-                                            inst.opcode = Opcode::STTRB;
-                                            SizeCode::W
-                                        }
-                                        0b0001 => {
-                                            inst.opcode = Opcode::LDTRB;
-                                            SizeCode::W
-                                        }
-                                        0b0010 => {
-                                            inst.opcode = Opcode::LDTRSB;
-                                            SizeCode::X
-                                        }
-                                        0b0011 => {
-                                            inst.opcode = Opcode::LDTRSB;
-                                            SizeCode::W
-                                        }
-                                        0b0100 => {
-                                            inst.opcode = Opcode::STTRH;
-                                            SizeCode::W
-                                        }
-                                        0b0101 => {
-                                            inst.opcode = Opcode::LDTRH;
-                                            SizeCode::W
-                                        }
-                                        0b0110 => {
-                                            inst.opcode = Opcode::LDTRSH;
-                                            SizeCode::X
-                                        }
-                                        0b0111 => {
-                                            inst.opcode = Opcode::LDTRSH;
-                                            SizeCode::W
-                                        }
-                                        0b1000 => {
-                                            inst.opcode = Opcode::STTR;
-                                            SizeCode::W
-                                        }
-                                        0b1001 => {
-                                            inst.opcode = Opcode::LDTR;
-                                            SizeCode::W
-                                        }
-                                        0b1010 => {
-                                            inst.opcode = Opcode::LDTRSW;
-                                            SizeCode::X
-                                        }
-                                        0b1011 => {
-                                            inst.opcode = Opcode::Invalid;
-                                            SizeCode::W
-                                        }
-                                        0b1100 => {
-                                            inst.opcode = Opcode::STTR;
-                                            SizeCode::X
-                                        }
-                                        0b1101 => {
-                                            inst.opcode = Opcode::LDTR;
-                                            SizeCode::X
-                                        }
-                                        0b1110 |
-                                        0b1111 => {
-                                            inst.opcode = Opcode::Invalid;
-                                            SizeCode::W
-                                        }
-                                        _ => {
-                                            unreachable!("size and opc are four bits");
-                                        }
-                                    };
+                                    let (opcode, size) = OPCODES[size_opc as usize]?;
+                                    inst.opcode = opcode;
 
                                     inst.operands = [
                                         Operand::Register(size, Rt),
@@ -2731,69 +2596,27 @@ impl Decoder<ARMv8> for InstDecoder {
                                 }
                                 0b01 |
                                 0b11 => {
-                                    let size = match size_opc {
-                                        0b0000 => {
-                                            inst.opcode = Opcode::STRB;
-                                            SizeCode::W
-                                        },
-                                        0b0001 => {
-                                            inst.opcode = Opcode::LDRB;
-                                            SizeCode::W
-                                        }
-                                        0b0010 => {
-                                            inst.opcode = Opcode::LDRSB;
-                                            SizeCode::X
-                                        }
-                                        0b0011 => {
-                                            inst.opcode = Opcode::LDRSB;
-                                            SizeCode::W
-                                        }
-                                        0b0100 => {
-                                            inst.opcode = Opcode::STRH;
-                                            SizeCode::W
-                                        }
-                                        0b0101 => {
-                                            inst.opcode = Opcode::LDRH;
-                                            SizeCode::W
-                                        }
-                                        0b0110 => {
-                                            inst.opcode = Opcode::LDRSH;
-                                            SizeCode::X
-                                        }
-                                        0b0111 => {
-                                            inst.opcode = Opcode::LDRSH;
-                                            SizeCode::W
-                                        }
-                                        0b1000 => {
-                                            inst.opcode = Opcode::STR;
-                                            SizeCode::W
-                                        }
-                                        0b1001 => {
-                                            inst.opcode = Opcode::LDR;
-                                            SizeCode::W
-                                        }
-                                        0b1010 |
-                                        0b1011 => {
-                                            inst.opcode = Opcode::Invalid;
-                                            SizeCode::W
-                                        }
-                                        0b1100 => {
-                                            inst.opcode = Opcode::STR;
-                                            SizeCode::X
-                                        }
-                                        0b1101 => {
-                                            inst.opcode = Opcode::LDR;
-                                            SizeCode::X
-                                        }
-                                        0b1110 |
-                                        0b1111 => {
-                                            inst.opcode = Opcode::Invalid;
-                                            SizeCode::X
-                                        }
-                                        _ => {
-                                            unreachable!("size and opc are four bits");
-                                        }
-                                    };
+                                    const OPCODES: &[Result<(Opcode, SizeCode), DecodeError>] = &[
+                                        Ok((Opcode::STRB, SizeCode::W)),
+                                        Ok((Opcode::LDRB, SizeCode::W)),
+                                        Ok((Opcode::LDRSB, SizeCode::X)),
+                                        Ok((Opcode::LDRSB, SizeCode::W)),
+                                        Ok((Opcode::STRH, SizeCode::W)),
+                                        Ok((Opcode::LDRH, SizeCode::W)),
+                                        Ok((Opcode::LDRSH, SizeCode::X)),
+                                        Ok((Opcode::LDRSH, SizeCode::W)),
+                                        Ok((Opcode::STR, SizeCode::W)),
+                                        Ok((Opcode::LDR, SizeCode::W)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Ok((Opcode::STR, SizeCode::X)),
+                                        Ok((Opcode::LDR, SizeCode::X)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                    ];
+
+                                    let (opcode, size) = OPCODES[size_opc as usize]?;
+                                    inst.opcode = opcode;
 
                                     inst.operands = [
                                         Operand::Register(size, Rt),
