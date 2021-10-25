@@ -2827,7 +2827,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         // V == 0
                         let Rt = (word & 0x1f) as u16;
                         let Rn = ((word >> 5) & 0x1f) as u16;
-                        let imm12 = ((((word >> 10) as i16) & 0x0fff) << 4) >> 4;
+                        let imm12 = ((word >> 10) & 0x0fff) as i16;
                         let size_opc = ((word >> 22) & 0x3) | ((word >> 28) & 0xc);
                         match size_opc {
                             0b0000 => {
