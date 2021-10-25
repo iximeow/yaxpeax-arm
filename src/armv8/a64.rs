@@ -2387,7 +2387,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             0b011 => {
                                 inst.opcode = Opcode::LDPSW;
                                 imm7 <<= 2;
-                                SizeCode::W
+                                SizeCode::X
                             },
                             0b100 => {
                                 inst.opcode = Opcode::STP;
@@ -2446,7 +2446,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             0b011 => {
                                 inst.opcode = Opcode::LDPSW;
                                 imm7 <<= 2;
-                                SizeCode::W
+                                SizeCode::X
                             },
                             0b100 => {
                                 inst.opcode = Opcode::STP;
@@ -2505,7 +2505,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             0b011 => {
                                 inst.opcode = Opcode::LDPSW;
                                 imm7 <<= 2;
-                                SizeCode::W
+                                SizeCode::X
                             },
                             0b100 => {
                                 inst.opcode = Opcode::STP;
