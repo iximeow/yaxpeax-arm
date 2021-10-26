@@ -804,24 +804,42 @@ impl Display for Instruction {
                 write!(fmt, "cls")?;
             }
             Opcode::MADD => {
+                if let Operand::Register(_, 31) = self.operands[3] {
+                    return write!(fmt, "mul {}, {}, {}", self.operands[0], self.operands[1], self.operands[2])
+                }
                 write!(fmt, "madd")?;
             }
             Opcode::MSUB => {
+                if let Operand::Register(_, 31) = self.operands[3] {
+                    return write!(fmt, "mneg {}, {}, {}", self.operands[0], self.operands[1], self.operands[2])
+                }
                 write!(fmt, "msub")?;
             }
             Opcode::SMADDL => {
+                if let Operand::Register(_, 31) = self.operands[3] {
+                    return write!(fmt, "smull {}, {}, {}", self.operands[0], self.operands[1], self.operands[2])
+                }
                 write!(fmt, "smaddl")?;
             }
             Opcode::SMSUBL => {
+                if let Operand::Register(_, 31) = self.operands[3] {
+                    return write!(fmt, "smnegl {}, {}, {}", self.operands[0], self.operands[1], self.operands[2])
+                }
                 write!(fmt, "smsubl")?;
             }
             Opcode::SMULH => {
                 write!(fmt, "smulh")?;
             }
             Opcode::UMADDL => {
+                if let Operand::Register(_, 31) = self.operands[3] {
+                    return write!(fmt, "umull {}, {}, {}", self.operands[0], self.operands[1], self.operands[2])
+                }
                 write!(fmt, "umaddl")?;
             }
             Opcode::UMSUBL => {
+                if let Operand::Register(_, 31) = self.operands[3] {
+                    return write!(fmt, "umnegl {}, {}, {}", self.operands[0], self.operands[1], self.operands[2])
+                }
                 write!(fmt, "umsubl")?;
             }
             Opcode::UMULH => {
