@@ -413,7 +413,14 @@ impl Display for Instruction {
                         }
                     }
                 }
-                write!(fmt, "ubfm")?;
+                // `ubfm` is never actually displayed: in the remaining case, it is always aliased
+                // to `ubfx`
+                let width = if let (Operand::Immediate(lsb), Operand::Immediate(width)) = (self.operands[2], self.operands[3]) {
+                    Operand::Immediate(width - lsb + 1)
+                } else {
+                    unreachable!("last two operands of ubfm are always immediates");
+                };
+                return write!(fmt, "ubfx {}, {}, {}, {}", self.operands[0], self.operands[1], self.operands[2], width);
             },
             Opcode::SBFM => {
                 if let Operand::Immediate(0) = self.operands[2] {
@@ -459,7 +466,14 @@ impl Display for Instruction {
                         );
                     }
                 }
-                write!(fmt, "sbfm")?;
+                // `sbfm` is never actually displayed: in the remaining case, it is always aliased
+                // to `sbfx`
+                let width = if let (Operand::Immediate(lsb), Operand::Immediate(width)) = (self.operands[2], self.operands[3]) {
+                    Operand::Immediate(width - lsb + 1)
+                } else {
+                    unreachable!("last two operands of sbfm are always immediates");
+                };
+                return write!(fmt, "sbfx {}, {}, {}, {}", self.operands[0], self.operands[1], self.operands[2], width);
             },
             Opcode::ADR => {
                 write!(fmt, "adr")?;
