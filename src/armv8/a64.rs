@@ -2327,10 +2327,10 @@ impl Decoder<ARMv8> for InstDecoder {
                         let Rt = (word & 0x1f) as u16;
                         let Rn = ((word >> 5) & 0x1f) as u16;
                         let Rt2 = ((word >> 10) & 0x1f) as u16;
-                        let o0 = (word & 0x0080) >> 7;
+                        let o0 = (word & 0x8000) >> 15;
                         let Rs = ((word >> 16) & 0x1f) as u16;
                         let Lo1 = (word & 0x600000) >> 21;
-                        let size = (word >> 29) & 0x3;
+                        let size = (word >> 30) & 0x3;
                         // load/store exclusive
                         // o2 == 0
                         inst.opcode = match size {
@@ -2394,7 +2394,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         inst.operands = [
                                             Operand::Register(SizeCode::W, Rs),
                                             Operand::Register(size_code, Rt),
-                                            Operand::RegisterOrSP(SizeCode::X, Rn), // memory operand?
+                                            Operand::RegOffset(Rn, 0),
                                             Operand::Nothing,
                                         ];
                                         match o0 {
@@ -2408,7 +2408,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                             Operand::Register(SizeCode::W, Rs),
                                             Operand::Register(size_code, Rt),
                                             Operand::Register(size_code, Rt2),
-                                            Operand::RegisterOrSP(SizeCode::X, Rn), // memory operand?
+                                            Operand::RegOffset(Rn, 0),
                                         ];
                                         match o0 {
                                             0b0 => Opcode::STXP,
@@ -2419,7 +2419,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     0b10 => {
                                         inst.operands = [
                                             Operand::Register(size_code, Rt),
-                                            Operand::RegisterOrSP(SizeCode::X, Rn), // memory operand?
+                                            Operand::RegOffset(Rn, 0),
                                             Operand::Nothing,
                                             Operand::Nothing,
                                         ];
@@ -2433,7 +2433,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         inst.operands = [
                                             Operand::Register(size_code, Rt),
                                             Operand::Register(size_code, Rt2),
-                                            Operand::RegisterOrSP(SizeCode::X, Rn), // memory operand?
+                                            Operand::RegOffset(Rn, 0),
                                             Operand::Nothing,
                                         ];
                                         match o0 {
@@ -2919,7 +2919,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Ok((Opcode::LDRSH, SizeCode::W)),
                                         Ok((Opcode::STR, SizeCode::W)),
                                         Ok((Opcode::LDR, SizeCode::W)),
-                                        Err(DecodeError::InvalidOpcode),
+                                        Ok((Opcode::LDRSW, SizeCode::X)),
                                         Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::STR, SizeCode::X)),
                                         Ok((Opcode::LDR, SizeCode::X)),
@@ -2954,7 +2954,157 @@ impl Decoder<ARMv8> for InstDecoder {
                          * unprivileged, immediate pre-indexd, register offset}
                          * V == 1
                          */
-                        return Err(DecodeError::IncompleteDecoder);
+                        let Rt = (word & 0x1f) as u16;
+                        let Rn = ((word >> 5) & 0x1f) as u16;
+                        let size_opc = ((word >> 22) & 0x03) | ((word >> 28) & 0x0c);
+
+                        let op4 = ((word >> 16) & 0x3f) as u8;
+                        let op5 = ((word >> 10) & 0x03) as u8;
+                        if op4 < 0b10_0000 {
+                            let imm9 = ((((word >> 12) & 0x1ff) as i16) << 7) >> 7;
+                            match op5 {
+                                0b00 => {
+                                    // Load/store register (unscaled immediate)
+                                    // V == 1
+                                    const OPCODES: &[Result<(Opcode, SIMDSizeCode), DecodeError>] = &[
+                                        Ok((Opcode::STUR, SIMDSizeCode::B)),
+                                        Ok((Opcode::LDUR, SIMDSizeCode::B)),
+                                        Ok((Opcode::STUR, SIMDSizeCode::Q)),
+                                        Ok((Opcode::LDUR, SIMDSizeCode::Q)),
+                                        // 01 1 0x
+                                        Ok((Opcode::STUR, SIMDSizeCode::H)),
+                                        Ok((Opcode::LDUR, SIMDSizeCode::H)),
+                                        // 01 1 1x
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        // 10 1 0x
+                                        Ok((Opcode::STUR, SIMDSizeCode::S)),
+                                        Ok((Opcode::LDUR, SIMDSizeCode::S)),
+                                        // 10 1 1x
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        // 11 1 0x
+                                        Ok((Opcode::STUR, SIMDSizeCode::D)),
+                                        Ok((Opcode::LDUR, SIMDSizeCode::D)),
+                                        // 11 1 1x
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                    ];
+
+                                    let (opcode, size) = OPCODES[size_opc as usize]?;
+                                    inst.opcode = opcode;
+
+                                    inst.operands = [
+                                        Operand::SIMDRegister(size, Rt),
+                                        Operand::RegPreIndex(Rn, imm9),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                0b10 => {
+                                    // Load/store register (unprivileged)
+                                    // V == 1
+                                    // this entire section in the manual is currently `Unallocated`
+                                    return Err(DecodeError::InvalidOpcode);
+                                }
+                                0b01 |
+                                0b11 => {
+                                    // Load/store register (immediate post-indexed)
+                                    // and
+                                    // Load/store register (immediate pre-indexed)
+                                    // V == 1
+                                    let pre_or_post = (word >> 11) & 0x01;
+                                    const OPCODES: &[Result<(Opcode, SIMDSizeCode), DecodeError>] = &[
+                                        Ok((Opcode::STR, SIMDSizeCode::B)),
+                                        Ok((Opcode::LDR, SIMDSizeCode::B)),
+                                        Ok((Opcode::STR, SIMDSizeCode::Q)),
+                                        Ok((Opcode::LDR, SIMDSizeCode::Q)),
+                                        // 01 1 0x
+                                        Ok((Opcode::STR, SIMDSizeCode::H)),
+                                        Ok((Opcode::LDR, SIMDSizeCode::H)),
+                                        // 01 1 1x
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        // 10 1 0x
+                                        Ok((Opcode::STR, SIMDSizeCode::S)),
+                                        Ok((Opcode::LDR, SIMDSizeCode::S)),
+                                        // 10 1 1x
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        // 11 1 0x
+                                        Ok((Opcode::STR, SIMDSizeCode::D)),
+                                        Ok((Opcode::LDR, SIMDSizeCode::D)),
+                                        // 11 1 1x
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                    ];
+
+                                    let (opcode, size) = OPCODES[size_opc as usize]?;
+                                    inst.opcode = opcode;
+
+                                    inst.operands = [
+                                        Operand::SIMDRegister(size, Rt),
+                                        if pre_or_post == 1 {
+                                            Operand::RegPreIndex(Rn, imm9)
+                                        } else {
+                                            Operand::RegPostIndex(Rn, imm9)
+                                        },
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                _ => {
+                                    unreachable!("op5 is two bits");
+                                }
+                            }
+                        } else {
+                            match op5 {
+                                0b00 => {
+                                    // Atomic memory operations
+                                    // V == 1
+                                    // all `V == 1` atomic operations are unallocated.
+                                    return Err(DecodeError::InvalidOpcode);
+                                }
+                                0b10 => {
+                                    // Load/store register (register offset)
+                                    // V == 1
+                                    const OPCODES: &[Result<Opcode, DecodeError>] = &[
+                                        Ok(Opcode::STR),
+                                        Ok(Opcode::LDR),
+                                        Ok(Opcode::STR),
+                                        Ok(Opcode::LDR),
+                                        Ok(Opcode::STR),
+                                        Ok(Opcode::LDR),
+                                        Ok(Opcode::STR),
+                                        Ok(Opcode::LDR),
+                                        // 01 1 1x
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        // 10 1 0x
+                                        Ok(Opcode::STR),
+                                        Ok(Opcode::LDR),
+                                        // 10 1 1x
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        // 11 1 0x
+                                        Ok(Opcode::STR),
+                                        Ok(Opcode::LDR),
+                                        // 11 1 1x
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                    ];
+
+                                    inst.opcode = OPCODES[size_opc as usize]?;
+                                    return Err(DecodeError::IncompleteDecoder);
+                                }
+                                _ => {
+                                    // Load/store register (pac)
+                                    // not clearly named in a table but looks like all `V == 1` are
+                                    // unallocated.
+                                    return Err(DecodeError::InvalidOpcode);
+                                }
+                            }
+                        }
                     }
                     0b11010 |
                     0b11011 => {
