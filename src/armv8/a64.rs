@@ -845,6 +845,56 @@ impl Display for Instruction {
             Opcode::UMULH => {
                 write!(fmt, "umulh")?;
             }
+            Opcode::UDIV => {
+                write!(fmt, "udiv")?;
+            }
+            Opcode::SDIV => {
+                write!(fmt, "sdiv")?;
+            }
+            Opcode::LSLV => {
+                // lslv == lsl (register) and, quoth the manual, `lsl is always the preferred
+                // disassembly`.
+                write!(fmt, "lsl")?;
+            }
+            Opcode::LSRV => {
+                // lsrv == lsr (register) and, quoth the manual, `lsr is always the preferred
+                // disassembly`.
+                write!(fmt, "lsr")?;
+            }
+            Opcode::ASRV => {
+                // asrv == asr (register) and, quoth the manual, `asr is always the preferred
+                // disassembly`.
+                write!(fmt, "asr")?;
+            }
+            Opcode::RORV => {
+                // rorv == ror (register) and, quoth the manual, `ror is always the preferred
+                // disassembly`.
+                write!(fmt, "ror")?;
+            }
+            Opcode::CRC32B => {
+                write!(fmt, "crc32b")?;
+            }
+            Opcode::CRC32H => {
+                write!(fmt, "crc32h")?;
+            }
+            Opcode::CRC32W => {
+                write!(fmt, "crc32w")?;
+            }
+            Opcode::CRC32X => {
+                write!(fmt, "crc32x")?;
+            }
+            Opcode::CRC32CB => {
+                write!(fmt, "crc32cb")?;
+            }
+            Opcode::CRC32CH => {
+                write!(fmt, "crc32ch")?;
+            }
+            Opcode::CRC32CW => {
+                write!(fmt, "crc32cw")?;
+            }
+            Opcode::CRC32CX => {
+                write!(fmt, "crc32cx")?;
+            }
         };
 
         if self.operands[0] != Operand::Nothing {
@@ -1028,6 +1078,20 @@ pub enum Opcode {
     UMADDL,
     UMSUBL,
     UMULH,
+    UDIV,
+    SDIV,
+    LSLV,
+    LSRV,
+    ASRV,
+    RORV,
+    CRC32B,
+    CRC32H,
+    CRC32W,
+    CRC32X,
+    CRC32CB,
+    CRC32CH,
+    CRC32CW,
+    CRC32CX,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -1520,7 +1584,94 @@ impl Decoder<ARMv8> for InstDecoder {
                             if ((word >> 30) & 1) == 0 {
                                 // X0X11010_110XXXXX_XXXXXXXX_XXXXXXXX
                                 // Data-processing (2 source)
-                                return Err(DecodeError::IncompleteDecoder);
+                                let sf = ((word >> 31) & 0x01) as u8;
+                                let S = ((word >> 29) & 0x01) as u8;
+
+                                let Rd = (word & 0x1f) as u16;
+                                let Rn = ((word >> 5) & 0x1f) as u16;
+                                let opcode = ((word >> 10) & 0x3f) as u8;
+                                let Rm = ((word >> 16) & 0x1f) as u16;
+
+                                if S == 1 {
+                                    // unallocated
+                                    return Err(DecodeError::InvalidOpcode);
+                                }
+
+                                let combined_idx = (opcode << 1) | sf;
+
+                                const OPCODES: &[Result<(Opcode, SizeCode), DecodeError>] = &[
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    // opcode = 0b00_0010
+                                    Ok((Opcode::UDIV, SizeCode::W)),
+                                    Ok((Opcode::UDIV, SizeCode::X)),
+                                    // opcode = 0b00_0011
+                                    Ok((Opcode::SDIV, SizeCode::W)),
+                                    Ok((Opcode::SDIV, SizeCode::X)),
+                                    // opcode = 0b00_01xx
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    // opcode = 0b00_1000
+                                    Ok((Opcode::LSLV, SizeCode::W)),
+                                    Ok((Opcode::LSLV, SizeCode::X)),
+                                    Ok((Opcode::LSRV, SizeCode::W)),
+                                    Ok((Opcode::LSRV, SizeCode::X)),
+                                    // opcode = 0b00_1010
+                                    Ok((Opcode::ASRV, SizeCode::W)),
+                                    Ok((Opcode::ASRV, SizeCode::X)),
+                                    // opcode = 0b00_1011
+                                    Ok((Opcode::RORV, SizeCode::W)),
+                                    Ok((Opcode::RORV, SizeCode::X)),
+                                    // opcode = 0b00_11xx
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    // opcode = 0b01_0000
+                                    Ok((Opcode::CRC32B, SizeCode::X)),
+                                    Err(DecodeError::InvalidOpcode),
+                                    // opcode = 0b01_0001
+                                    Ok((Opcode::CRC32H, SizeCode::X)),
+                                    Err(DecodeError::InvalidOpcode),
+                                    // opcode = 0b01_0010
+                                    Ok((Opcode::CRC32W, SizeCode::X)),
+                                    Err(DecodeError::InvalidOpcode),
+                                    // opcode = 0b01_0011
+                                    Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::CRC32X, SizeCode::X)),
+                                    // opcode = 0b01_0100
+                                    Ok((Opcode::CRC32CB, SizeCode::X)),
+                                    Err(DecodeError::InvalidOpcode),
+                                    // opcode = 0b01_0101
+                                    Ok((Opcode::CRC32CH, SizeCode::X)),
+                                    Err(DecodeError::InvalidOpcode),
+                                    // opcode = 0b01_0110
+                                    Ok((Opcode::CRC32CW, SizeCode::X)),
+                                    Err(DecodeError::InvalidOpcode),
+                                    // opcode = 0b01_0111
+                                    Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::CRC32CX, SizeCode::X)),
+                                ];
+                                let (opcode, size) = OPCODES[combined_idx as usize]?;
+                                inst.opcode = opcode;
+                                inst.operands = [
+                                    Operand::Register(size, Rd),
+                                    Operand::Register(size, Rn),
+                                    Operand::Register(size, Rm),
+                                    Operand::Nothing,
+                                ];
                             } else {
                                 // X1X11010_110XXXXX_XXXXXXXX_XXXXXXXX
                                 // Data-processing (1 source)
