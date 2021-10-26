@@ -468,6 +468,11 @@ impl Display for Instruction {
                 write!(fmt, "adrp")?;
             },
             Opcode::EXTR => {
+                if let (Operand::Register(_, Rn), Operand::Register(_, Rm)) = (self.operands[1], self.operands[2]) {
+                    if Rn == Rm {
+                        return write!(fmt, "ror {}, {}, {}", self.operands[0], self.operands[2], self.operands[3]);
+                    }
+                }
                 write!(fmt, "extr")?;
             },
             Opcode::LDP => {
@@ -2248,23 +2253,41 @@ impl Decoder<ARMv8> for InstDecoder {
 
                         let sf_op21 = word >> 29;
 
-                        if sf_op21 == 0b000 {
+                        let size = if sf_op21 == 0b000 {
                             if No0 != 0b00 || imms >= 0x10 {
                                 inst.opcode = Opcode::Invalid;
+                                return Err(DecodeError::InvalidOpcode);
                             } else {
                                 inst.opcode = Opcode::EXTR;
+                                SizeCode::W
                             }
                         } else if sf_op21 == 0b100 {
                             if No0 != 0b10 {
                                 inst.opcode = Opcode::Invalid;
+                                return Err(DecodeError::InvalidOpcode);
                             } else {
                                 inst.opcode = Opcode::EXTR;
+                                SizeCode::X
                             }
                         } else {
                             inst.opcode = Opcode::Invalid;
+                            return Err(DecodeError::InvalidOpcode);
+                        };
+
+                        if imms > 15 && size == SizeCode::W {
+                            return Err(DecodeError::InvalidOperand);
                         }
-                        // eprintln!("decode Rd: {}, Rn: {}, imms: {}, Rm: {}, No0: {}", Rd, Rn, imms, Rm, No0);
-                        return Err(DecodeError::IncompleteDecoder);
+
+                        let Rd = (word & 0x1f) as u16;
+                        let Rn = ((word >> 5) & 0x1f) as u16;
+                        let Rm = ((word >> 16) & 0x1f) as u16;
+
+                        inst.operands = [
+                            Operand::Register(size, Rd),
+                            Operand::Register(size, Rn),
+                            Operand::Register(size, Rm),
+                            Operand::Immediate(imms),
+                        ];
                     }
                     _ => { unreachable!("group is three bits") }
                 }
