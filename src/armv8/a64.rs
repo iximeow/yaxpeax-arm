@@ -214,7 +214,7 @@ pub enum SizeCode { X, W }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(u8)]
-pub enum SIMDSizeCode { S, D, Q }
+pub enum SIMDSizeCode { B, H, S, D, Q }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(C)]
@@ -914,6 +914,12 @@ impl Display for Instruction {
             Opcode::CRC32CX => {
                 write!(fmt, "crc32cx")?;
             }
+            Opcode::STNP => {
+                write!(fmt, "stnp")?;
+            }
+            Opcode::LDNP => {
+                write!(fmt, "ldnp")?;
+            }
         };
 
         if self.operands[0] != Operand::Nothing {
@@ -1111,6 +1117,8 @@ pub enum Opcode {
     CRC32CH,
     CRC32CW,
     CRC32CX,
+    STNP,
+    LDNP,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -1198,6 +1206,8 @@ impl Display for Operand {
             },
             Operand::SIMDRegister(size, reg) => {
                 match size {
+                    SIMDSizeCode::B => { write!(fmt, "b{}", reg) }
+                    SIMDSizeCode::H => { write!(fmt, "h{}", reg) }
                     SIMDSizeCode::S => { write!(fmt, "s{}", reg) }
                     SIMDSizeCode::D => { write!(fmt, "d{}", reg) }
                     SIMDSizeCode::Q => { write!(fmt, "q{}", reg) }
@@ -1824,7 +1834,6 @@ impl Decoder<ARMv8> for InstDecoder {
                             ];
 
                             let compound_idx = (op << 1) | sf;
-                            crate::armv8::a64::std::eprintln!("word: {:#08x}, compound_idx: {:x}", word, compound_idx);
                             let (opcode, source_size, dest_size) = DATA_PROCESSING_3_SOURCE.get(compound_idx as usize)
                                 .map(std::borrow::ToOwned::to_owned)
                                 .unwrap_or(Err(DecodeError::InvalidOpcode))?;
@@ -2565,16 +2574,64 @@ impl Decoder<ARMv8> for InstDecoder {
                     0b10000 => {
                         // load/store no-allocate pair (offset)
                         // V == 0
-                        // let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        // eprintln!("C3.3.7 V==0, opc_L: {}", opc_L);
-                        return Err(DecodeError::IncompleteDecoder);
+                        let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
+                        const ENCODINGS: &'static [Result<(Opcode, SizeCode), DecodeError>] = &[
+                            Ok((Opcode::STNP, SizeCode::W)),
+                            Ok((Opcode::LDNP, SizeCode::W)),
+                            Err(DecodeError::InvalidOpcode),
+                            Err(DecodeError::InvalidOpcode),
+                            Ok((Opcode::STNP, SizeCode::X)),
+                            Ok((Opcode::LDNP, SizeCode::X)),
+                            Err(DecodeError::InvalidOpcode),
+                            Err(DecodeError::InvalidOpcode),
+                        ];
+
+                        let (opcode, size) = ENCODINGS[opc_L as usize]?;
+                        inst.opcode = opcode;
+
+                        let Rt = (word & 0x1f) as u16;
+                        let Rn = ((word >> 5) & 0x1f) as u16;
+                        let Rt2 = ((word >> 10) & 0x1f) as u16;
+                        let imm7 = ((word >> 15) & 0x7f) as i16;
+                        let imm7 = (imm7 << 9) >> 9;
+
+                        inst.operands = [
+                            Operand::Register(size, Rt),
+                            Operand::Register(size, Rt2),
+                            Operand::RegPreIndex(Rn, imm7),
+                            Operand::Nothing,
+                        ];
                     },
                     0b10100 => {
                         // load/store no-allocate pair (offset)
                         // V == 1
-                        // let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        // eprintln!("C3.3.7 V==1, opc_L: {}", opc_L);
-                        return Err(DecodeError::IncompleteDecoder);
+                        let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
+                        const ENCODINGS: &'static [Result<(Opcode, SIMDSizeCode), DecodeError>] = &[
+                            Ok((Opcode::STNP, SIMDSizeCode::S)),
+                            Ok((Opcode::LDNP, SIMDSizeCode::S)),
+                            Ok((Opcode::STNP, SIMDSizeCode::D)),
+                            Ok((Opcode::LDNP, SIMDSizeCode::D)),
+                            Ok((Opcode::STNP, SIMDSizeCode::Q)),
+                            Ok((Opcode::LDNP, SIMDSizeCode::Q)),
+                            Err(DecodeError::InvalidOpcode),
+                            Err(DecodeError::InvalidOpcode),
+                        ];
+
+                        let (opcode, size) = ENCODINGS[opc_L as usize]?;
+                        inst.opcode = opcode;
+
+                        let Rt = (word & 0x1f) as u16;
+                        let Rn = ((word >> 5) & 0x1f) as u16;
+                        let Rt2 = ((word >> 10) & 0x1f) as u16;
+                        let imm7 = ((word >> 15) & 0x7f) as i16;
+                        let imm7 = (imm7 << 9) >> 9;
+
+                        inst.operands = [
+                            Operand::SIMDRegister(size, Rt),
+                            Operand::SIMDRegister(size, Rt2),
+                            Operand::RegPreIndex(Rn, imm7),
+                            Operand::Nothing,
+                        ];
                     },
                     0b10001 => {
                         // load/store register pair (post-indexed)
@@ -2757,7 +2814,8 @@ impl Decoder<ARMv8> for InstDecoder {
                     0b11001 => {
                         /*
                          * load/store register {unscaled immediate, immediate post-indexed,
-                         * unprivileged, immediate pre-indexd, register offset}
+                         * unprivileged, immediate pre-indexd, register offset, pac}
+                         * atomic memory operations
                          * V == 0
                          */
                         let Rt = (word & 0x1f) as u16;
@@ -2951,7 +3009,8 @@ impl Decoder<ARMv8> for InstDecoder {
                     0b11101 => {
                         /*
                          * load/store register {unscaled immediate, immediate post-indexed,
-                         * unprivileged, immediate pre-indexd, register offset}
+                         * unprivileged, immediate pre-indexed, register offset, pac}
+                         * also atomic memory operations
                          * V == 1
                          */
                         let Rt = (word & 0x1f) as u16;
@@ -3348,6 +3407,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         ];
                     }
                     0b01001 => { // conditional branch (imm)
+                        // probably actually an invalid opcode?
                         return Err(DecodeError::IncompleteDecoder);
                         inst.opcode = Opcode::Invalid;
                     }
