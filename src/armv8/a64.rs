@@ -1244,9 +1244,10 @@ pub enum Operand {
     ImmShift(u16, u8),
     RegShift(ShiftStyle, u8, SizeCode, u16),
     RegOffset(u16, i16),
-    RegRegOffset(u16, SizeCode, u16, ShiftStyle, u8),
-    RegPreIndex(u16, i16),
-    RegPostIndex(u16, i16),
+    RegRegOffset(u16, SizeCode, u16, SizeCode, ShiftStyle, u8),
+    RegPreIndex(u16, i32, bool),
+    RegPostIndex(u16, i32),
+    RegPostIndexReg(u16, u16),
 }
 
 impl Display for Operand {
@@ -1421,33 +1422,27 @@ impl Display for Operand {
                     write!(fmt, "[{}]", Operand::RegisterOrSP(SizeCode::X, *reg))
                 }
             }
-            Operand::RegRegOffset(reg, size_code, index_reg, extend, amount) => {
-                match size_code {
-                    SizeCode::X => {
-                        if *extend == ShiftStyle::LSL && *amount == 0 {
-                            write!(fmt, "[x{}, x{}]", reg, index_reg)
-                        } else {
-                            write!(fmt, "[x{}, x{}, {} {}]", reg, index_reg, extend, amount)
-                        }
-                    },
-                    SizeCode::W => {
-                        if *extend == ShiftStyle::LSL && *amount == 0 {
-                            write!(fmt, "[x{}, w{}]", reg, index_reg)
-                        } else {
-                            write!(fmt, "[x{}, w{}, {} {}]", reg, index_reg, extend, amount)
-                        }
-                    }
+            Operand::RegRegOffset(reg, size_code, index_reg, index_size, extend, amount) => {
+                if *extend == ShiftStyle::LSL && *amount == 0 {
+                    write!(fmt, "[{}, {}]", Operand::RegisterOrSP(*size_code, *reg), Operand::RegisterOrSP(*index_size, *index_reg))
+                } else {
+                    write!(fmt, "[{}, {}, {} {}]", Operand::RegisterOrSP(*size_code, *reg), Operand::RegisterOrSP(*index_size, *index_reg), extend, amount)
                 }
             }
-            Operand::RegPreIndex(reg, offset) => {
+            Operand::RegPreIndex(reg, offset, wback) => {
+                let wback = if *wback {
+                    "!"
+                } else {
+                    ""
+                };
                 if *offset != 0 {
                     if *offset < 0 {
-                        write!(fmt, "[{}, -{:#x}]!", Operand::RegisterOrSP(SizeCode::X, *reg), -*offset)
+                        write!(fmt, "[{}, -{:#x}]{}", Operand::RegisterOrSP(SizeCode::X, *reg), -*offset, wback)
                     } else {
-                        write!(fmt, "[{}, {:#x}]!", Operand::RegisterOrSP(SizeCode::X, *reg), offset)
+                        write!(fmt, "[{}, {:#x}]{}", Operand::RegisterOrSP(SizeCode::X, *reg), offset, wback)
                     }
                 } else {
-                    write!(fmt, "[{}]!", Operand::RegisterOrSP(SizeCode::X, *reg))
+                    write!(fmt, "[{}]{}", Operand::RegisterOrSP(SizeCode::X, *reg), wback)
                 }
             }
             Operand::RegPostIndex(reg, offset) => {
@@ -1460,6 +1455,9 @@ impl Display for Operand {
                 } else {
                     write!(fmt, "[{}]", Operand::RegisterOrSP(SizeCode::X, *reg))
                 }
+            }
+            Operand::RegPostIndexReg(reg, offset_reg) => {
+                write!(fmt, "[{}], x{}", Operand::RegisterOrSP(SizeCode::X, *reg), offset_reg)
             }
         }
     }
@@ -2702,7 +2700,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         inst.operands = [
                             Operand::Register(size, Rt),
                             Operand::Register(size, Rt2),
-                            Operand::RegPreIndex(Rn, imm7),
+                            Operand::RegPreIndex(Rn, imm7 as i32, true),
                             Operand::Nothing,
                         ];
                     },
@@ -2733,7 +2731,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         inst.operands = [
                             Operand::SIMDRegister(size, Rt),
                             Operand::SIMDRegister(size, Rt2),
-                            Operand::RegPreIndex(Rn, imm7),
+                            Operand::RegPreIndex(Rn, imm7 as i32, true),
                             Operand::Nothing,
                         ];
                     },
@@ -2785,7 +2783,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         inst.operands = [
                             Operand::Register(size, Rt),
                             Operand::Register(size, Rt2),
-                            Operand::RegPostIndex(Rn, imm7),
+                            Operand::RegPostIndex(Rn, imm7 as i32),
                             Operand::Nothing
                         ];
                     },
@@ -2794,7 +2792,55 @@ impl Decoder<ARMv8> for InstDecoder {
                         // V == 1
                         // let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
                         // eprintln!("C3.3.15 V==1, opc_L: {}", opc_L);
-                        return Err(DecodeError::IncompleteDecoder);
+                        let Rt = (word & 0x1f) as u16;
+                        let Rn = ((word >> 5) & 0x1f) as u16;
+                        let Rt2 = ((word >> 10) & 0x1f) as u16;
+                        let mut imm7 = ((((word >> 15) & 0x7f) as i16) << 9) >> 9;
+                        let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
+                        let size = match opc_L {
+                            0b000 => {
+                                inst.opcode = Opcode::STP;
+                                imm7 <<= 2;
+                                SIMDSizeCode::S
+                            },
+                            0b001 => {
+                                inst.opcode = Opcode::LDP;
+                                imm7 <<= 2;
+                                SIMDSizeCode::S
+                            },
+                            0b010 => {
+                                inst.opcode = Opcode::STP;
+                                imm7 <<= 3;
+                                SIMDSizeCode::D
+                            },
+                            0b011 => {
+                                inst.opcode = Opcode::LDP;
+                                imm7 <<= 3;
+                                SIMDSizeCode::D
+                            },
+                            0b100 => {
+                                inst.opcode = Opcode::STP;
+                                imm7 <<= 4;
+                                SIMDSizeCode::Q
+                            },
+                            0b101 => {
+                                inst.opcode = Opcode::LDP;
+                                imm7 <<= 4;
+                                SIMDSizeCode::Q
+                            },
+                            0b110 |
+                            0b111 => {
+                                inst.opcode = Opcode::Invalid;
+                                SIMDSizeCode::Q
+                            }
+                            _ => { unreachable!("opc and L are three bits"); }
+                        };
+                        inst.operands = [
+                            Operand::SIMDRegister(size, Rt),
+                            Operand::SIMDRegister(size, Rt2),
+                            Operand::RegPostIndex(Rn, imm7 as i32),
+                            Operand::Nothing
+                        ];
                     },
                     0b10010 => {
                         // load/store register pair (offset)
@@ -2853,7 +2899,55 @@ impl Decoder<ARMv8> for InstDecoder {
                         // V == 1
                         // let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
                         // eprintln!("C3.3.14 V==1, opc_L: {}", opc_L);
-                        return Err(DecodeError::IncompleteDecoder);
+                        let Rt = (word & 0x1f) as u16;
+                        let Rn = ((word >> 5) & 0x1f) as u16;
+                        let Rt2 = ((word >> 10) & 0x1f) as u16;
+                        let mut imm7 = ((((word >> 15) & 0x7f) as i16) << 9) >> 9;
+                        let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
+                        let size = match opc_L {
+                            0b000 => {
+                                inst.opcode = Opcode::STP;
+                                imm7 <<= 2;
+                                SIMDSizeCode::S
+                            },
+                            0b001 => {
+                                inst.opcode = Opcode::LDP;
+                                imm7 <<= 2;
+                                SIMDSizeCode::S
+                            },
+                            0b010 => {
+                                inst.opcode = Opcode::STP;
+                                imm7 <<= 3;
+                                SIMDSizeCode::D
+                            },
+                            0b011 => {
+                                inst.opcode = Opcode::LDP;
+                                imm7 <<= 3;
+                                SIMDSizeCode::D
+                            },
+                            0b100 => {
+                                inst.opcode = Opcode::STP;
+                                imm7 <<= 4;
+                                SIMDSizeCode::Q
+                            },
+                            0b101 => {
+                                inst.opcode = Opcode::LDP;
+                                imm7 <<= 4;
+                                SIMDSizeCode::Q
+                            },
+                            0b110 |
+                            0b111 => {
+                                inst.opcode = Opcode::Invalid;
+                                SIMDSizeCode::Q
+                            }
+                            _ => { unreachable!("opc and L are three bits"); }
+                        };
+                        inst.operands = [
+                            Operand::SIMDRegister(size, Rt),
+                            Operand::SIMDRegister(size, Rt2),
+                            Operand::RegPreIndex(Rn, imm7 as i32, false),
+                            Operand::Nothing
+                        ];
                     },
                     0b10011 => {
                         // load/store register pair (pre-indexed)
@@ -2903,7 +2997,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         inst.operands = [
                             Operand::Register(size, Rt),
                             Operand::Register(size, Rt2),
-                            Operand::RegPreIndex(Rn, imm7),
+                            Operand::RegPreIndex(Rn, imm7 as i32, true),
                             Operand::Nothing
                         ];
                     },
@@ -2912,7 +3006,55 @@ impl Decoder<ARMv8> for InstDecoder {
                         // V == 1
                         // let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
                         // eprintln!("C3.3.16 V==1, opc_L: {}", opc_L);
-                        return Err(DecodeError::IncompleteDecoder);
+                        let Rt = (word & 0x1f) as u16;
+                        let Rn = ((word >> 5) & 0x1f) as u16;
+                        let Rt2 = ((word >> 10) & 0x1f) as u16;
+                        let mut imm7 = ((((word >> 15) & 0x7f) as i16) << 9) >> 9;
+                        let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
+                        let size = match opc_L {
+                            0b000 => {
+                                inst.opcode = Opcode::STP;
+                                imm7 <<= 2;
+                                SIMDSizeCode::S
+                            },
+                            0b001 => {
+                                inst.opcode = Opcode::LDP;
+                                imm7 <<= 2;
+                                SIMDSizeCode::S
+                            },
+                            0b010 => {
+                                inst.opcode = Opcode::STP;
+                                imm7 <<= 3;
+                                SIMDSizeCode::D
+                            },
+                            0b011 => {
+                                inst.opcode = Opcode::LDP;
+                                imm7 <<= 3;
+                                SIMDSizeCode::D
+                            },
+                            0b100 => {
+                                inst.opcode = Opcode::STP;
+                                imm7 <<= 4;
+                                SIMDSizeCode::Q
+                            },
+                            0b101 => {
+                                inst.opcode = Opcode::LDP;
+                                imm7 <<= 4;
+                                SIMDSizeCode::Q
+                            },
+                            0b110 |
+                            0b111 => {
+                                inst.opcode = Opcode::Invalid;
+                                SIMDSizeCode::Q
+                            }
+                            _ => { unreachable!("opc and L are three bits"); }
+                        };
+                        inst.operands = [
+                            Operand::SIMDRegister(size, Rt),
+                            Operand::SIMDRegister(size, Rt2),
+                            Operand::RegPreIndex(Rn, imm7 as i32, true),
+                            Operand::Nothing
+                        ];
                     },
                     0b11000 |
                     0b11001 => {
@@ -2994,7 +3136,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
                                     inst.operands = [
                                         Operand::Register(size, Rt),
-                                        Operand::RegRegOffset(Rn, index_size, Rm, shift_style, S * shamt),
+                                        Operand::RegRegOffset(Rn, index_size, Rm, index_size, shift_style, S * shamt),
                                         Operand::Nothing,
                                         Operand::Nothing,
                                     ];
@@ -3063,7 +3205,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
                                     inst.operands = [
                                         Operand::Register(size, Rt),
-                                        Operand::RegPreIndex(Rn, imm9),
+                                        Operand::RegPreIndex(Rn, imm9 as i32, true),
                                         Operand::Nothing,
                                         Operand::Nothing,
                                     ];
@@ -3095,9 +3237,9 @@ impl Decoder<ARMv8> for InstDecoder {
                                     inst.operands = [
                                         Operand::Register(size, Rt),
                                         if category == 0b01 {
-                                            Operand::RegPostIndex(Rn, imm9)
+                                            Operand::RegPostIndex(Rn, imm9 as i32)
                                         } else {
-                                            Operand::RegPreIndex(Rn, imm9)
+                                            Operand::RegPreIndex(Rn, imm9 as i32, true)
                                         },
                                         Operand::Nothing,
                                         Operand::Nothing,
@@ -3159,7 +3301,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
                                     inst.operands = [
                                         Operand::SIMDRegister(size, Rt),
-                                        Operand::RegPreIndex(Rn, imm9),
+                                        Operand::RegPreIndex(Rn, imm9 as i32, false),
                                         Operand::Nothing,
                                         Operand::Nothing,
                                     ];
@@ -3208,9 +3350,9 @@ impl Decoder<ARMv8> for InstDecoder {
                                     inst.operands = [
                                         Operand::SIMDRegister(size, Rt),
                                         if pre_or_post == 1 {
-                                            Operand::RegPreIndex(Rn, imm9)
+                                            Operand::RegPreIndex(Rn, imm9 as i32, true)
                                         } else {
-                                            Operand::RegPostIndex(Rn, imm9)
+                                            Operand::RegPostIndex(Rn, imm9 as i32)
                                         },
                                         Operand::Nothing,
                                         Operand::Nothing,
@@ -3231,34 +3373,72 @@ impl Decoder<ARMv8> for InstDecoder {
                                 0b10 => {
                                     // Load/store register (register offset)
                                     // V == 1
-                                    const OPCODES: &[Result<Opcode, DecodeError>] = &[
-                                        Ok(Opcode::STR),
-                                        Ok(Opcode::LDR),
-                                        Ok(Opcode::STR),
-                                        Ok(Opcode::LDR),
-                                        Ok(Opcode::STR),
-                                        Ok(Opcode::LDR),
-                                        Ok(Opcode::STR),
-                                        Ok(Opcode::LDR),
+                                    const OPCODES: &[Result<(Opcode, SIMDSizeCode), DecodeError>] = &[
+                                        // 00 1 00
+                                        Ok((Opcode::STR, SIMDSizeCode::B)),
+                                        // 00 1 01
+                                        Ok((Opcode::LDR, SIMDSizeCode::B)),
+                                        // 00 1 10
+                                        Ok((Opcode::STR, SIMDSizeCode::Q)),
+                                        // 00 1 11
+                                        Ok((Opcode::LDR, SIMDSizeCode::Q)),
+                                        // 01 1 00
+                                        Ok((Opcode::STR, SIMDSizeCode::H)),
+                                        Ok((Opcode::LDR, SIMDSizeCode::H)),
                                         // 01 1 1x
                                         Err(DecodeError::InvalidOpcode),
                                         Err(DecodeError::InvalidOpcode),
                                         // 10 1 0x
-                                        Ok(Opcode::STR),
-                                        Ok(Opcode::LDR),
+                                        Ok((Opcode::STR, SIMDSizeCode::S)),
+                                        Ok((Opcode::LDR, SIMDSizeCode::S)),
                                         // 10 1 1x
                                         Err(DecodeError::InvalidOpcode),
                                         Err(DecodeError::InvalidOpcode),
                                         // 11 1 0x
-                                        Ok(Opcode::STR),
-                                        Ok(Opcode::LDR),
+                                        Ok((Opcode::STR, SIMDSizeCode::D)),
+                                        Ok((Opcode::LDR, SIMDSizeCode::D)),
                                         // 11 1 1x
                                         Err(DecodeError::InvalidOpcode),
                                         Err(DecodeError::InvalidOpcode),
                                     ];
 
-                                    inst.opcode = OPCODES[size_opc as usize]?;
-                                    return Err(DecodeError::IncompleteDecoder);
+                                    let size_bits = (word >> 30) & 0x03;
+                                    let option = (word >> 13) & 0x07;
+                                    let Rt = word & 0x1f;
+                                    let Rn = (word >> 5) & 0x1f;
+                                    let Rm = (word >> 16) & 0x1f;
+                                    let S = (word >> 12) & 0x01;
+
+                                    let (opcode, size) = OPCODES[size_opc as usize]?;
+                                    let shift_amount = match size {
+                                        SIMDSizeCode::B => 1,
+                                        SIMDSizeCode::H => 1,
+                                        SIMDSizeCode::S => 2,
+                                        SIMDSizeCode::D => 3,
+                                        SIMDSizeCode::Q => 4,
+                                    };
+
+                                    let extend = if size == SIMDSizeCode::B && option == 0b011 {
+                                        ShiftStyle::LSL
+                                    } else {
+                                        const SHIFT_TYPES: &[ShiftStyle] = &[
+                                            ShiftStyle::UXTB, ShiftStyle::UXTH, ShiftStyle::UXTW, ShiftStyle::LSL,
+                                            ShiftStyle::SXTB, ShiftStyle::SXTH, ShiftStyle::SXTW, ShiftStyle::SXTX,
+                                        ];
+                                        SHIFT_TYPES[option as usize]
+                                    };
+
+                                    inst.opcode = opcode;
+                                    inst.operands = [
+                                        Operand::SIMDRegister(size, Rt as u16),
+                                        Operand::RegRegOffset(Rn as u16, SizeCode::X, Rm as u16, if option & 0x01 == 0 {
+                                            SizeCode::W
+                                        } else {
+                                            SizeCode::X
+                                        }, extend, if S != 0 { shift_amount } else { 0 }),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
                                 }
                                 _ => {
                                     // Load/store register (pac)
@@ -3408,7 +3588,59 @@ impl Decoder<ARMv8> for InstDecoder {
                     0b11111 => {
                         // load/store register (unsigned immediate)
                         // V == 1
-                        return Err(DecodeError::IncompleteDecoder);
+                        let Rt = word & 0x1f;
+                        let Rn = (word >> 5) & 0x1f;
+                        let imm12 = (word >> 10) & 0xfff;
+                        let opc = (word >> 22) & 0x3;
+
+                        let size_opc = ((word >> 28) & 0x0c) | opc;
+
+                        const OPCODES: &[Result<(Opcode, SIMDSizeCode), DecodeError>] = &[
+                            // 00 1 00
+                            Ok((Opcode::STR, SIMDSizeCode::B)),
+                            // 00 1 01
+                            Ok((Opcode::LDR, SIMDSizeCode::B)),
+                            // 00 1 10
+                            Ok((Opcode::STR, SIMDSizeCode::Q)),
+                            // 00 1 11
+                            Ok((Opcode::LDR, SIMDSizeCode::Q)),
+                            // 01 1 00
+                            Ok((Opcode::STR, SIMDSizeCode::H)),
+                            Ok((Opcode::LDR, SIMDSizeCode::H)),
+                            // 01 1 1x
+                            Err(DecodeError::InvalidOpcode),
+                            Err(DecodeError::InvalidOpcode),
+                            // 10 1 0x
+                            Ok((Opcode::STR, SIMDSizeCode::S)),
+                            Ok((Opcode::LDR, SIMDSizeCode::S)),
+                            // 10 1 1x
+                            Err(DecodeError::InvalidOpcode),
+                            Err(DecodeError::InvalidOpcode),
+                            // 11 1 0x
+                            Ok((Opcode::STR, SIMDSizeCode::D)),
+                            Ok((Opcode::LDR, SIMDSizeCode::D)),
+                            // 11 1 1x
+                            Err(DecodeError::InvalidOpcode),
+                            Err(DecodeError::InvalidOpcode),
+                        ];
+
+                        let (opc, size) = OPCODES[size_opc as usize]?;
+
+                        let offset_scale = match size {
+                            SIMDSizeCode::B => 1,
+                            SIMDSizeCode::H => 2,
+                            SIMDSizeCode::S => 4,
+                            SIMDSizeCode::D => 8,
+                            SIMDSizeCode::Q => 16,
+                        };
+
+                        inst.opcode = opc;
+                        inst.operands = [
+                            Operand::SIMDRegister(size, Rt as u16),
+                            Operand::RegPreIndex(Rn as u16, (imm12 as u32 * offset_scale) as i32, false),
+                            Operand::Nothing,
+                            Operand::Nothing,
+                        ];
                     },
                     0b00100 => {
                         // AdvSIMD load/store multiple structures
