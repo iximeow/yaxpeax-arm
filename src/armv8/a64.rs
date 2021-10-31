@@ -1795,7 +1795,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Err(DecodeError::InvalidOpcode),
                                     Ok((Opcode::CRC32CX, SizeCode::X)),
                                 ];
-                                let (opcode, size) = OPCODES[combined_idx as usize]?;
+                                let (opcode, size) = OPCODES.get(combined_idx as usize).cloned().unwrap_or(Err(DecodeError::InvalidOpcode))?;
                                 inst.opcode = opcode;
                                 inst.operands = [
                                     Operand::Register(size, Rd),
@@ -3104,7 +3104,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Err(DecodeError::InvalidOpcode),
                                     ];
 
-                                    let (opcode, size, shamt) = OPCODES[size_opc as usize]?;
+                                    let (opcode, size, shamt) = OPCODES.get(size_opc as usize).cloned().unwrap_or(Err(DecodeError::InvalidOpcode))?;
                                     inst.opcode = opcode;
 
                                     let S = ((word >> 12) & 0x1) as u8;
@@ -3169,7 +3169,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Err(DecodeError::InvalidOpcode),
                                     ];
 
-                                    let (opcode, size) = OPCODES[size_opc as usize]?;
+                                    let (opcode, size) = OPCODES.get(size_opc as usize).cloned().unwrap_or(Err(DecodeError::InvalidOpcode))?;
                                     inst.opcode = opcode;
 
                                     inst.operands = [
@@ -3200,7 +3200,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Err(DecodeError::InvalidOpcode),
                                     ];
 
-                                    let (opcode, size) = OPCODES[size_opc as usize]?;
+                                    let (opcode, size) = OPCODES.get(size_opc as usize).cloned().unwrap_or(Err(DecodeError::InvalidOpcode))?;
                                     inst.opcode = opcode;
 
                                     inst.operands = [
@@ -3231,7 +3231,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Err(DecodeError::InvalidOpcode),
                                     ];
 
-                                    let (opcode, size) = OPCODES[size_opc as usize]?;
+                                    let (opcode, size) = OPCODES.get(size_opc as usize).cloned().unwrap_or(Err(DecodeError::InvalidOpcode))?;
                                     inst.opcode = opcode;
 
                                     inst.operands = [
@@ -3296,7 +3296,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Err(DecodeError::InvalidOpcode),
                                     ];
 
-                                    let (opcode, size) = OPCODES[size_opc as usize]?;
+                                    let (opcode, size) = OPCODES.get(size_opc as usize).cloned().unwrap_or(Err(DecodeError::InvalidOpcode))?;
                                     inst.opcode = opcode;
 
                                     inst.operands = [
@@ -3344,7 +3344,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Err(DecodeError::InvalidOpcode),
                                     ];
 
-                                    let (opcode, size) = OPCODES[size_opc as usize]?;
+                                    let (opcode, size) = OPCODES.get(size_opc as usize).cloned().unwrap_or(Err(DecodeError::InvalidOpcode))?;
                                     inst.opcode = opcode;
 
                                     inst.operands = [
@@ -3409,7 +3409,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     let Rm = (word >> 16) & 0x1f;
                                     let S = (word >> 12) & 0x01;
 
-                                    let (opcode, size) = OPCODES[size_opc as usize]?;
+                                    let (opcode, size) = OPCODES.get(size_opc as usize).cloned().unwrap_or(Err(DecodeError::InvalidOpcode))?;
                                     let shift_amount = match size {
                                         SIMDSizeCode::B => 1,
                                         SIMDSizeCode::H => 1,
@@ -3624,7 +3624,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             Err(DecodeError::InvalidOpcode),
                         ];
 
-                        let (opc, size) = OPCODES[size_opc as usize]?;
+                        let (opc, size) = OPCODES.get(size_opc as usize).cloned().unwrap_or(Err(DecodeError::InvalidOpcode))?;
 
                         let offset_scale = match size {
                             SIMDSizeCode::B => 1,
@@ -3724,7 +3724,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         // let mut replicate = false;
                         let opc_idx = (opcode_bits << 1) | R;
 
-                        let (opcode, group_size, item_size) = OPCODES[opc_idx as usize]?;
+                        let (opcode, group_size, item_size) = OPCODES.get(opc_idx as usize).cloned().unwrap_or(Err(DecodeError::InvalidOpcode))?;
 
                         let item_size = match item_size {
                             SIMDSizeCode::B => SIMDSizeCode::B,
@@ -3855,7 +3855,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         // let mut replicate = false;
                         let opc_idx = (opcode_bits << 1) | R;
 
-                        let (opcode, group_size, item_size) = OPCODES[opc_idx as usize]?;
+                        let (opcode, group_size, item_size) = OPCODES.get(opc_idx as usize).cloned().unwrap_or(Err(DecodeError::InvalidOpcode))?;
 
                         let item_size = match item_size {
                             SIMDSizeCode::B => SIMDSizeCode::B,
