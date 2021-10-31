@@ -216,6 +216,28 @@ pub enum SizeCode { X, W }
 #[repr(u8)]
 pub enum SIMDSizeCode { B, H, S, D, Q }
 
+impl SIMDSizeCode {
+    fn width(&self) -> u16 {
+        match self {
+            SIMDSizeCode::B => 1,
+            SIMDSizeCode::H => 2,
+            SIMDSizeCode::S => 4,
+            SIMDSizeCode::D => 8,
+            SIMDSizeCode::Q => 16,
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        match self {
+            SIMDSizeCode::B => "b",
+            SIMDSizeCode::H => "h",
+            SIMDSizeCode::S => "s",
+            SIMDSizeCode::D => "d",
+            SIMDSizeCode::Q => "q",
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(C)]
 pub struct Instruction {
@@ -920,6 +942,42 @@ impl Display for Instruction {
             Opcode::LDNP => {
                 write!(fmt, "ldnp")?;
             }
+            Opcode::ST1 => {
+                write!(fmt, "st1")?;
+            }
+            Opcode::ST2 => {
+                write!(fmt, "st2")?;
+            }
+            Opcode::ST3 => {
+                write!(fmt, "st3")?;
+            }
+            Opcode::ST4 => {
+                write!(fmt, "st4")?;
+            }
+            Opcode::LD1R => {
+                write!(fmt, "ld1r")?;
+            }
+            Opcode::LD2R => {
+                write!(fmt, "ld2r")?;
+            }
+            Opcode::LD3R => {
+                write!(fmt, "ld3r")?;
+            }
+            Opcode::LD4R => {
+                write!(fmt, "ld4r")?;
+            }
+            Opcode::LD1 => {
+                write!(fmt, "ld1")?;
+            }
+            Opcode::LD2 => {
+                write!(fmt, "ld2")?;
+            }
+            Opcode::LD3 => {
+                write!(fmt, "ld3")?;
+            }
+            Opcode::LD4 => {
+                write!(fmt, "ld4")?;
+            }
         };
 
         if self.operands[0] != Operand::Nothing {
@@ -1119,6 +1177,18 @@ pub enum Opcode {
     CRC32CX,
     STNP,
     LDNP,
+    ST1,
+    ST2,
+    ST3,
+    ST4,
+    LD1,
+    LD2,
+    LD3,
+    LD4,
+    LD1R,
+    LD2R,
+    LD3R,
+    LD4R,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -1162,6 +1232,8 @@ pub enum Operand {
     Nothing,
     Register(SizeCode, u16),
     SIMDRegister(SIMDSizeCode, u16),
+    SIMDRegisterGroup(SIMDSizeCode, u16, SIMDSizeCode, u8),
+    SIMDRegisterGroupLane(u16, SIMDSizeCode, u8, u8),
     RegisterOrSP(SizeCode, u16),
     ConditionCode(u8),
     Offset(i64),
@@ -1212,6 +1284,38 @@ impl Display for Operand {
                     SIMDSizeCode::D => { write!(fmt, "d{}", reg) }
                     SIMDSizeCode::Q => { write!(fmt, "q{}", reg) }
                 }
+            }
+            Operand::SIMDRegisterGroup(vector_width, reg, lane_width, group_size) => {
+                let num_items = vector_width.width() / lane_width.width();
+                let format_reg = |f: &mut fmt::Formatter, reg, elems, lane_size: SIMDSizeCode| {
+                    write!(f, "v{}.{}{}", reg, elems, lane_size.name())
+                };
+
+                fmt.write_str("{")?;
+                format_reg(fmt, *reg, num_items, *lane_width)?;
+                for i in 1..*group_size {
+                    fmt.write_str(", ")?;
+                    format_reg(fmt, (*reg + i as u16) % 32, num_items, *lane_width)?;
+                }
+                fmt.write_str("}")?;
+
+                Ok(())
+            }
+            Operand::SIMDRegisterGroupLane(reg, lane_width, group_size, lane) => {
+                let format_reg = |f: &mut fmt::Formatter, reg, lane_size: SIMDSizeCode| {
+                    write!(f, "v{}.{}", reg, lane_size.name())
+                };
+
+                fmt.write_str("{")?;
+                format_reg(fmt, *reg, *lane_width)?;
+                for i in 1..*group_size {
+                    fmt.write_str(", ")?;
+                    format_reg(fmt, (*reg + i as u16) % 32, *lane_width)?;
+                }
+                fmt.write_str("}")?;
+                write!(fmt, "[{}]", lane)?;
+
+                Ok(())
             }
             Operand::RegisterOrSP(size, reg) => {
                 if *reg == 31 {
@@ -3316,11 +3420,268 @@ impl Decoder<ARMv8> for InstDecoder {
                     },
                     0b00110 => {
                         // AdvSIMD load/store single structure
-                        return Err(DecodeError::IncompleteDecoder);
+                        let Rt = word & 0x1f;
+                        let Rn = (word >> 5) & 0x1f;
+                        let size = (word >> 10) & 0x03;
+                        let S = (word >> 12) & 1;
+                        let opcode_bits = (word >> 13) & 0x07;
+                        let Rm = (word >> 16) & 0x1f;
+                        if Rm != 0 {
+                            return Err(DecodeError::InvalidOperand);
+                        }
+                        let R = (word >> 21) & 0x01;
+                        let L = (word >> 22) & 0x01;
+                        let Q = (word >> 30) & 0x01;
+                        let datasize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
+
+                        // interleave R==0, R==1
+                        const OPCODES: &[Result<(Opcode, u8, SIMDSizeCode), DecodeError>] = &[
+                            Ok((Opcode::ST1, 1, SIMDSizeCode::B)),
+                            Ok((Opcode::ST2, 2, SIMDSizeCode::B)),
+                            Ok((Opcode::ST3, 3, SIMDSizeCode::B)),
+                            Ok((Opcode::ST4, 4, SIMDSizeCode::B)),
+                            // opcode = 0b010
+                            Ok((Opcode::ST1, 1, SIMDSizeCode::H)),
+                            Ok((Opcode::ST2, 2, SIMDSizeCode::H)),
+                            Ok((Opcode::ST3, 3, SIMDSizeCode::H)),
+                            Ok((Opcode::ST4, 4, SIMDSizeCode::H)),
+                            // opcode = 0b100
+                            Ok((Opcode::ST1, 1, SIMDSizeCode::S)), // note these can be 64-bit if `size` says so.
+                            Ok((Opcode::ST2, 2, SIMDSizeCode::S)),
+                            Ok((Opcode::ST3, 3, SIMDSizeCode::S)),
+                            Ok((Opcode::ST4, 4, SIMDSizeCode::S)),
+                            // opcode = 0b110
+                            // unallocated, is. if L==1, these are LD*R
+                        ];
+
+                        if opcode_bits > 0b101 {
+                            if S != 0 {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+
+                            if L == 0 {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+
+                            const OPCODES: [Opcode; 4] = [
+                                Opcode::LD1R,
+                                Opcode::LD2R,
+                                Opcode::LD3R,
+                                Opcode::LD4R,
+                            ];
+                            let opc_idx = (opcode_bits & 0x01) * 2 + S;
+                            inst.opcode = OPCODES[opc_idx as usize];
+                            const SIZES: [SIMDSizeCode; 4] = [
+                                SIMDSizeCode::B,
+                                SIMDSizeCode::H,
+                                SIMDSizeCode::S,
+                                SIMDSizeCode::D,
+                            ];
+                            inst.operands = [
+                                Operand::SIMDRegisterGroup(datasize, Rt as u16, SIZES[size as usize], opc_idx as u8),
+                                Operand::RegPostIndex(Rn as u16, 0),
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+
+                            return Ok(());
+                        }
+
+                        let mut scale = opcode_bits >> 1;
+                        // let selem = (((opcode_bits & 1) << 1) | R) + 1;
+                        // let mut replicate = false;
+                        let opc_idx = (opcode_bits << 1) | R;
+
+                        let (opcode, group_size, item_size) = OPCODES[opc_idx as usize]?;
+
+                        let item_size = match item_size {
+                            SIMDSizeCode::B => SIMDSizeCode::B,
+                            SIMDSizeCode::H => {
+                                if (size & 1) == 1 {
+                                    return Err(DecodeError::InvalidOperand);
+                                }
+                                SIMDSizeCode::H
+                            }
+                            SIMDSizeCode::S => {
+                                if size >= 0b10 {
+                                    return Err(DecodeError::InvalidOperand);
+                                }
+                                if size == 0b01 {
+                                    if S == 1 {
+                                        return Err(DecodeError::InvalidOperand);
+                                    }
+                                    scale = 3;
+                                    SIMDSizeCode::D
+                                } else {
+                                    SIMDSizeCode::S
+                                }
+                            }
+                            SIMDSizeCode::D => {
+                                if L == 0 || S == 1 {
+                                    return Err(DecodeError::InvalidOperand);
+                                }
+                                // replicate = true;
+                                SIMDSizeCode::D
+                            }
+                            other => other
+                        };
+
+                        let index = ((Q << 3) | (S << 2) | size) >> scale;
+
+                        inst.opcode = if L == 0 {
+                            opcode
+                        } else {
+                            if opcode == Opcode::ST1 {
+                                Opcode::LD1
+                            } else if opcode == Opcode::ST2 {
+                                Opcode::LD2
+                            } else if opcode == Opcode::ST3 {
+                                Opcode::LD3
+                            } else {
+                                Opcode::LD4
+                            }
+                        };
+                        inst.operands = [
+                            Operand::SIMDRegisterGroupLane(Rt as u16, item_size, group_size, index as u8),
+                            Operand::RegPostIndex(Rn as u16, 0),
+                            Operand::Nothing,
+                            Operand::Nothing,
+                        ];
                     },
                     0b00111 => {
                         // AdvSIMD load/store single structure (post-indexed)
-                        return Err(DecodeError::IncompleteDecoder);
+                        let Rt = word & 0x1f;
+                        let Rn = (word >> 5) & 0x1f;
+                        let size = (word >> 10) & 0x03;
+                        let S = (word >> 12) & 1;
+                        let opcode_bits = (word >> 13) & 0x07;
+                        let Rm = (word >> 16) & 0x1f;
+                        let R = (word >> 21) & 0x01;
+                        let L = (word >> 22) & 0x01;
+                        let Q = (word >> 30) & 0x01;
+                        let datasize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
+
+                        // interleave R==0, R==1
+                        const OPCODES: &[Result<(Opcode, u8, SIMDSizeCode), DecodeError>] = &[
+                            Ok((Opcode::ST1, 1, SIMDSizeCode::B)),
+                            Ok((Opcode::ST2, 2, SIMDSizeCode::B)),
+                            Ok((Opcode::ST3, 3, SIMDSizeCode::B)),
+                            Ok((Opcode::ST4, 4, SIMDSizeCode::B)),
+                            // opcode = 0b010
+                            Ok((Opcode::ST1, 1, SIMDSizeCode::H)),
+                            Ok((Opcode::ST2, 2, SIMDSizeCode::H)),
+                            Ok((Opcode::ST3, 3, SIMDSizeCode::H)),
+                            Ok((Opcode::ST4, 4, SIMDSizeCode::H)),
+                            // opcode = 0b100
+                            Ok((Opcode::ST1, 1, SIMDSizeCode::S)), // note these can be 64-bit if `size` says so.
+                            Ok((Opcode::ST2, 2, SIMDSizeCode::S)),
+                            Ok((Opcode::ST3, 3, SIMDSizeCode::S)),
+                            Ok((Opcode::ST4, 4, SIMDSizeCode::S)),
+                            // opcode = 0b110
+                            // unallocated, is. if L==1, these are LD*R
+                        ];
+
+                        if opcode_bits >= 0b110 {
+                            if S != 0 {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+
+                            if L == 0 {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+
+                            const OPCODES: [Opcode; 4] = [
+                                Opcode::LD1R,
+                                Opcode::LD2R,
+                                Opcode::LD3R,
+                                Opcode::LD4R,
+                            ];
+                            let opc_idx = (opcode_bits & 0x01) * 2 + S;
+                            inst.opcode = OPCODES[opc_idx as usize];
+                            const SIZES: [SIMDSizeCode; 4] = [
+                                SIMDSizeCode::B,
+                                SIMDSizeCode::H,
+                                SIMDSizeCode::S,
+                                SIMDSizeCode::D,
+                            ];
+                            inst.operands = [
+                                Operand::SIMDRegisterGroup(datasize, Rt as u16, SIZES[size as usize], opc_idx as u8),
+                                if Rm == 31 {
+                                    Operand::RegPostIndex(Rn as u16, ((opc_idx + 1) * (1 << size)) as i32)
+                                } else {
+                                    Operand::RegPostIndexReg(Rn as u16, Rm as u16)
+                                },
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+
+                            return Ok(());
+                        }
+
+                        let mut scale = opcode_bits >> 1;
+                        // let selem = (((opcode_bits & 1) << 1) | R) + 1;
+                        // let mut replicate = false;
+                        let opc_idx = (opcode_bits << 1) | R;
+
+                        let (opcode, group_size, item_size) = OPCODES[opc_idx as usize]?;
+
+                        let item_size = match item_size {
+                            SIMDSizeCode::B => SIMDSizeCode::B,
+                            SIMDSizeCode::H => {
+                                if (size & 1) == 1 {
+                                    return Err(DecodeError::InvalidOperand);
+                                }
+                                SIMDSizeCode::H
+                            }
+                            SIMDSizeCode::S => {
+                                if size >= 0b10 {
+                                    return Err(DecodeError::InvalidOperand);
+                                }
+                                if size == 0b01 {
+                                    if S == 1 {
+                                        return Err(DecodeError::InvalidOperand);
+                                    }
+                                    scale = 3;
+                                    SIMDSizeCode::D
+                                } else {
+                                    SIMDSizeCode::S
+                                }
+                            }
+                            SIMDSizeCode::D => {
+                                if L == 0 || S == 1 {
+                                    return Err(DecodeError::InvalidOperand);
+                                }
+                                // replicate = true;
+                                SIMDSizeCode::D
+                            }
+                            other => other
+                        };
+
+                        let index = ((Q << 3) | (S << 2) | size) >> scale;
+
+                        inst.opcode = if L == 0 {
+                            opcode
+                        } else {
+                            if opcode == Opcode::ST1 {
+                                Opcode::LD1
+                            } else if opcode == Opcode::ST2 {
+                                Opcode::LD2
+                            } else if opcode == Opcode::ST3 {
+                                Opcode::LD3
+                            } else {
+                                Opcode::LD4
+                            }
+                        };
+                        inst.operands = [
+                            Operand::SIMDRegisterGroupLane(Rt as u16, item_size, group_size, index as u8),
+                            if Rm == 31 {
+                                Operand::RegPostIndex(Rn as u16, (group_size as u16 * item_size.width()) as i32)
+                            } else {
+                                Operand::RegPostIndexReg(Rn as u16, Rm as u16)
+                            },
+                            Operand::Nothing,
+                            Operand::Nothing,
+                        ];
                     }
                     _ => {
                         inst.opcode = Opcode::Invalid;
