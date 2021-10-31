@@ -3644,11 +3644,124 @@ impl Decoder<ARMv8> for InstDecoder {
                     },
                     0b00100 => {
                         // AdvSIMD load/store multiple structures
-                        return Err(DecodeError::IncompleteDecoder);
+                        let Rt = word & 0x1f;
+                        let Rn = (word >> 5) & 0x1f;
+                        let size = (word >> 10) & 0x03;
+                        let opcode_bits = (word >> 12) & 0x0f;
+                        let Rm = (word >> 16) & 0x1f;
+                        if Rm != 0 {
+                            return Err(DecodeError::InvalidOperand);
+                        }
+                        let L = (word >> 22) & 0x01;
+                        let Q = (word >> 30) & 0x01;
+                        let datasize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
+
+                        const OPCODES: &[Result<(Opcode, u8), DecodeError>] = &[
+                            // opcode == 0b0000
+                            Ok((Opcode::ST4, 4)),
+                            Err(DecodeError::InvalidOpcode),
+                            Ok((Opcode::ST1, 4)),
+                            Err(DecodeError::InvalidOpcode),
+                            // opcode == 0b0100
+                            Ok((Opcode::ST3, 3)),
+                            Err(DecodeError::InvalidOpcode),
+                            Ok((Opcode::ST1, 3)),
+                            Ok((Opcode::ST1, 1)),
+                            // opcode == 0b1000
+                            Ok((Opcode::ST2, 2)),
+                            Err(DecodeError::InvalidOpcode),
+                            Ok((Opcode::ST1, 2)),
+                            Err(DecodeError::InvalidOpcode),
+                        ];
+
+                        let (opcode, num_regs) = OPCODES[opcode_bits as usize]?;
+
+                        inst.opcode = if L == 0 {
+                            opcode
+                        } else {
+                            if opcode == Opcode::ST1 {
+                                Opcode::LD1
+                            } else if opcode == Opcode::ST2 {
+                                Opcode::LD2
+                            } else if opcode == Opcode::ST3 {
+                                Opcode::LD3
+                            } else {
+                                Opcode::LD4
+                            }
+                        };
+                        const SIZES: [SIMDSizeCode; 4] = [
+                            SIMDSizeCode::B,
+                            SIMDSizeCode::H,
+                            SIMDSizeCode::S,
+                            SIMDSizeCode::D,
+                        ];
+                        inst.operands = [
+                            Operand::SIMDRegisterGroup(datasize, Rt as u16, SIZES[size as usize], num_regs),
+                            Operand::RegPostIndex(Rn as u16, 0),
+                            Operand::Nothing,
+                            Operand::Nothing,
+                        ];
                     },
                     0b00101 => {
                         // AdvSIMD load/store multiple structures (post-indexed)
-                        return Err(DecodeError::IncompleteDecoder);
+                        let Rt = word & 0x1f;
+                        let Rn = (word >> 5) & 0x1f;
+                        let size = (word >> 10) & 0x03;
+                        let opcode_bits = (word >> 12) & 0x0f;
+                        let Rm = (word >> 16) & 0x1f;
+                        let L = (word >> 22) & 0x01;
+                        let Q = (word >> 30) & 0x01;
+                        let datasize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
+
+                        const OPCODES: &[Result<(Opcode, u8), DecodeError>] = &[
+                            // opcode == 0b0000
+                            Ok((Opcode::ST4, 4)),
+                            Err(DecodeError::InvalidOpcode),
+                            Ok((Opcode::ST1, 4)),
+                            Err(DecodeError::InvalidOpcode),
+                            // opcode == 0b0100
+                            Ok((Opcode::ST3, 3)),
+                            Err(DecodeError::InvalidOpcode),
+                            Ok((Opcode::ST1, 3)),
+                            Ok((Opcode::ST1, 1)),
+                            // opcode == 0b1000
+                            Ok((Opcode::ST2, 2)),
+                            Err(DecodeError::InvalidOpcode),
+                            Ok((Opcode::ST1, 2)),
+                            Err(DecodeError::InvalidOpcode),
+                        ];
+
+                        let (opcode, num_regs) = OPCODES[opcode_bits as usize]?;
+
+                        inst.opcode = if L == 0 {
+                            opcode
+                        } else {
+                            if opcode == Opcode::ST1 {
+                                Opcode::LD1
+                            } else if opcode == Opcode::ST2 {
+                                Opcode::LD2
+                            } else if opcode == Opcode::ST3 {
+                                Opcode::LD3
+                            } else {
+                                Opcode::LD4
+                            }
+                        };
+                        const SIZES: [SIMDSizeCode; 4] = [
+                            SIMDSizeCode::B,
+                            SIMDSizeCode::H,
+                            SIMDSizeCode::S,
+                            SIMDSizeCode::D,
+                        ];
+                        inst.operands = [
+                            Operand::SIMDRegisterGroup(datasize, Rt as u16, SIZES[size as usize], num_regs),
+                            if Rm == 31 {
+                                Operand::RegPostIndex(Rn as u16, (datasize.width() * (num_regs as u16)) as i32)
+                            } else {
+                                Operand::RegPostIndexReg(Rn as u16, Rm as u16)
+                            },
+                            Operand::Nothing,
+                            Operand::Nothing,
+                        ];
                     },
                     0b00110 => {
                         // AdvSIMD load/store single structure
