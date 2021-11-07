@@ -39,6 +39,15 @@ mod docs {
         assert_eq!(HighestSetBit(8, 0x08), 3);
     }
 
+    #[test]
+    fn test_vfpexpandimm() {
+        assert_eq!(VFPExpandImm(0x34), 20.0f64);
+        assert_eq!(VFPExpandImm(0x70), 1f64);
+        assert_eq!(VFPExpandImm(0xdc), -0.4375f64);
+        assert_eq!(VFPExpandImm(0xe0), -0.5f64);
+        assert_eq!(VFPExpandImm(0xf0), -1f64);
+    }
+
     fn HighestSetBit(N: u8, bits: u64) -> u8 {
         let mut probe = 1u64 << (N - 1);
         let mut i = N - 1;
@@ -131,6 +140,20 @@ mod docs {
             super::ShiftStyle::ASR,
             super::ShiftStyle::ROR,
         ][op as usize]
+    }
+
+    pub fn VFPExpandImm(imm8: u8) -> f64 {
+        let sign = imm8 >> 7;
+        let exp = imm8 >> 4;
+        let exp = (exp as i16) << 13 >> 13;
+        let exp = exp ^ 0b1_00_0000_0000;
+        let frac = (imm8 << 4);
+
+        let bits = ((sign as u64) << 63) |
+            (((exp as u64) & 0b1_11_1111_1111) << 52) |
+            ((frac as u64) << 44);
+
+        f64::from_bits(bits)
     }
 }
 
@@ -978,6 +1001,87 @@ impl Display for Instruction {
             Opcode::LD4 => {
                 write!(fmt, "ld4")?;
             }
+            Opcode::FMADD => {
+                write!(fmt, "fmadd")?;
+            }
+            Opcode::FMSUB => {
+                write!(fmt, "fmsub")?;
+            }
+            Opcode::FNMADD => {
+                write!(fmt, "fnmadd")?;
+            }
+            Opcode::FNMSUB => {
+                write!(fmt, "fnmsub")?;
+            }
+            Opcode::SCVTF => {
+                write!(fmt, "scvtf")?;
+            }
+            Opcode::UCVTF => {
+                write!(fmt, "ucvtf")?;
+            }
+            Opcode::FCVTZS => {
+                write!(fmt, "fcvtzs")?;
+            }
+            Opcode::FCVTZU => {
+                write!(fmt, "fcvtzu")?;
+            }
+            Opcode::FMOV => {
+                write!(fmt, "fmov")?;
+            }
+            Opcode::FABS => {
+                write!(fmt, "fabs")?;
+            }
+            Opcode::FNEG => {
+                write!(fmt, "fneg")?;
+            }
+            Opcode::FSQRT => {
+                write!(fmt, "fsqrt")?;
+            }
+            Opcode::FRINTN => {
+                write!(fmt, "frintn")?;
+            }
+            Opcode::FRINTP => {
+                write!(fmt, "frintp")?;
+            }
+            Opcode::FRINTM => {
+                write!(fmt, "frintm")?;
+            }
+            Opcode::FRINTZ => {
+                write!(fmt, "frintz")?;
+            }
+            Opcode::FRINTA => {
+                write!(fmt, "frinta")?;
+            }
+            Opcode::FRINTX => {
+                write!(fmt, "frintx")?;
+            }
+            Opcode::FRINTI => {
+                write!(fmt, "frinti")?;
+            },
+            Opcode::FRINT32Z => {
+                write!(fmt, "frint32z")?;
+            }
+            Opcode::FRINT32X => {
+                write!(fmt, "frint32x")?;
+            }
+            Opcode::FRINT64Z => {
+                write!(fmt, "frint64z")?;
+            }
+            Opcode::FRINT64X => {
+                write!(fmt, "frint64x")?;
+            }
+            Opcode::BFCVT => {
+                write!(fmt, "bfcvt")?;
+            }
+            Opcode::FCVT => {
+                write!(fmt, "fcvt")?;
+            }
+            Opcode::FCMP => {
+                write!(fmt, "fcmp")?;
+            }
+            Opcode::FCMPE => {
+                write!(fmt, "fcmpe")?;
+            }
         };
 
         if self.operands[0] != Operand::Nothing {
@@ -1189,6 +1293,33 @@ pub enum Opcode {
     LD2R,
     LD3R,
     LD4R,
+    FMADD,
+    FMSUB,
+    FNMADD,
+    FNMSUB,
+    SCVTF,
+    UCVTF,
+    FCVTZS,
+    FCVTZU,
+    FMOV,
+    FABS,
+    FNEG,
+    FSQRT,
+    FRINTN,
+    FRINTP,
+    FRINTM,
+    FRINTZ,
+    FRINTA,
+    FRINTX,
+    FRINTI,
+    FRINT32Z,
+    FRINT32X,
+    FRINT64Z,
+    FRINT64X,
+    BFCVT,
+    FCVT,
+    FCMP,
+    FCMPE,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -1239,6 +1370,7 @@ pub enum Operand {
     Offset(i64),
     PCOffset(i64),
     Immediate(u32),
+    ImmediateDouble(f64),
     Imm64(u64),
     Imm16(u16),
     ImmShift(u16, u8),
@@ -1376,6 +1508,9 @@ impl Display for Operand {
             }
             Operand::Immediate(i) => {
                 write!(fmt, "{:#x}", i)
+            },
+            Operand::ImmediateDouble(d) => {
+                write!(fmt, "{:}", d)
             },
             Operand::Imm16(i) => {
                 write!(fmt, "{:#x}", *i)
@@ -1522,7 +1657,388 @@ impl Decoder<ARMv8> for InstDecoder {
         match section {
             Section::DataProcessingSimd |
             Section::DataProcessingSimd2 => {
-                return Err(DecodeError::IncompleteDecoder);
+                let op3 = (word >> 10) & 0b1_1111_1111;
+                let op2 = (word >> 19) & 0b1111;
+                let op1 = (word >> 23) & 0b11;
+                let op0 = (word >> 28) & 0b1111;
+                if (op0 & 0b0101) != 0b0001 {
+                    // op0 != x0x1
+                    return Err(DecodeError::IncompleteDecoder);
+                } else {
+                    // op0 == x0x1 (floating-point ops or unallocated - op1, op2, op3 are
+                    // self-contained from here)
+                    if op1 & 0b10 == 0b00 {
+                        if op2 & 0b0100 == 0b0000 {
+                            // op2 = x0xx
+                            // `Conversion between floating-point and fixed-point`
+                            let sf = (word >> 31);
+                            let S = (word >> 29) & 1;
+                            let ty = (word >> 22) & 0b11;
+                            let mode = (word >> 19) & 0b11;
+                            let opcode = (word >> 16) & 0b111;
+                            let scale = (word >> 10) & 0b11_1111;
+                            let Rn = (word >> 5) & 0b1_1111;
+                            let Rd = word & 0b1_1111;
+
+                            if S == 1 {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+
+                            if sf == 0 && scale >= 100000 {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+
+                            if opcode >= 0b100 {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+
+                            let rm_opcode = (mode << 2) | (opcode & 0b11);
+
+                            let size = if sf == 0 {
+                                SizeCode::W
+                            } else {
+                                SizeCode::X
+                            };
+
+                            let precision = if ty == 0b00 {
+                                SIMDSizeCode::S
+                            } else if ty == 0b01 {
+                                SIMDSizeCode::D
+                            } else if ty == 0b11 {
+                                SIMDSizeCode::H
+                            } else {
+                                return Err(DecodeError::InvalidOperand);
+                            };
+
+                            const OPCODES: &[Result<Opcode, DecodeError>] = &[
+                                // type = 00
+                                // mode = 00, opcode = 00
+                                Err(DecodeError::InvalidOpcode),
+                                Err(DecodeError::InvalidOpcode),
+                                // mode = 00, opcode = 10
+                                Ok(Opcode::SCVTF),
+                                Ok(Opcode::UCVTF),
+                                // mode = 11, opcode = 00
+                                Ok(Opcode::FCVTZS),
+                                Ok(Opcode::FCVTZU),
+                                // mode = 11, opcode = 10
+                                Err(DecodeError::InvalidOpcode),
+                                Err(DecodeError::InvalidOpcode),
+                            ];
+
+                            let opc_idx = ((mode & 0b10) << 1) | (opcode & 0b011);
+                            inst.opcode = OPCODES[opc_idx as usize]?;
+
+                            if mode == 0b00 {
+                                inst.operands = [
+                                    Operand::SIMDRegister(precision, Rd as u16),
+                                    Operand::Register(size, Rn as u16),
+                                    Operand::Immediate(std::cmp::min(64 - scale, if size == SizeCode::X { 64 } else { 32 })),
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                inst.operands = [
+                                    Operand::Register(size, Rd as u16),
+                                    Operand::SIMDRegister(precision, Rn as u16),
+                                    Operand::Immediate(std::cmp::min(64 - scale, if size == SizeCode::X { 64 } else { 32 })),
+                                    Operand::Nothing,
+                                ];
+                            }
+                            return Err(DecodeError::IncompleteDecoder);
+                        } else if (op3 & 0b000_111111) == 0b000_000000 {
+                            // op2 = x1xx, op3 = xxx000000
+                            let sf = (word >> 31);
+                            let S = (word >> 29) & 1;
+                            let ty = (word >> 22) & 0b11;
+                            let mode = (word >> 19) & 0b11;
+                            let opcode = (word >> 16) & 0b111;
+                            let Rn = (word >> 5) & 0b1_1111;
+                            let Rd = word & 0b1_1111;
+
+                            if S == 1 {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+
+                            if opcode >= 0b100 {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+
+                            let rm_opcode = (mode << 2) | (opcode & 0b11);
+
+                            let size = if sf == 0 {
+                                SizeCode::W
+                            } else {
+                                SizeCode::X
+                            };
+
+                            let precision = if ty == 0b00 {
+                                SIMDSizeCode::S
+                            } else if ty == 0b01 {
+                                SIMDSizeCode::D
+                            } else if ty == 0b11 {
+                                SIMDSizeCode::H
+                            } else {
+                                return Err(DecodeError::InvalidOperand);
+                            };
+
+                            const OPCODES: &[Result<Opcode, DecodeError>] = &[
+                                // type = 00
+                                // mode = 00, opcode = 00
+                                Err(DecodeError::InvalidOpcode),
+                                Err(DecodeError::InvalidOpcode),
+                                // mode = 00, opcode = 10
+                                Ok(Opcode::SCVTF),
+                                Ok(Opcode::UCVTF),
+                                // mode = 11, opcode = 00
+                                Ok(Opcode::FCVTZS),
+                                Ok(Opcode::FCVTZU),
+                                // mode = 11, opcode = 10
+                                Err(DecodeError::InvalidOpcode),
+                                Err(DecodeError::InvalidOpcode),
+                            ];
+
+                            let opc_idx = ((mode & 0b10) << 1) | (opcode & 0b011);
+                            inst.opcode = OPCODES[opc_idx as usize]?;
+
+                            if mode == 0b00 {
+                                inst.operands = [
+                                    Operand::SIMDRegister(precision, Rd as u16),
+                                    Operand::Register(size, Rn as u16),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                inst.operands = [
+                                    Operand::Register(size, Rd as u16),
+                                    Operand::SIMDRegister(precision, Rn as u16),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            }
+                        } else {
+                            if (word >> 29) > 0 {
+                                // if either `M` or `S` are set..
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+                            match op3.trailing_zeros() {
+                                0 => {
+                                    // op3 = xxxxxxxx1
+                                    // `Floating-point conditional compare` or
+                                    // `Floating-point conditional select`
+                                }
+                                1 => {
+                                    // op3 = xxxxxxx10
+                                    // `Floating-point data-processing (2 source)`
+                                }
+                                2 => {
+                                    // op3 = xxxxxx100
+                                    // `Floating-point immediate`
+                                    let ty = (word >> 22) & 0b11;
+                                    let imm8 = (word >> 13) & 0b1111_1111;
+                                    let imm5 = (word >> 5) & 0b1_1111;
+                                    let Rd = word & 0b1_1111;
+
+                                    if imm5 != 0 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+
+                                    let precision = if ty == 0b00 {
+                                        SIMDSizeCode::S
+                                    } else if ty == 0b01 {
+                                        SIMDSizeCode::D
+                                    } else if ty == 0b11 {
+                                        SIMDSizeCode::H
+                                    } else {
+                                        return Err(DecodeError::InvalidOperand);
+                                    };
+
+                                    inst.opcode = Opcode::FMOV;
+                                    inst.operands = [
+                                        Operand::SIMDRegister(precision, Rd as u16),
+                                        Operand::ImmediateDouble(docs::VFPExpandImm(imm8 as u8)),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                3 => {
+                                    // op3 = xxxxx1000
+                                    // `Floating-point compare`
+                                    let ty = (word >> 22) & 0b11;
+                                    let Rm = (word >> 16) & 0b1_1111;
+                                    let opcode = (word >> 14) & 0b11;
+                                    let Rn = (word >> 5) & 0b1_1111;
+                                    let opcode2 = word & 0b1_1111;
+
+                                    if (opcode & 0b00_111) != 00_000 {
+                                        // any of the low three bits in opcode being set means
+                                        // unallocated
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+
+                                    let precision = if ty == 0b00 {
+                                        SIMDSizeCode::S
+                                    } else if ty == 0b01 {
+                                        SIMDSizeCode::D
+                                    } else if ty == 0b11 {
+                                        SIMDSizeCode::H
+                                    } else {
+                                        return Err(DecodeError::InvalidOperand);
+                                    };
+
+                                    inst.opcode = if opcode & 0b1_0000 != 0 {
+                                        Opcode::FCMPE
+                                    } else {
+                                        Opcode::FCMP
+                                    };
+                                    inst.operands = [
+                                        Operand::SIMDRegister(precision, Rn as u16),
+                                        if Rm == 0 {
+                                            Operand::Immediate(0)
+                                        } else {
+                                            Operand::SIMDRegister(precision, Rm as u16)
+                                        },
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                4 => {
+                                    // op3 = xxxx10000
+                                    // `Floating-point data-processing (1 source)`
+                                    let ty = (word >> 22) & 0b11;
+                                    let opcode = (word >> 15) & 0b111_111;
+                                    let Rn = (word >> 5) & 0b1_1111;
+                                    let Rd = word & 0b1_1111;
+
+                                    if opcode >= 0b100_000 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+
+                                    let precision = if ty == 0b00 {
+                                        SIMDSizeCode::S
+                                    } else if ty == 0b01 {
+                                        SIMDSizeCode::D
+                                    } else if ty == 0b11 {
+                                        SIMDSizeCode::H
+                                    } else {
+                                        return Err(DecodeError::InvalidOperand);
+                                    };
+
+                                    const OPCODES: &[Result<Opcode, DecodeError>] = &[
+                                        Ok(Opcode::FMOV), Ok(Opcode::FABS), Ok(Opcode::FNEG), Ok(Opcode::FSQRT),
+                                        Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                        Ok(Opcode::FRINTN), Ok(Opcode::FRINTP), Ok(Opcode::FRINTM), Ok(Opcode::FRINTZ),
+                                        Ok(Opcode::FRINTA), Err(DecodeError::InvalidOpcode), Ok(Opcode::FRINTX), Ok(Opcode::FRINTI),
+                                        Ok(Opcode::FRINT32Z), Ok(Opcode::FRINT32X), Ok(Opcode::FRINT64Z), Ok(Opcode::FRINT64X),
+                                    ];
+
+                                    if opcode >= 0b000100 && opcode < 0b001000 {
+                                        // precision-specific opcodes to convert between floating
+                                        // point precisions
+                                        let dest_precision_bits = opcode & 0b11;
+                                        let dest_precision = if dest_precision_bits == 0b00 {
+                                            SIMDSizeCode::S
+                                        } else if dest_precision_bits == 0b01 {
+                                            SIMDSizeCode::D
+                                        } else if dest_precision_bits == 0b10 {
+                                            return if precision == SIMDSizeCode::H {
+                                                inst.opcode = Opcode::BFCVT;
+                                                inst.operands = [
+                                                    Operand::SIMDRegister(SIMDSizeCode::H, Rd as u16),
+                                                    Operand::SIMDRegister(SIMDSizeCode::S, Rn as u16),
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                ];
+                                                Ok(())
+                                            } else {
+                                                Err(DecodeError::InvalidOpcode)
+                                            };
+                                        } else {
+                                            SIMDSizeCode::H
+                                        };
+
+                                        if precision == dest_precision {
+                                            return Err(DecodeError::InvalidOpcode);
+                                        }
+
+                                        inst.opcode = Opcode::FCVT;
+                                        inst.operands = [
+                                            Operand::SIMDRegister(dest_precision, Rd as u16),
+                                            Operand::SIMDRegister(precision, Rn as u16),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    } else {
+                                        let opc = OPCODES.get(opcode as usize).cloned().unwrap_or(Err(DecodeError::InvalidOpcode))?;
+                                        inst.opcode = opc;
+                                        inst.operands = [
+                                            Operand::SIMDRegister(precision, Rd as u16),
+                                            Operand::SIMDRegister(precision, Rn as u16),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                }
+                                5 => {
+                                    // op3 = xxx100000
+                                    // unallocated
+                                    return Err(DecodeError::InvalidOpcode);
+                                }
+                                _ => {
+                                    // 6 or more zeroes
+                                    // op3 = xxx000000
+                                    // `Conversion between floating-point and integer`
+                                    // handled above, so this arm is actually unreachable.
+                                }
+                            }
+                        }
+                    } else {
+                        // op1 = 1x
+                        // `Floating-point data-processing (3 source)`
+
+                        if (word >> 29) > 0 {
+                            // if either `M` or `S` are set..
+                            return Err(DecodeError::InvalidOpcode);
+                        }
+
+                        let type_o1_o0 = ((word >> 20) & 0b1110) | ((word >> 15) & 0b0001);
+                        const OPCODES: [Result<(Opcode, SIMDSizeCode), DecodeError>; 16] = [
+                            Ok((Opcode::FMADD, SIMDSizeCode::S)),
+                            Ok((Opcode::FMSUB, SIMDSizeCode::S)),
+                            Ok((Opcode::FNMADD, SIMDSizeCode::S)),
+                            Ok((Opcode::FNMSUB, SIMDSizeCode::S)),
+
+                            Ok((Opcode::FMADD, SIMDSizeCode::D)),
+                            Ok((Opcode::FMSUB, SIMDSizeCode::D)),
+                            Ok((Opcode::FNMADD, SIMDSizeCode::D)),
+                            Ok((Opcode::FNMSUB, SIMDSizeCode::D)),
+
+                            Err(DecodeError::InvalidOpcode),
+                            Err(DecodeError::InvalidOpcode),
+                            Err(DecodeError::InvalidOpcode),
+                            Err(DecodeError::InvalidOpcode),
+
+                            Ok((Opcode::FMADD, SIMDSizeCode::H)), // TODO: half-precision added in ARMv8.2
+                            Ok((Opcode::FMSUB, SIMDSizeCode::H)),
+                            Ok((Opcode::FNMADD, SIMDSizeCode::H)),
+                            Ok((Opcode::FNMSUB, SIMDSizeCode::H)),
+                        ];
+
+                        let (opcode, precision) = OPCODES[type_o1_o0 as usize]?;
+
+                        let Rd = (word & 0x1f) as u16;
+                        let Rn = ((word >> 5) & 0x1f) as u16;
+                        let Ra = ((word >> 10) & 0x1f) as u16;
+                        let Rm = ((word >> 16) & 0x1f) as u16;
+
+                        inst.opcode = opcode;
+                        inst.operands = [
+                            Operand::SIMDRegister(precision, Rd),
+                            Operand::SIMDRegister(precision, Rn),
+                            Operand::SIMDRegister(precision, Rm),
+                            Operand::SIMDRegister(precision, Ra),
+                        ];
+                    }
+                }
             }
             Section::Unallocated => {
                 inst.opcode = Opcode::Invalid;
