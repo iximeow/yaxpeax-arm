@@ -147,7 +147,7 @@ mod docs {
         let exp = imm8 >> 4;
         let exp = (exp as i16) << 13 >> 13;
         let exp = exp ^ 0b1_00_0000_0000;
-        let frac = (imm8 << 4);
+        let frac = imm8 << 4;
 
         let bits = ((sign as u64) << 63) |
             (((exp as u64) & 0b1_11_1111_1111) << 52) |
@@ -5786,7 +5786,7 @@ impl Decoder<ARMv8> for InstDecoder {
                     0b01001 => { // conditional branch (imm)
                         // probably actually an invalid opcode?
                         return Err(DecodeError::IncompleteDecoder);
-                        inst.opcode = Opcode::Invalid;
+                        // inst.opcode = Opcode::Invalid;
                     }
                     /* 0b01010 to 0b01111 seem all invalid? */
                     0b10000 |
