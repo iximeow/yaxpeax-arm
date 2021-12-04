@@ -1292,6 +1292,252 @@ impl Display for Instruction {
             Opcode::SSHLL => {
                 write!(fmt, "sshll");
             }
+            Opcode::MOVI => {
+                write!(fmt, "movi");
+            }
+            Opcode::MVNI => {
+                write!(fmt, "mvni");
+            }
+            Opcode::SHADD => {
+                write!(fmt, "shadd");
+            }
+            Opcode::SQADD => {
+                write!(fmt, "sqadd");
+            }
+            Opcode::SRHADD => {
+                write!(fmt, "srhadd");
+            }
+            Opcode::SHSUB => {
+                write!(fmt, "shsub");
+            }
+            Opcode::SQSUB => {
+                write!(fmt, "sqsub");
+            }
+            Opcode::CMGT => {
+                write!(fmt, "cmgt");
+            }
+            Opcode::CMGE => {
+                write!(fmt, "cmge");
+            }
+            Opcode::SSHL => {
+                write!(fmt, "sshl");
+            }
+            Opcode::SRSHL => {
+                write!(fmt, "srshl");
+            }
+            Opcode::SQRSHL => {
+                write!(fmt, "sqrshl");
+            }
+            Opcode::SMAX => {
+                write!(fmt, "smax");
+            }
+            Opcode::SMIN => {
+                write!(fmt, "smin");
+            }
+            Opcode::SABD => {
+                write!(fmt, "sabd");
+            }
+            Opcode::SABA => {
+                write!(fmt, "saba");
+            }
+            Opcode::CMTST => {
+                write!(fmt, "cmtst");
+            }
+            Opcode::SMAXP => {
+                write!(fmt, "smaxp");
+            }
+            Opcode::SMINP => {
+                write!(fmt, "sminp");
+            }
+            Opcode::ADDP => {
+                write!(fmt, "addp");
+            }
+            Opcode::UHADD => {
+                write!(fmt, "uhadd");
+            }
+            Opcode::UQADD => {
+                write!(fmt, "uqadd");
+            }
+            Opcode::URHADD => {
+                write!(fmt, "urhadd");
+            }
+            Opcode::UHSUB => {
+                write!(fmt, "uhsub");
+            }
+            Opcode::UQSUB => {
+                write!(fmt, "uqsub");
+            }
+            Opcode::CMHI => {
+                write!(fmt, "cmhi");
+            }
+            Opcode::CMHS => {
+                write!(fmt, "cmhs");
+            }
+            Opcode::USHL => {
+                write!(fmt, "ushl");
+            }
+            Opcode::URSHL => {
+                write!(fmt, "urshl");
+            }
+            Opcode::UQRSHL => {
+                write!(fmt, "uqrshl");
+            }
+            Opcode::UMAX => {
+                write!(fmt, "umax");
+            }
+            Opcode::UMIN => {
+                write!(fmt, "umin");
+            }
+            Opcode::UABD => {
+                write!(fmt, "uabd");
+            }
+            Opcode::UABA => {
+                write!(fmt, "uaba");
+            }
+            Opcode::CMEQ => {
+                write!(fmt, "cmeq");
+            }
+            Opcode::PMUL => {
+                write!(fmt, "pmul");
+            }
+            Opcode::UMAXP => {
+                write!(fmt, "umaxp");
+            }
+            Opcode::UMINP => {
+                write!(fmt, "uminp");
+            }
+            Opcode::FMLA => {
+                write!(fmt, "fmla");
+            }
+            Opcode::FCMEQ => {
+                write!(fmt, "fcmeq");
+            }
+            Opcode::FRECPS => {
+                write!(fmt, "frecps");
+            }
+            Opcode::BSL => {
+                write!(fmt, "bsl");
+            }
+            Opcode::BIT => {
+                write!(fmt, "bit");
+            }
+            Opcode::BIF => {
+                write!(fmt, "bif");
+            }
+            Opcode::FMAXNMP => {
+                write!(fmt, "fmaxnmp");
+            }
+            Opcode::FMINMNP => {
+                write!(fmt, "fminmnp");
+            }
+            Opcode::FADDP => {
+                write!(fmt, "faddp");
+            }
+            Opcode::FCMGE => {
+                write!(fmt, "fcmge");
+            }
+            Opcode::FACGE => {
+                write!(fmt, "facge");
+            }
+            Opcode::FMAXP => {
+                write!(fmt, "fmaxp");
+            }
+            Opcode::SADDL => {
+                write!(fmt, "saddl");
+            }
+            Opcode::SADDL2 => {
+                write!(fmt, "saddl2");
+            }
+            Opcode::SADDW => {
+                write!(fmt, "saddw");
+            }
+            Opcode::SADDW2 => {
+                write!(fmt, "saddw2");
+            }
+            Opcode::SSUBL => {
+                write!(fmt, "ssubl");
+            }
+            Opcode::SSUBL2 => {
+                write!(fmt, "ssubl2");
+            }
+            Opcode::SSUBW => {
+                write!(fmt, "ssubw");
+            }
+            Opcode::SSUBW2 => {
+                write!(fmt, "ssubw2");
+            }
+            Opcode::ADDHN => {
+                write!(fmt, "addhn");
+            }
+            Opcode::ADDHN2 => {
+                write!(fmt, "addhn2");
+            }
+            Opcode::SABAL => {
+                write!(fmt, "sabal");
+            }
+            Opcode::SABAL2 => {
+                write!(fmt, "sabal2");
+            }
+            Opcode::SUBHN => {
+                write!(fmt, "subhn");
+            }
+            Opcode::SUBHN2 => {
+                write!(fmt, "subhn2");
+            }
+            Opcode::SABDL => {
+                write!(fmt, "sabdl");
+            }
+            Opcode::SABDL2 => {
+                write!(fmt, "sabdl2");
+            }
+            Opcode::SQDMUL => {
+                write!(fmt, "sqdmul");
+            }
+            Opcode::SQDMUL2 => {
+                write!(fmt, "sqdmul2");
+            }
+            Opcode::PMULL => {
+                write!(fmt, "pmull");
+            }
+            Opcode::PMULL2 => {
+                write!(fmt, "pmull2");
+            }
+            Opcode::UADDL => {
+                write!(fmt, "uaddl");
+            }
+            Opcode::UADDL2 => {
+                write!(fmt, "uaddl2");
+            }
+            Opcode::UADDW => {
+                write!(fmt, "uaddw");
+            }
+            Opcode::UADDW2 => {
+                write!(fmt, "uaddw2");
+            }
+            Opcode::USUBL => {
+                write!(fmt, "usubl");
+            }
+            Opcode::USUBL2 => {
+                write!(fmt, "usubl2");
+            }
+            Opcode::USUBW => {
+                write!(fmt, "usubw");
+            }
+            Opcode::USUBW2 => {
+                write!(fmt, "usubw2");
+            }
+            Opcode::RADDHN => {
+                write!(fmt, "raddhn");
+            }
+            Opcode::RADDHN2 => {
+                write!(fmt, "raddhn2");
+            }
+            Opcode::UABAL => {
+                write!(fmt, "uabal");
+            }
+            Opcode::UABAL2 => {
+                write!(fmt, "uabal2");
+            }
         };
 
         if self.operands[0] != Operand::Nothing {
@@ -1342,7 +1588,7 @@ impl Default for Instruction {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-#[repr(u8)]
+#[repr(u16)]
 pub enum Opcode {
     Invalid,
     MOVN,
@@ -1599,6 +1845,88 @@ pub enum Opcode {
     UQSHRN,
     UQRSHRN,
     USHLL,
+    MOVI,
+    MVNI,
+    SHADD,
+    SQADD,
+    SRHADD,
+    SHSUB,
+    SQSUB,
+    CMGT,
+    CMGE,
+    SSHL,
+    SRSHL,
+    SQRSHL,
+    SMAX,
+    SMIN,
+    SABD,
+    SABA,
+    CMTST,
+    SMAXP,
+    SMINP,
+    ADDP,
+    UHADD,
+    UQADD,
+    URHADD,
+    UHSUB,
+    UQSUB,
+    CMHI,
+    CMHS,
+    USHL,
+    URSHL,
+    UQRSHL,
+    UMAX,
+    UMIN,
+    UABD,
+    UABA,
+    CMEQ,
+    PMUL,
+    UMAXP,
+    UMINP,
+    FMLA,
+    FCMEQ,
+    FRECPS,
+    BSL,
+    BIT,
+    BIF,
+    FMAXNMP,
+    FMINMNP,
+    FADDP,
+    FCMGE,
+    FACGE,
+    FMAXP,
+    SADDL,
+    SADDL2,
+    SADDW,
+    SADDW2,
+    SSUBL,
+    SSUBL2,
+    SSUBW,
+    SSUBW2,
+    ADDHN,
+    ADDHN2,
+    SABAL,
+    SABAL2,
+    SUBHN,
+    SUBHN2,
+    SABDL,
+    SABDL2,
+    SQDMUL,
+    SQDMUL2,
+    PMULL,
+    PMULL2,
+    UADDL,
+    UADDL2,
+    UADDW,
+    UADDW2,
+    USUBL,
+    USUBL2,
+    USUBW,
+    USUBW2,
+    RADDHN,
+    RADDHN2,
+    UABAL,
+    UABAL2,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -2041,6 +2369,69 @@ impl Decoder<ARMv8> for InstDecoder {
                                 ];
                             } else {
                                 // `modified`
+                                let Rd = word & 0b1_1111;
+                                let defgh = (word >> 5) & 0b1_1111;
+                                let o2 = (word >> 11) & 0b1;
+                                let cmode = (word >> 12) & 0b1111;
+                                let abc = (word >> 16) & 0b111;
+
+                                let Q = (word >> 30) & 1;
+                                let op = (word >> 29) & 1;
+
+                                let datasize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
+
+                                const OPCODES: &[Result<(Opcode, SIMDSizeCode), DecodeError>] = &[
+                                    Ok((Opcode::MOVI, SIMDSizeCode::S)), Ok((Opcode::ORR, SIMDSizeCode::S)),
+                                    Ok((Opcode::MOVI, SIMDSizeCode::S)), Ok((Opcode::ORR, SIMDSizeCode::S)),
+                                    Ok((Opcode::MOVI, SIMDSizeCode::S)), Ok((Opcode::ORR, SIMDSizeCode::S)),
+                                    Ok((Opcode::MOVI, SIMDSizeCode::S)), Ok((Opcode::ORR, SIMDSizeCode::S)),
+                                    Ok((Opcode::MOVI, SIMDSizeCode::H)), Ok((Opcode::ORR, SIMDSizeCode::H)),
+                                    Ok((Opcode::MOVI, SIMDSizeCode::H)), Ok((Opcode::ORR, SIMDSizeCode::H)),
+                                    Ok((Opcode::MOVI, SIMDSizeCode::S)), Ok((Opcode::MOVI, SIMDSizeCode::S)),
+                                    Ok((Opcode::MOVI, SIMDSizeCode::B)), Ok((Opcode::FMOV, SIMDSizeCode::B)),
+                                    // op == 1
+                                    Ok((Opcode::MVNI, SIMDSizeCode::S)), Ok((Opcode::BIC, SIMDSizeCode::S)),
+                                    Ok((Opcode::MVNI, SIMDSizeCode::S)), Ok((Opcode::BIC, SIMDSizeCode::S)),
+                                    Ok((Opcode::MVNI, SIMDSizeCode::S)), Ok((Opcode::BIC, SIMDSizeCode::S)),
+                                    Ok((Opcode::MVNI, SIMDSizeCode::S)), Ok((Opcode::BIC, SIMDSizeCode::S)),
+                                    Ok((Opcode::MVNI, SIMDSizeCode::H)), Ok((Opcode::BIC, SIMDSizeCode::H)),
+                                    Ok((Opcode::MVNI, SIMDSizeCode::H)), Ok((Opcode::BIC, SIMDSizeCode::H)),
+                                    Ok((Opcode::MVNI, SIMDSizeCode::S)), Ok((Opcode::BIC, SIMDSizeCode::S)),
+                                    Ok((Opcode::MVNI, SIMDSizeCode::B)), Ok((Opcode::FMOV, SIMDSizeCode::B)),
+                                ];
+
+                                if cmode == 0b1111 && op == 1 && Q == 0 {
+                                    return Err(DecodeError::InvalidOpcode);
+                                }
+
+                                let (opc, size) = OPCODES[((op << 4) | cmode) as usize]?;
+
+                                let imm = if opc == Opcode::FMOV {
+                                    // simd expand
+                                    // TODO
+                                    todo!();
+                                } else if opc == Opcode::ORR || opc == Opcode::BIC {
+                                    // abcdefgh
+                                    let abcdefgh = (abc << 5) | defgh;
+                                    abcdefgh as u64
+                                } else /* if opc == Opcode::MOVI || opc == Opcode::MVNI */ {
+                                    let abcdefgh = ((abc << 5) | defgh) as u64;
+                                    let abcdefgh = (abcdefgh | (abcdefgh << 16)) & 0x000000ff000000ff;
+                                    let abcdefgh = (abcdefgh | (abcdefgh << 8))  & 0x00ff00ff00ff00ff;
+                                    let abcdefgh = (abcdefgh | (abcdefgh << 4))  & 0x0f0f0f0f0f0f0f0f;
+                                    let abcdefgh = (abcdefgh | (abcdefgh << 2))  & 0x3333333333333333;
+                                    let abcdefgh = (abcdefgh | (abcdefgh << 1))  & 0x5555555555555555;
+
+                                    abcdefgh | (abcdefgh << 1)
+                                };
+
+                                inst.opcode = opc;
+                                inst.operands = [
+                                    Operand::SIMDRegisterElements(datasize, Rd as u16, size),
+                                    Operand::Imm64(imm),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
                             }
                         } else {
                             // `Advanced SIMD vector x indexed element`
@@ -2737,6 +3128,344 @@ impl Decoder<ARMv8> for InstDecoder {
                              }
                         }
                     } else {
+                        // `Advanced SIMD three same` and below
+                        // op1 == 0x
+                        if op2 & 0b0100 == 0b0100 {
+                            // op2 == x1xx
+
+                            let size = (word >> 22) & 0b11;
+                            let Rn = (word >> 5) & 0b1_1111;
+                            let Rd = word & 0b1_1111;
+
+                            let Q = (word >> 30) & 1;
+                            let U = (word >> 29) & 1;
+
+                            if op3 & 1 == 1 {
+                                // `Advanced SIMD three same`
+                                let opcode = (word >> 11) & 0b1_1111;
+                                let Rm = (word >> 16) & 0b1_1111;
+
+                                const U0_OPCODES: &[Opcode] = &[
+                                    Opcode::SHADD, Opcode::SQADD, Opcode::SRHADD, Opcode::AND, // or BIC, ORR, ORN
+                                    Opcode::SHSUB, Opcode::SQSUB, Opcode::CMGT, Opcode::CMGE,
+                                    Opcode::SSHL, Opcode::SQSHL, Opcode::SRSHL, Opcode::SQRSHL,
+                                    Opcode::SMAX, Opcode::SMIN, Opcode::SABD, Opcode::SABA,
+                                    Opcode::ADD, Opcode::CMTST, Opcode::MLA, Opcode::MUL,
+                                    Opcode::SMAXP, Opcode::SMINP, Opcode::SQDMULH, Opcode::ADDP,
+                                ];
+                                const U1_OPCODES: &[Opcode] = &[
+                                    Opcode::UHADD, Opcode::UQADD, Opcode::URHADD, Opcode::EOR, // or BSL, BIT, BIF
+                                    Opcode::UHSUB, Opcode::UQSUB, Opcode::CMHI, Opcode::CMHS,
+                                    Opcode::USHL, Opcode::UQSHL, Opcode::URSHL, Opcode::UQRSHL,
+                                    Opcode::UMAX, Opcode::UMIN, Opcode::UABD, Opcode::UABA,
+                                    Opcode::SUB, Opcode::CMEQ, Opcode::MLS, Opcode::PMUL,
+                                    Opcode::UMAXP, Opcode::UMINP, Opcode::SQRDMULH,
+                                ];
+
+                                let datasize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
+
+                                const SIZES: [SIMDSizeCode; 4] = [
+                                    SIMDSizeCode::B,
+                                    SIMDSizeCode::H,
+                                    SIMDSizeCode::S,
+                                    SIMDSizeCode::D,
+                                ];
+
+                                let (opc, T) = if U == 0 {
+                                    if opcode < 0b11000 {
+                                        if opcode == 0b00011 {
+                                            const OPS: [Opcode; 4] = [
+                                                Opcode::AND, Opcode::BIC,
+                                                Opcode::ORR, Opcode::ORN,
+                                            ];
+                                            (OPS[size as usize], SIMDSizeCode::B)
+                                        } else {
+                                            (U0_OPCODES[opcode as usize], SIZES[size as usize])
+                                        }
+                                    } else {
+                                        const U0_HIGH_OPCODES: &[Opcode] = &[
+                                            Opcode::FMAXNM, Opcode::FMLA,
+                                            Opcode::FADD, Opcode::FMULX,
+                                            Opcode::FCMEQ, Opcode::FMLAL,
+                                            Opcode::FMAX, Opcode::FRECPS
+                                        ];
+                                        (U0_HIGH_OPCODES[opcode as usize - 0b11000], [SIMDSizeCode::S, SIMDSizeCode::D][((word >> 22) & 1) as usize])
+                                    }
+                                } else {
+                                    if opcode < 0b11000 {
+                                        if opcode == 0b00011 {
+                                            const OPS: [Opcode; 4] = [
+                                                Opcode::EOR, Opcode::BSL,
+                                                Opcode::BIT, Opcode::BIF,
+                                            ];
+                                            (OPS[size as usize], SIMDSizeCode::B)
+                                        } else {
+                                            (U1_OPCODES[opcode as usize], SIZES[size as usize])
+                                        }
+                                    } else {
+                                        const U1_HIGH_OPCODES: &[Opcode] = &[
+                                            Opcode::FMAXNMP, Opcode::FMLAL,
+                                            Opcode::FADDP, Opcode::FMUL,
+                                            Opcode::FCMGE, Opcode::FACGE,
+                                            Opcode::FMAXP, Opcode::FDIV
+                                        ];
+                                        (U1_HIGH_OPCODES[opcode as usize - 0b11000], [SIMDSizeCode::S, SIMDSizeCode::D][((word >> 22) & 1) as usize])
+                                    }
+                                };
+
+                                inst.opcode = opc;
+                                inst.operands = [
+                                    Operand::SIMDRegisterElements(datasize, Rd as u16, T),
+                                    Operand::SIMDRegisterElements(datasize, Rn as u16, T),
+                                    Operand::SIMDRegisterElements(datasize, Rm as u16, T),
+                                    Operand::Nothing,
+                                ];
+                            } else if op3 & 0b11 == 0 {
+                                // `Advanced SIMD three different`
+                                let opcode = (word >> 12) & 0b1111;
+                                let Rm = (word >> 16) & 0b1_1111;
+
+                                const OPCODES: &[Result<Opcode, DecodeError>] = &[
+                                    Ok(Opcode::SADDL), Ok(Opcode::SADDL2),
+                                    Ok(Opcode::SADDW), Ok(Opcode::SADDW2),
+                                    Ok(Opcode::SSUBL), Ok(Opcode::SSUBL2),
+                                    Ok(Opcode::SSUBW), Ok(Opcode::SSUBW2),
+                                    Ok(Opcode::ADDHN), Ok(Opcode::ADDHN2),
+                                    Ok(Opcode::SABAL), Ok(Opcode::SABAL2),
+                                    Ok(Opcode::SUBHN), Ok(Opcode::SUBHN2),
+                                    Ok(Opcode::SABDL), Ok(Opcode::SABDL2),
+                                    Ok(Opcode::SMLAL), Ok(Opcode::SMLAL2),
+                                    Ok(Opcode::SQDMLAL), Ok(Opcode::SQDMLAL2),
+                                    Ok(Opcode::SMLSL), Ok(Opcode::SMLSL2),
+                                    Ok(Opcode::SQDMLSL), Ok(Opcode::SQDMLSL2),
+                                    Ok(Opcode::SMULL), Ok(Opcode::SMULL2),
+                                    Ok(Opcode::SQDMUL), Ok(Opcode::SQDMUL2),
+                                    Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                    // u == 1
+                                    Ok(Opcode::PMULL), Ok(Opcode::PMULL2),
+                                    Ok(Opcode::UADDL), Ok(Opcode::UADDL2),
+                                    Ok(Opcode::UADDW), Ok(Opcode::UADDW2),
+                                    Ok(Opcode::USUBL), Ok(Opcode::USUBL2),
+                                    Ok(Opcode::USUBW), Ok(Opcode::USUBW2),
+                                    Ok(Opcode::RADDHN), Ok(Opcode::RADDHN2),
+                                    Ok(Opcode::UABAL), Ok(Opcode::UABAL2),
+                                    Ok(Opcode::UMLAL), Ok(Opcode::UMLAL2),
+                                    Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                    Ok(Opcode::UMLSL), Ok(Opcode::UMLSL2),
+                                    Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                    Ok(Opcode::UMULL), Ok(Opcode::UMULL2),
+                                    Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                ];
+
+                                let datasize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
+
+                                let (Ta, Tb) = [
+                                    Ok((SIMDSizeCode::H, SIMDSizeCode::B)),
+                                    Ok((SIMDSizeCode::S, SIMDSizeCode::H)),
+                                    Ok((SIMDSizeCode::D, SIMDSizeCode::S)),
+                                    Err(DecodeError::InvalidOperand)
+                                ][size as usize]?;
+
+                                inst.opcode = OPCODES[((U << 5) | (opcode << 1) | Q) as usize]?;
+                                inst.operands = [
+                                    Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd as u16, Ta),
+                                    Operand::SIMDRegisterElements(datasize, Rn as u16, Tb),
+                                    Operand::SIMDRegisterElements(datasize, Rm as u16, Tb),
+                                    Operand::Nothing,
+                                ];
+                            } else if op3 & 0b11_0000_11 == 0b00_0000_10 {
+                                // op3 == 00xxxx10:
+                                // could be either `Advanced SIMD across lanes` or `Advanced SIMD
+                                // two-register miscellaneous` or `Cryptographic AES`
+
+                                let opcode = (word >> 12) & 0b1_1111;
+                                let size = (word >> 22) & 0b11;
+
+                                type OperandSizeTable = [Result<(SIMDSizeCode, SIMDSizeCode, SIMDSizeCode, SIMDSizeCode), DecodeError>; 8];
+
+                                const TABLE_A: &'static OperandSizeTable = &[
+                                    Ok((D, B, D, B)), Ok((Q, B, Q, B)),
+                                    Ok((D, H, D, H)), Ok((Q, H, Q, H)),
+                                    Ok((D, S, D, S)), Ok((Q, S, Q, S)),
+                                    Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
+                                ];
+
+                                const TABLE_B: &'static OperandSizeTable = &[
+                                    Ok((D, B, D, B)), Ok((Q, B, Q, B)),
+                                    Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
+                                    Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
+                                    Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
+                                ];
+
+                                const TABLE_C: &'static OperandSizeTable = &[
+                                    Ok((D, H, D, B)), Ok((Q, H, Q, B)),
+                                    Ok((D, S, D, H)), Ok((Q, S, Q, H)),
+                                    Ok((D, D, D, S)), Ok((Q, D, Q, S)),
+                                    Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
+                                ];
+
+                                const TABLE_D: &'static OperandSizeTable = &[
+                                    Ok((D, B, D, B)), Ok((Q, H, Q, B)),
+                                    Ok((D, H, D, H)), Ok((Q, S, Q, H)),
+                                    Ok((D, S, D, S)), Ok((Q, D, Q, S)),
+                                    Err(DecodeError::InvalidOperand), Ok((Q, D, Q, D)),
+                                ];
+
+                                const TABLE_E: &'static OperandSizeTable = &[
+                                    Ok((D, B, D, H)), Ok((Q, H, Q, H)),
+                                    Ok((D, H, D, S)), Ok((Q, S, Q, S)),
+                                    Ok((D, S, D, D)), Ok((Q, D, Q, D)),
+                                    Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
+                                ];
+
+                                // TODO: double check?
+                                const TABLE_F: &'static OperandSizeTable = &[
+                                    Ok((D, H, Q, S)), Ok((Q, H, Q, S)),
+                                    Ok((D, S, Q, D)), Ok((Q, S, Q, D)),
+                                    Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
+                                    Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
+                                ];
+
+                                // TODO: double check?
+                                const TABLE_G: &'static OperandSizeTable = &[
+                                    Ok((Q, S, D, H)), Ok((Q, S, Q, H)),
+                                    Ok((Q, D, D, S)), Ok((Q, D, Q, S)),
+                                    Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
+                                    Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
+                                ];
+
+                                // TODO: double check?
+                                const TABLE_H: &'static OperandSizeTable = &[
+                                    Ok((D, S, D, S)), Ok((Q, S, Q, S)),
+                                    Err(DecodeError::InvalidOperand), Ok((Q, D, Q, D)),
+                                    Ok((D, S, D, S)), Ok((Q, S, Q, S)),
+                                    Err(DecodeError::InvalidOperand), Ok((Q, D, Q, D)),
+                                ];
+
+                                if op2 & 0b0111 == 0b0100 {
+                                    // `Advanced SIMD two-register miscellaneous`
+                                    const OPCODES_U0_LOW: &[Result<(Opcode, &'static OperandSizeTable), DecodeError>] = &[
+                                        Ok((Opcode::REV64, TABLE_A)),
+                                        Ok((Opcode::REV16, TABLE_B)),
+                                        Ok((Opcode::SADDLP, TABLE_C)),
+                                        Ok((Opcode::SUQADD, TABLE_D)),
+                                        Ok((Opcode::CLS, TABLE_A)),
+                                        Ok((Opcode::CNT, TABLE_B)),
+                                        Ok((Opcode::SADALP, TABLE_C)),
+                                        Ok((Opcode::SQABS, TABLE_D)),
+                                        Ok((Opcode::CMGT, TABLE_D)),
+                                        Ok((Opcode::CMEQ, TABLE_D)),
+                                        Ok((Opcode::CMLT, TABLE_D)),
+                                        Ok((Opcode::ABS, TABLE_D)),
+                                        // 0b01100
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        // 0b10000
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Ok((Opcode::XTN, TABLE_E)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        // 0b10100
+                                    ];
+                                    // index by low 3 of opcode | upper bit of size
+                                    const OPCODES_U0_HIGH: &[Result<(Opcode, &'static OperandSizeTable), DecodeError>] = &[
+                                        Ok((Opcode::SQXTN, TABLE_E)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Ok((Opcode::FCVTN, TABLE_F)),
+                                        Ok((Opcode::FCVTL, TABLE_G)),
+                                        Ok((Opcode::FRINTN, TABLE_H)),
+                                        Ok((Opcode::FRINTM, TABLE_H)),
+                                        Ok((Opcode::FCVTNS, TABLE_H)),
+                                        Ok((Opcode::FCVTMS, TABLE_H)),
+                                        Ok((Opcode::FCVTAS, TABLE_H)),
+                                        Ok((Opcode::SCVTF, TABLE_H)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        // u == 1, op == 0b00000
+                                    ];
+
+                                    // `Advanced SIMD two-register miscellaneous`, U == 1
+                                    const OPCODES_U1_LOW: &[Result<(Opcode, &'static OperandSizeTable), DecodeError>] = &[
+                                        Ok((Opcode::REV32, TABLE_A)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Ok((Opcode::UADDLP, TABLE_C)),
+                                        Ok((Opcode::USQADD, TABLE_D)),
+                                        Ok((Opcode::CLZ, TABLE_A)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Ok((Opcode::UADALP, TABLE_C)),
+                                        Ok((Opcode::SQNEG, TABLE_D)),
+                                        Ok((Opcode::CMGE, TABLE_D)),
+                                        Ok((Opcode::CMLE, TABLE_D)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Ok((Opcode::NEG, TABLE_D)),
+                                        // 0b01100
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        // 0b10000
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Ok((Opcode::SQXTUN, TABLE_E)),
+                                        Ok((Opcode::SHLL, )),
+                                        // 0b10100
+                                    ];
+                                    // index by low 3 of opcode | upper bit of size
+                                    const OPCODES_U1_HIGH: &[Result<(Opcode, &'static OperandSizeTable), DecodeError>] = &[
+                                        Ok((Opcode::UQXTN, TABLE_E)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Ok((Opcode::FCVTXN, TABLE_F)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Ok((Opcode::FRINTA, TABLE_H)),
+                                        Ok((Opcode::FRINTX, TABLE_H)),
+                                        Ok((Opcode::FCVTNU, TABLE_H)),
+                                        Ok((Opcode::FCVTMU, TABLE_H)),
+                                        Ok((Opcode::FCVTAU, TABLE_H)),
+                                        Ok((Opcode::UCVTF, TABLE_H)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        // u == 1, op == 0b00000
+                                    ];
+
+                                    let (opc, (datasize_a, elemsize_a, datasize_b, elemsize_b)) = if opcode < 0b11000 {
+                                        if U == 0 {
+                                            OPCODES_U0_LOW[opcode as usize]?
+                                        } else {
+                                            OPCODES_U1_LOW[opcode as usize]?
+                                        }
+                                        (opc, table[size as usize]?)
+                                    } else {
+                                        let (opc, table) = if U == 0 {
+                                            OPCODES_U0_HIGH[((opcode << 1) | (size >> 1)) as usize]?
+                                        } else {
+                                            OPCODES_U1_HIGH[((opcode << 1) | (size >> 1)) as usize]?
+                                        };
+                                        (opc, table[(size >> 1) as usize]?)
+                                    };
+
+                                    inst.opcode = opc;
+                                    inst.operands = [
+                                        Operand::SIMDRegisterElements(datasize_a, Rd as u16, elemsize_a),
+                                        Operand::SIMDRegisterElements(datasize_b, Rn as u16, elemsize_b),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else if op2 & 0b0111 == 0b0110 {
+                                    // `Advanced SIMD across lanes`
+                                }
+                                return Err(DecodeError::IncompleteDecoder);
+
+                            } else {
+                                // op3 == 1xxxxx10 or x1xxxx10: both unallocated.
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+                        } else {
+                            // op2 == x0xx
+                        }
                     }
                 } else if (op0 & 0b0101) == 0b0001 {
                     // op0 == x0x1 (floating-point ops or unallocated - op1, op2, op3 are
@@ -3189,6 +3918,57 @@ impl Decoder<ARMv8> for InstDecoder {
                             Operand::SIMDRegister(precision, Rm),
                             Operand::SIMDRegister(precision, Ra),
                         ];
+                    }
+                } else if (op0 & 0b1101) == 0b0101 {
+                    // op0 == x1x1 `Advanced SIMD scalar *`
+                    if op1 < 0b10 {
+                        // op1 == 0x
+                        if op2 & 0b0100 == 0b0100 {
+                            // op2 == x1xx
+                            if op3 & 1 == 1 {
+                                // `Advanced SIMD scalar three same`
+                                // op3 == xxxxxxxx1
+                            } else {
+                                if op3 & 0b10 == 0b10 {
+                                    // `Advanced SIMD scalar three different`
+                                    // op3 == xxxxxxx00
+                                } else {
+                                    // op3 == xxxxxxx10
+                                    if op3 & 0b110000011 != 0b000000010 {
+                                        // op3 == 1xxxxxx10 or
+                                        // op3 == x1xxxxx10
+                                        // either are unallocated
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+
+                                    if op2 & 0b0111 == 0b0100 {
+                                        // `Advanced SIMD scalar two-register miscellaneous`
+                                    } else if op2 & 0b0111 == 0b110 {
+                                        // `Advanced SIMD scalar pairwise`
+                                    } else if op2 == 0b1111 {
+                                        // `Advanced SIMD scalar two-register miscellaneous FP16`
+                                    } else if op2 & 0b0111 == 0b0101 && op0 == 0b0101 {
+                                        // `Cryptographic two-register SHA`
+                                    } else if op2 & 0b0111 == 0b0101 && op0 == 0b0100 {
+                                        // `Cryptographic AES`
+                                    } else {
+                                        // unallocated
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                }
+                            }
+                        } else {
+                        }
+                    } else {
+                        // op1 == 1x
+                        if op3 & 1 == 0 {
+                            // `Advanced SIMD scalar x indexed element`
+                        } else {
+                            if op1 == 0b11 {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+                            // `Advanced SIMD scalar shift by immediate`
+                        }
                     }
                 } else {
                     // op0 != 0xx0, op0 != x0x1
