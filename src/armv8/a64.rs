@@ -1538,6 +1538,102 @@ impl Display for Instruction {
             Opcode::UABAL2 => {
                 write!(fmt, "uabal2");
             }
+            Opcode::REV64 => {
+                write!(fmt, "rev64");
+            }
+            Opcode::SADDLP => {
+                write!(fmt, "saddlp");
+            }
+            Opcode::SUQADD => {
+                write!(fmt, "suqadd");
+            }
+            Opcode::CNT => {
+                write!(fmt, "cnt");
+            }
+            Opcode::SADALP => {
+                write!(fmt, "sadalp");
+            }
+            Opcode::SQABS => {
+                write!(fmt, "sqabs");
+            }
+            Opcode::CMLT => {
+                write!(fmt, "cmlt");
+            }
+            Opcode::ABS => {
+                write!(fmt, "abs");
+            }
+            Opcode::XTN => {
+                write!(fmt, "xtn");
+            }
+            Opcode::SQXTN => {
+                write!(fmt, "sqxtn");
+            }
+            Opcode::FCVTN => {
+                write!(fmt, "fcvtn");
+            }
+            Opcode::FCMGT => {
+                write!(fmt, "fcmgt");
+            }
+            Opcode::FCVTL => {
+                write!(fmt, "fcvtl");
+            }
+            Opcode::FCVTNS => {
+                write!(fmt, "fcvtns");
+            }
+            Opcode::FCVTPS => {
+                write!(fmt, "fcvtps");
+            }
+            Opcode::FCVTMS => {
+                write!(fmt, "fcvtms");
+            }
+            Opcode::FCVTAS => {
+                write!(fmt, "fcvtas");
+            }
+            Opcode::URECPE => {
+                write!(fmt, "urecpe");
+            }
+            Opcode::FRECPE => {
+                write!(fmt, "frecpe");
+            }
+            Opcode::UADDLP => {
+                write!(fmt, "uaddlp");
+            }
+            Opcode::USQADD => {
+                write!(fmt, "usqadd");
+            }
+            Opcode::UADALP => {
+                write!(fmt, "uadalp");
+            }
+            Opcode::SQNEG => {
+                write!(fmt, "sqneg");
+            }
+            Opcode::CMLE => {
+                write!(fmt, "cmle");
+            }
+            Opcode::NEG => {
+                write!(fmt, "neg");
+            }
+            Opcode::SQXTUN => {
+                write!(fmt, "sqxtun");
+            }
+            Opcode::SHLL => {
+                write!(fmt, "shll");
+            }
+            Opcode::UQXTN => {
+                write!(fmt, "uqxtn");
+            }
+            Opcode::FCVTXN => {
+                write!(fmt, "fcvtxn");
+            }
+            Opcode::FCVTNU => {
+                write!(fmt, "fcvtnu");
+            }
+            Opcode::FCVTMU => {
+                write!(fmt, "fcvtmu");
+            }
+            Opcode::FCVTAU => {
+                write!(fmt, "fcvtau");
+            }
         };
 
         if self.operands[0] != Operand::Nothing {
@@ -1927,6 +2023,40 @@ pub enum Opcode {
     RADDHN2,
     UABAL,
     UABAL2,
+
+    REV64,
+    SADDLP,
+    SUQADD,
+    CNT,
+    SADALP,
+    SQABS,
+    CMLT,
+    ABS,
+    XTN,
+    SQXTN,
+    FCVTN,
+    FCMGT,
+    FCVTL,
+    FCVTNS,
+    FCVTPS,
+    FCVTMS,
+    FCVTAS,
+    URECPE,
+    FRECPE,
+
+    UADDLP,
+    USQADD,
+    UADALP,
+    SQNEG,
+    CMLE,
+    NEG,
+    SQXTUN,
+    SHLL,
+    UQXTN,
+    FCVTXN,
+    FCVTNU,
+    FCVTMU,
+    FCVTAU,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -2769,15 +2899,19 @@ impl Decoder<ARMv8> for InstDecoder {
                                     // FMLAL
                                 }
                                 0b0_0001 => {
+                                    // TODO:
                                     // FMLA (not size=0b01)
                                 }
                                 0b0_0100 => {
+                                    // TODO:
                                     // FMLSL (not size<0b10)
                                 }
                                 0b0_0101 => {
+                                    // TODO:
                                     // FMLS (not size=0b01)
                                 }
                                 0b0_1001 => {
+                                    // TODO:
                                     // FMUL (not size=0b01)
                                 }
                                 0b1_0000 => {
@@ -3285,6 +3419,8 @@ impl Decoder<ARMv8> for InstDecoder {
 
                                 type OperandSizeTable = [Result<(SIMDSizeCode, SIMDSizeCode, SIMDSizeCode, SIMDSizeCode), DecodeError>; 8];
 
+                                use armv8::a64::SIMDSizeCode::*;
+
                                 const TABLE_A: &'static OperandSizeTable = &[
                                     Ok((D, B, D, B)), Ok((Q, B, Q, B)),
                                     Ok((D, H, D, H)), Ok((Q, H, Q, H)),
@@ -3411,7 +3547,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Err(DecodeError::InvalidOpcode),
                                         Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::SQXTUN, TABLE_E)),
-                                        Ok((Opcode::SHLL, )),
+                                        Ok((Opcode::SHLL, TABLE_E)), // TODO: verify
                                         // 0b10100
                                     ];
                                     // index by low 3 of opcode | upper bit of size
@@ -3432,11 +3568,11 @@ impl Decoder<ARMv8> for InstDecoder {
                                     ];
 
                                     let (opc, (datasize_a, elemsize_a, datasize_b, elemsize_b)) = if opcode < 0b11000 {
-                                        if U == 0 {
+                                        let (opc, table) = if U == 0 {
                                             OPCODES_U0_LOW[opcode as usize]?
                                         } else {
                                             OPCODES_U1_LOW[opcode as usize]?
-                                        }
+                                        };
                                         (opc, table[size as usize]?)
                                     } else {
                                         let (opc, table) = if U == 0 {
@@ -3465,6 +3601,66 @@ impl Decoder<ARMv8> for InstDecoder {
                             }
                         } else {
                             // op2 == x0xx
+                            if op3 & 0b000100001 == 0b000000001 {
+                                // `Advanced SIMD copy`
+                                if imm5 & 0b01111 == 0b00000 {
+                                    return Err(DecodeError::InvalidOpcode);
+                                }
+
+                                if op == 1 {
+                                    if Q {
+                                        inst.opcode = Opcode::INS;
+                                        // TODO: operands
+                                    } else {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                } else {
+                                    if Q {
+                                        if imm4 == 0b0011 {
+                                            // INS (general)
+                                        } else if imm4 == 0b0101 {
+                                            // SMOV
+                                        } else if imm4 == 0b0111 {
+                                            // UMOV
+                                            if imm5 & 0b01111 != 0b01000 {
+                                                return Err(DecodeError::InvalidOpcode);
+                                            }
+                                        }
+                                    } else {
+                                        if imm4 == 0b0000 {
+                                            // DUP (element)
+                                        } else if imm4 == 0b0001 {
+                                            // DUP (general)
+                                        } else if imm4 == 0b0101 {
+                                            // SMOV
+                                        } else if imm4 == 0b0111 {
+                                            // UMOV
+                                        }
+                                    }
+                                }
+                            } else {
+                                if op3 & 0b000100001 == 0b000000001 && op0 & 0b1011 == 0b0010 {
+                                    // `Advanced SIMD extract`
+                                    if op2 != 00 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                    inst.opcode = Opcode::EXT;
+                                } else if op3 & 0b000100011 == 0b000000010 && op0 & 0b1011 == 0b0000 {
+                                    // `Advanced SIMD permute`
+                                    inst.opcode = match opcode {
+                                        0b000 => { return Err(DecodeError::InvalidOpcode); },
+                                        0b001 => { Opcode::UZP1 },
+                                        0b010 => { Opcode::TRN1 },
+                                        0b011 => { Opcode::ZIP1 },
+                                        0b100 => { return Err(DecodeError::InvalidOpcode); },
+                                        0b101 => { Opcode::UZP2 },
+                                        0b110 => { Opcode::TRN2 },
+                                        0b111 => { Opcode::ZIP2 },
+                                    };
+                                } else {
+                                    return Err(DecodeError::InvalidOpcode);
+                                }
+                            }
                         }
                     }
                 } else if (op0 & 0b0101) == 0b0001 {
@@ -3958,6 +4154,37 @@ impl Decoder<ARMv8> for InstDecoder {
                                 }
                             }
                         } else {
+                            // op2 == x0xx
+                            if op3 & 0b000100001 == 0 {
+                                // op3 == xxx0xxxx0, `Unallocated`
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+                            if op2 & 0b1000 == 0b1000 {
+                                // op2 == 10xx
+                                // `Advanced SIMD scalar three same FP16`
+                            } else {
+                                // op2 == 00xx
+                                // `Advanced SIMD scalar copy`
+                                if imm4 == 0b0000 && op == 0 {
+                                    inst.opcode = Opcode::DUP;
+
+                                    let imm5 = (word >> 16) & 0b11111;
+                                    let Rn = (word >> 5) & 0b11111;
+                                    let Rd = (word >> 0) & 0b11111;
+
+                                    let size = imm5.trailing_zeroes();
+                                    let idx = imm5 >> size;
+
+                                    inst.operands = [
+                                        Operand::Nothing, // Vd
+                                        Operand::Nothing, // Vn.T[index]
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+
+                                    return Err(DecodeError::IncompleteDecoder);
+                                }
+                            }
                         }
                     } else {
                         // op1 == 1x
