@@ -2472,7 +2472,7 @@ pub enum Operand {
     ImmShift(u16, u8),
     RegShift(ShiftStyle, u8, SizeCode, u16),
     RegOffset(u16, i16),
-    RegRegOffset(u16, SizeCode, u16, SizeCode, ShiftStyle, u8),
+    RegRegOffset(u16, u16, SizeCode, ShiftStyle, u8),
     RegPreIndex(u16, i32, bool),
     RegPostIndex(u16, i32),
     RegPostIndexReg(u16, u16),
@@ -2693,11 +2693,11 @@ impl Display for Operand {
                     write!(fmt, "[{}]", Operand::RegisterOrSP(SizeCode::X, *reg))
                 }
             }
-            Operand::RegRegOffset(reg, size_code, index_reg, index_size, extend, amount) => {
+            Operand::RegRegOffset(reg, index_reg, index_size, extend, amount) => {
                 if *extend == ShiftStyle::LSL && *amount == 0 {
-                    write!(fmt, "[{}, {}]", Operand::RegisterOrSP(*size_code, *reg), Operand::RegisterOrSP(*index_size, *index_reg))
+                    write!(fmt, "[{}, {}]", Operand::RegisterOrSP(SizeCode::X, *reg), Operand::RegisterOrSP(*index_size, *index_reg))
                 } else {
-                    write!(fmt, "[{}, {}, {} {}]", Operand::RegisterOrSP(*size_code, *reg), Operand::RegisterOrSP(*index_size, *index_reg), extend, amount)
+                    write!(fmt, "[{}, {}, {} {}]", Operand::RegisterOrSP(SizeCode::X, *reg), Operand::RegisterOrSP(*index_size, *index_reg), extend, amount)
                 }
             }
             Operand::RegPreIndex(reg, offset, wback) => {
@@ -5646,9 +5646,46 @@ impl Decoder<ARMv8> for InstDecoder {
                                         ];
                                     } else if op2 == 0b1111 {
                                         // `Advanced SIMD scalar two-register miscellaneous FP16`
+                                        let Rd = word & 0b11111;
+                                        let Rn = (word >> 5) & 0b11111;
+                                        let opcode = (word >> 12) & 0b11111;
                                         let opcode = (word >> 12) & 0b11111;
                                         let a = (word >> 23) & 1;
-                                        return Err(DecodeError::IncompleteDecoder);
+                                        let U = (word >> 29) & 1;
+
+                                        let index = (opcode << 2) | (U << 1) | a;
+                                        let res = match index {
+                                            0b11010_0_0 => Ok(Opcode::FCVTNS),
+                                            0b11011_0_0 => Ok(Opcode::FCVTMS),
+                                            0b11100_0_0 => Ok(Opcode::FCVTAS),
+                                            0b11101_0_0 => Ok(Opcode::SCVTF),
+                                            0b01100_1_0 => Ok(Opcode::FCMGT),
+                                            0b01101_1_0 => Ok(Opcode::FCMEQ),
+                                            0b01110_1_0 => Ok(Opcode::FCMLT),
+                                            0b11010_1_0 => Ok(Opcode::FCVTPS),
+                                            0b11011_1_0 => Ok(Opcode::FCVTZS),
+                                            0b11101_1_0 => Ok(Opcode::FRECPE),
+                                            0b11111_1_0 => Ok(Opcode::FRECPX),
+
+                                            0b11010_0_1 => Ok(Opcode::FCVTNU),
+                                            0b11011_0_1 => Ok(Opcode::FCVTMU),
+                                            0b11100_0_1 => Ok(Opcode::FCVTAU),
+                                            0b11101_0_1 => Ok(Opcode::UCVTF),
+                                            0b01100_1_1 => Ok(Opcode::FCMGE),
+                                            0b01101_1_1 => Ok(Opcode::FCMLE),
+                                            0b11010_1_1 => Ok(Opcode::FCVTPU),
+                                            0b11011_1_1 => Ok(Opcode::FCVTZU),
+                                            0b11101_1_1 => Ok(Opcode::FRSQRTE),
+                                            _ => Err(DecodeError::InvalidOpcode)
+                                        };
+
+                                        inst.opcode = res?;
+                                        inst.operands = [
+                                            Operand::SIMDRegister(SIMDSizeCode::H, Rd as u16),
+                                            Operand::SIMDRegister(SIMDSizeCode::H, Rn as u16),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
                                     } else if op2 & 0b0111 == 0b0101 && op0 == 0b0101 {
                                         // `Cryptographic two-register SHA`
                                         let Rd = word & 0b11111;
@@ -5726,11 +5763,57 @@ impl Decoder<ARMv8> for InstDecoder {
                             if op2 & 0b1000 == 0b1000 {
                                 // op2 == 10xx
                                 // `Advanced SIMD scalar three same FP16`
+                                let Rd = word & 0b11111;
+                                let Rn = (word >> 5) & 0b11111;
                                 let opcode = (word >> 11) & 0b111;
                                 let Rm = (word >> 16) & 0b11111;
-                                let U = (word >> 29) & 1 == 1;
+                                let a = (word >> 23) & 1;
+                                let U = (word >> 29) & 1;
 
-                                return Err(DecodeError::IncompleteDecoder);
+                                if opcode < 0b011 {
+                                    return Err(DecodeError::InvalidOpcode);
+                                }
+
+                                let opcode = opcode - 0b011;
+                                let index = (opcode << 2) | (U << 1) | a;
+
+                                inst.opcode = [
+                                    Ok(Opcode::FMULX),
+                                    Ok(Opcode::FCMEQ),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    // opcode == 0b111
+                                    Ok(Opcode::FRECPS),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    // opcode == 0b111
+                                    Ok(Opcode::FRSQRTS),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    // opcode == 0b100
+                                    Ok(Opcode::FCMGE),
+                                    Ok(Opcode::FACGE),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Ok(Opcode::FABD),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Ok(Opcode::FCMGT),
+                                    Ok(Opcode::FACGT),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                ][index as usize]?;
+
+                                inst.operands = [
+                                    Operand::SIMDRegister(SIMDSizeCode::H, Rd as u16),
+                                    Operand::SIMDRegister(SIMDSizeCode::H, Rn as u16),
+                                    Operand::SIMDRegister(SIMDSizeCode::H, Rm as u16),
+                                    Operand::Nothing,
+                                ];
                             } else {
                                 // op2 == 00xx
                                 // `Advanced SIMD scalar copy`
@@ -7833,7 +7916,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         } else {
                                             Operand::Register(size, Rt)
                                         },
-                                        Operand::RegRegOffset(Rn, index_size, Rm, index_size, shift_style, S * shamt),
+                                        Operand::RegRegOffset(Rn, Rm, index_size, shift_style, S * shamt),
                                         Operand::Nothing,
                                         Operand::Nothing,
                                     ];
@@ -8132,7 +8215,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     inst.opcode = opcode;
                                     inst.operands = [
                                         Operand::SIMDRegister(size, Rt as u16),
-                                        Operand::RegRegOffset(Rn as u16, SizeCode::X, Rm as u16, if option & 0x01 == 0 {
+                                        Operand::RegRegOffset(Rn as u16, Rm as u16, if option & 0x01 == 0 {
                                             SizeCode::W
                                         } else {
                                             SizeCode::X

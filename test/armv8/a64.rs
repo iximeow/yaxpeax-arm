@@ -4339,3 +4339,17 @@ fn test_movi() {
 
     assert!(errs.is_empty());
 }
+
+#[test]
+fn test_weird_str() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x08, 0xdb, 0x7c, 0xf8], "ldr x8, [x24, w28, sxtw 3]"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
