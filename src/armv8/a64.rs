@@ -5107,11 +5107,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Err(DecodeError::InvalidOperand), Ok((Q, D, Q, D)),
                                 ];
 
-                                if opcode == 0b00011 {
-                                    // AND, BIC, ORR, ORN
-                                    // EOR, BSL, BIT, BIF
-                                    return Err(DecodeError::IncompleteDecoder);
-                                } else if opcode < 0b11000 {
+                                if opcode < 0b11000 {
                                     // TODO: validate operands
                                     const OPCODES_U0_LOW: &[Result<(Opcode, &'static OperandSizeTable), DecodeError>] = &[
                                         Err(DecodeError::InvalidOpcode),
