@@ -1777,6 +1777,9 @@ impl Display for Instruction {
             Opcode::URSQRTE => {
                 write!(fmt, "ursqrte");
             }
+            Opcode::PRFM => {
+                write!(fmt, "prfm");
+            }
         };
 
         if self.operands[0] != Operand::Nothing {
@@ -2253,6 +2256,8 @@ pub enum Opcode {
     FJCVTZS,
 
     URSQRTE,
+
+    PRFM,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -2315,6 +2320,7 @@ pub enum Operand {
     RegPreIndex(u16, i32, bool),
     RegPostIndex(u16, i32),
     RegPostIndexReg(u16, u16),
+    PrefetchOp(u16),
 }
 
 impl Display for Operand {
@@ -2344,6 +2350,21 @@ impl Display for Operand {
                     }
                 }
             },
+            Operand::PrefetchOp(op) => {
+                let ty = (op >> 3) & 0b11;
+                let target = (op >> 1) & 0b11;
+                let policy = op & 1;
+
+                if ty == 0b11 || target == 0b11 {
+                    write!(fmt, "{:#02x}", op)
+                } else {
+                    write!(fmt, "{}{}{}",
+                        ["pld", "pli", "pst"][ty as usize],
+                        ["l1", "l2", "l3"][target as usize],
+                        ["keep", "strm"][policy as usize],
+                    )
+                }
+            }
             Operand::SIMDRegister(size, reg) => {
                 match size {
                     SIMDSizeCode::B => { write!(fmt, "b{}", reg) }
@@ -6883,8 +6904,8 @@ impl Decoder<ARMv8> for InstDecoder {
                                 SizeCode::W
                             }
                             0b11 => {
-                                // PRFM is not supported
-                                return Err(DecodeError::IncompleteDecoder);
+                                inst.opcode = Opcode::PRFM;
+                                SizeCode::X
                             }
                             _ => {
                                 unreachable!("opc is two bits");
@@ -6892,7 +6913,11 @@ impl Decoder<ARMv8> for InstDecoder {
                         };
 
                         inst.operands = [
-                            Operand::Register(size, Rt),
+                            if opc == 0b11 {
+                                Operand::PrefetchOp(Rt)
+                            } else {
+                                Operand::Register(size, Rt)
+                            },
                             Operand::PCOffset((imm19 << 2) as i64),
                             Operand::Nothing,
                             Operand::Nothing,
@@ -7355,7 +7380,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::STR, SizeCode::X, 3)),
                                         Ok((Opcode::LDR, SizeCode::X, 3)),
-                                        Err(DecodeError::IncompleteDecoder), // PRFM is not supported yet
+                                        Ok((Opcode::PRFM, SizeCode::X, 3)),
                                         Err(DecodeError::InvalidOpcode),
                                     ];
 
@@ -7390,7 +7415,11 @@ impl Decoder<ARMv8> for InstDecoder {
                                     let shift_style = SHIFT_STYLES[option as usize]?;
 
                                     inst.operands = [
-                                        Operand::Register(size, Rt),
+                                        if size_opc == 0b1110 {
+                                            Operand::PrefetchOp(Rt)
+                                        } else {
+                                            Operand::Register(size, Rt)
+                                        },
                                         Operand::RegRegOffset(Rn, index_size, Rm, index_size, shift_style, S * shamt),
                                         Operand::Nothing,
                                         Operand::Nothing,
@@ -7832,8 +7861,13 @@ impl Decoder<ARMv8> for InstDecoder {
                                 ];
                             }
                             0b1110 => {
-                                // PRFM not yet supported
-                                return Err(DecodeError::IncompleteDecoder);
+                                inst.opcode = Opcode::PRFM;
+                                inst.operands = [
+                                    Operand::PrefetchOp(Rt),
+                                    Operand::RegOffset(Rn, imm12 << 3),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
                             }
                             0b1111 => { inst.opcode = Opcode::Invalid; }
                             _ => { unreachable!("size and opc are four bits"); }
