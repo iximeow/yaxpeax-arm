@@ -2723,7 +2723,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Ok((Opcode::MVNI, SIMDSizeCode::H)), Ok((Opcode::BIC, SIMDSizeCode::H)),
                                     Ok((Opcode::MVNI, SIMDSizeCode::H)), Ok((Opcode::BIC, SIMDSizeCode::H)),
                                     Ok((Opcode::MVNI, SIMDSizeCode::S)), Ok((Opcode::BIC, SIMDSizeCode::S)),
-                                    Ok((Opcode::MVNI, SIMDSizeCode::B)), Ok((Opcode::FMOV, SIMDSizeCode::B)),
+                                    Ok((Opcode::MOVI, SIMDSizeCode::D)), Ok((Opcode::FMOV, SIMDSizeCode::B)),
                                 ];
 
                                 if cmode == 0b1111 && op == 1 && Q == 0 {
@@ -2739,25 +2739,49 @@ impl Decoder<ARMv8> for InstDecoder {
                                 } else if opc == Opcode::ORR || opc == Opcode::BIC {
                                     // abcdefgh
                                     let abcdefgh = (abc << 5) | defgh;
-                                    abcdefgh as u64
+                                    Operand::Imm64(abcdefgh as u64)
                                 } else /* if opc == Opcode::MOVI || opc == Opcode::MVNI */ {
-                                    let abcdefgh = ((abc << 5) | defgh) as u64;
-                                    let abcdefgh = (abcdefgh | (abcdefgh << 16)) & 0x000000ff000000ff;
-                                    let abcdefgh = (abcdefgh | (abcdefgh << 8))  & 0x00ff00ff00ff00ff;
-                                    let abcdefgh = (abcdefgh | (abcdefgh << 4))  & 0x0f0f0f0f0f0f0f0f;
-                                    let abcdefgh = (abcdefgh | (abcdefgh << 2))  & 0x3333333333333333;
-                                    let abcdefgh = (abcdefgh | (abcdefgh << 1))  & 0x5555555555555555;
+                                    if cmode == 0b1110 {
+                                        let abcdefgh = ((abc << 5) | defgh) as u64;
+                                        let abcdefgh = (abcdefgh | (abcdefgh << 16)) & 0x000000ff000000ff;
+                                        let abcdefgh = (abcdefgh | (abcdefgh << 8))  & 0x00ff00ff00ff00ff;
+                                        let abcdefgh = (abcdefgh | (abcdefgh << 4))  & 0x0f0f0f0f0f0f0f0f;
+                                        let abcdefgh = (abcdefgh | (abcdefgh << 2))  & 0x3333333333333333;
+                                        let abcdefgh = (abcdefgh | (abcdefgh << 1))  & 0x5555555555555555;
 
-                                    abcdefgh | (abcdefgh << 1)
+                                        Operand::Imm64(abcdefgh | (abcdefgh << 1))
+                                    } else {
+                                        let abcdefgh = ((abc << 5) | defgh) as u64;
+                                        let imm8 = abcdefgh;
+                                        let amount = match size {
+                                            SIMDSizeCode::H => {
+                                                (cmode & 0b0010) << 1
+                                            }
+                                            SIMDSizeCode::S => {
+                                                (cmode & 0b0110) << 2
+                                            }
+                                            _ => 0,
+                                        };
+                                        Operand::ImmShift(imm8 as u16, amount as u8)
+                                    }
                                 };
 
                                 inst.opcode = opc;
-                                inst.operands = [
-                                    Operand::SIMDRegisterElements(datasize, Rd as u16, size),
-                                    Operand::Imm64(imm),
-                                    Operand::Nothing,
-                                    Operand::Nothing,
-                                ];
+                                if Q == 0 && op == 1 && cmode == 0b1110 && o2 == 0 {
+                                    inst.operands = [
+                                        Operand::SIMDRegister(size, Rd as u16),
+                                        imm,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else {
+                                    inst.operands = [
+                                        Operand::SIMDRegisterElements(datasize, Rd as u16, size),
+                                        imm,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                }
                             }
                         } else {
                             // `Advanced SIMD vector x indexed element`

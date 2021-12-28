@@ -4319,3 +4319,23 @@ fn test_simd_abs() {
 
     assert!(errs.is_empty());
 }
+
+#[test]
+fn test_movi() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x1c, 0x04, 0x00, 0x0f], "movi v28.2s, 0x0"),
+        ([0x28, 0x04, 0x00, 0x0f], "movi v8.2s, 0x1"),
+        ([0x80, 0x66, 0x01, 0x0f], "movi v0.2s, 0x34, lsl 24"),
+        ([0x17, 0x64, 0x04, 0x0f], "movi v23.2s, 0x80, lsl 24"),
+        ([0x01, 0xe4, 0x00, 0x6f], "movi v1.2d, 0x0"),
+        ([0x02, 0xe4, 0x00, 0x6f], "movi v2.2d, 0x0"),
+        ([0x03, 0xe4, 0x00, 0x2f], "movi d3, 0x0"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
