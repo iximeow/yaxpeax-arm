@@ -274,6 +274,50 @@ impl Display for Instruction {
             Opcode::Invalid => {
                 write!(fmt, "invalid")?;
             },
+            Opcode::DMB => {
+                if let Operand::Imm16(option) = self.operands[0] {
+                    return match option {
+                        0b0001 => write!(fmt, "dmb oshld"),
+                        0b0010 => write!(fmt, "dmb oshst"),
+                        0b0011 => write!(fmt, "dmb osh"),
+                        0b0101 => write!(fmt, "dmb nshld"),
+                        0b0110 => write!(fmt, "dmb nshst"),
+                        0b0111 => write!(fmt, "dmb nsh"),
+                        0b1001 => write!(fmt, "dmb ishld"),
+                        0b1010 => write!(fmt, "dmb ishst"),
+                        0b1011 => write!(fmt, "dmb ish"),
+                        0b1101 => write!(fmt, "dmb ld"),
+                        0b1110 => write!(fmt, "dmb st"),
+                        0b1111 => write!(fmt, "dmb sy"),
+                        _ => write!(fmt, "dmb {:x}", option)
+                    };
+                }
+            }
+            Opcode::DSB => {
+                if let Operand::Imm16(option) = self.operands[0] {
+                    return match option {
+                        0b0001 => write!(fmt, "dsb oshld"),
+                        0b0010 => write!(fmt, "dsb oshst"),
+                        0b0011 => write!(fmt, "dsb osh"),
+                        0b0101 => write!(fmt, "dsb nshld"),
+                        0b0110 => write!(fmt, "dsb nshst"),
+                        0b0111 => write!(fmt, "dsb nsh"),
+                        0b1001 => write!(fmt, "dsb ishld"),
+                        0b1010 => write!(fmt, "dsb ishst"),
+                        0b1011 => write!(fmt, "dsb ish"),
+                        0b1101 => write!(fmt, "dsb ld"),
+                        0b1110 => write!(fmt, "dsb st"),
+                        0b1111 => write!(fmt, "dsb sy"),
+                        _ => write!(fmt, "dsb {:x}", option)
+                    };
+                }
+            }
+            Opcode::ISB => {
+                // the default/reserved/expected value for the immediate in `isb` is `0b1111`.
+                if let Operand::Imm16(15) = self.operands[0] {
+                    return write!(fmt, "isb");
+                }
+            }
             Opcode::MOVN => {
                 let imm = if let Operand::ImmShift(imm, shift) = self.operands[1] {
                     !((imm as u64) << shift)
@@ -779,6 +823,12 @@ impl Display for Instruction {
             }
             Opcode::DMB => {
                 write!(fmt, "dmb")?;
+            }
+            Opcode::SB => {
+                write!(fmt, "sb")?;
+            }
+            Opcode::SSSB => {
+                write!(fmt, "sssb")?;
             }
             Opcode::HINT(v) => {
                 match v {
@@ -1935,6 +1985,8 @@ pub enum Opcode {
     ISB,
     DSB,
     DMB,
+    SB,
+    SSSB,
     HINT(u8),
     CLREX,
     CSEL,
@@ -8414,9 +8466,8 @@ impl Decoder<ARMv8> for InstDecoder {
                         ];
                     }
                     0b01001 => { // conditional branch (imm)
-                        // probably actually an invalid opcode?
-                        return Err(DecodeError::IncompleteDecoder);
-                        // inst.opcode = Opcode::Invalid;
+                        // o1 -> unallocated, reserved
+                        return Err(DecodeError::InvalidOpcode);
                     }
                     /* 0b01010 to 0b01111 seem all invalid? */
                     0b10000 |
@@ -8527,7 +8578,7 @@ impl Decoder<ARMv8> for InstDecoder {
                     0b11001 => { // system
                         let remainder = word & 0xffffff;
                         if remainder >= 0x400000 {
-                            inst.opcode = Opcode::Invalid;
+                            return Err(DecodeError::InvalidOperand);
                         } else {
                             let Rt = word & 0x1f;
                             let Lop0 = ((word >> 19) & 0x7) as u8;
@@ -8548,18 +8599,66 @@ impl Decoder<ARMv8> for InstDecoder {
                                                 }
                                             },
                                             0b0011 => {
+                                                let CRm = (word >> 8) & 0xf;
+                                                let op2 = (word >> 5) & 0b111;
                                                 match op2 {
                                                     0b010 => {
                                                         inst.opcode = Opcode::CLREX;
+                                                        inst.operands = [
+                                                            Operand::Imm16(CRm as u16),
+                                                            Operand::Nothing,
+                                                            Operand::Nothing,
+                                                            Operand::Nothing,
+                                                        ];
                                                     },
                                                     0b100 => {
-                                                        inst.opcode = Opcode::DSB;
+                                                        if CRm == 0b0000 {
+                                                            inst.opcode = Opcode::SSSB;
+                                                            inst.operands = [
+                                                                Operand::Nothing,
+                                                                Operand::Nothing,
+                                                                Operand::Nothing,
+                                                                Operand::Nothing,
+                                                            ];
+                                                        } else {
+                                                            inst.opcode = Opcode::DSB;
+                                                            inst.operands = [
+                                                                Operand::Imm16(CRm as u16),
+                                                                Operand::Nothing,
+                                                                Operand::Nothing,
+                                                                Operand::Nothing,
+                                                            ];
+                                                        }
                                                     },
                                                     0b101 => {
                                                         inst.opcode = Opcode::DMB;
+                                                        inst.operands = [
+                                                            Operand::Imm16(CRm as u16),
+                                                            Operand::Nothing,
+                                                            Operand::Nothing,
+                                                            Operand::Nothing,
+                                                        ];
                                                     },
                                                     0b110 => {
                                                         inst.opcode = Opcode::ISB;
+                                                        // other values of CRm are reserved, but
+                                                        // execute as full barriers. "must not be
+                                                        // relied upon by software".
+                                                        inst.operands = [
+                                                            Operand::Imm16(CRm as u16),
+                                                            Operand::Nothing,
+                                                            Operand::Nothing,
+                                                            Operand::Nothing,
+                                                        ];
+                                                    }
+                                                    0b111 => {
+                                                        inst.opcode = Opcode::SB;
+                                                        inst.operands = [
+                                                            Operand::Nothing,
+                                                            Operand::Nothing,
+                                                            Operand::Nothing,
+                                                            Operand::Nothing,
+                                                        ];
                                                     }
                                                     _ => {
                                                         inst.opcode = Opcode::Invalid;
