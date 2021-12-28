@@ -5412,9 +5412,49 @@ impl Decoder<ARMv8> for InstDecoder {
                                         ];
                                     } else if op2 & 0b0111 == 0b110 {
                                         // `Advanced SIMD scalar pairwise`
+                                        let Rd = word & 0b11111;
+                                        let Rn = (word >> 5) & 0b11111;
                                         let opcode = (word >> 12) & 0b11111;
                                         let size = (word >> 22) & 0b11;
-                                        return Err(DecodeError::IncompleteDecoder);
+                                        let U = (word >> 29) & 1;
+
+                                        let (opcode, vec_size, size) = if opcode == 0b11011 {
+                                            if U == 0 && size == 0b11 {
+                                                (Opcode::ADDP, SIMDSizeCode::Q, SIMDSizeCode::D)
+                                            } else {
+                                                return Err(DecodeError::InvalidOpcode);
+                                            }
+                                        } else {
+                                            let (vec_size, el_size) = if U == 0 {
+                                                (SIMDSizeCode::S, SIMDSizeCode::H)
+                                            } else if size & 0b01 == 0 {
+                                                (SIMDSizeCode::D, SIMDSizeCode::S)
+                                            } else {
+                                                (SIMDSizeCode::Q, SIMDSizeCode::D)
+                                            };
+
+                                            let opcode = match opcode | ((size & 0b10) << 5) {
+                                                0b001100 => Opcode::FMAXNMP,
+                                                0b001101 => Opcode::FADDP,
+                                                0b001111 => Opcode::FMAXP,
+                                                0b101100 => Opcode::FMINNMP,
+                                                0b101111 => Opcode::FMINP,
+                                                _ => {
+                                                    return Err(DecodeError::InvalidOpcode);
+                                                }
+                                            };
+
+                                            (opcode, vec_size, el_size)
+                                        };
+
+                                        inst.opcode = opcode;
+
+                                        inst.operands = [
+                                            Operand::SIMDRegister(size, Rd as u16),
+                                            Operand::SIMDRegisterElements(vec_size, Rn as u16, size),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
                                     } else if op2 == 0b1111 {
                                         // `Advanced SIMD scalar two-register miscellaneous FP16`
                                         let opcode = (word >> 12) & 0b11111;
