@@ -4804,14 +4804,14 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOperand);
                                     };
 
-                                    inst.opcode = if opcode & 0b1_0000 != 0 {
+                                    inst.opcode = if opcode2 & 0b1_0000 != 0 {
                                         Opcode::FCMPE
                                     } else {
                                         Opcode::FCMP
                                     };
                                     inst.operands = [
                                         Operand::SIMDRegister(precision, Rn as u16),
-                                        if Rm == 0 {
+                                        if opcode2 & 0b01000 != 0 { // and, sugguested, Rm == 0
                                             Operand::Immediate(0)
                                         } else {
                                             Operand::SIMDRegister(precision, Rm as u16)
