@@ -41,8 +41,7 @@ fn test_display(data: [u8; 4], expected: &'static str) {
 
 #[test]
 fn test_neon() {
-    // currently, NEON is incompletely implemented in yaxpeax-arm.
-    test_err([0x00, 0x01, 0x27, 0x1e], DecodeError::IncompleteDecoder);
+    test_display([0x00, 0x01, 0x27, 0x1e], "fmov s0, w8");
     test_display([0xe0, 0x03, 0x13, 0xaa], "mov x0, x19");
 }
 
@@ -133,15 +132,15 @@ fn test_decode_misc() {
     );
     test_display(
         [0x1d, 0x00, 0x80, 0xd2],
-        "movz x29, 0x0"
+        "mov x29, 0x0"
     );
     test_display(
         [0x13, 0x00, 0x80, 0xd2],
-        "movz x19, 0x0"
+        "mov x19, 0x0"
     );
     test_display(
         [0x1d, 0xff, 0xff, 0xd2],
-        "movz x29, 0xfff8, lsl 48"
+        "mov x29, 0xfff8, lsl 48"
     );
     test_display(
         [0x22, 0x39, 0x04, 0xb0],
@@ -353,7 +352,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x00, 0x00, 0x80, 0x12],
-        "movn w0, 0x0"
+        "mov w0, 0xffffffff"
     );
     test_display(
         [0x00, 0x01, 0x3f, 0xd6],
@@ -385,7 +384,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x00, 0x0b, 0x80, 0x52],
-        "movz w0, 0x58"
+        "mov w0, 0x58"
     );
     test_display(
         [0x00, 0x14, 0x42, 0xf9],
@@ -393,7 +392,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x00, 0x1b, 0x80, 0x52],
-        "movz w0, 0xd8"
+        "mov w0, 0xd8"
     );
     test_display(
         [0x00, 0x20, 0x40, 0xf9],
@@ -405,7 +404,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x00, 0x2b, 0x03, 0x90],
-        "adrp x0, 0x6560000"
+        "adrp x0, $+0x6560000"
     );
     test_display(
         [0x00, 0x34, 0x42, 0xf9],
@@ -413,11 +412,11 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x00, 0x39, 0x04, 0xb0],
-        "adrp x0, 0x8721000"
+        "adrp x0, $+0x8721000"
     );
     test_display(
         [0x00, 0x3b, 0x04, 0xb0],
-        "adrp x0, 0x8761000"
+        "adrp x0, $+0x8761000"
     );
     test_display(
         [0x00, 0x3c, 0x43, 0xf9],
@@ -509,19 +508,19 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x02, 0x00, 0x00, 0x90],
-        "adrp x2, 0x0"
+        "adrp x2, $+0x0"
     );
     test_display(
         [0x02, 0x00, 0x80, 0x92],
-        "movn x2, 0x0"
+        "mov x2, 0xffffffffffffffff"
     );
     test_display(
         [0x02, 0x04, 0xf8, 0x97],
-        "bl $+0x7e01008"
+        "bl $-0x1feff8"
     );
     test_display(
         [0x02, 0x2c, 0x80, 0x52],
-        "movz w2, 0x160"
+        "mov w2, 0x160"
     );
     test_display(
         [0x08, 0x00, 0x40, 0xf9],
@@ -537,7 +536,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x08, 0x06, 0xf8, 0x97],
-        "bl $+0x7e01820"
+        "bl $-0x1fe7e0"
     );
     test_display(
         [0x08, 0x09, 0x40, 0xf9],
@@ -585,7 +584,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x08, 0xf2, 0xff, 0x36],
-        "tbz w8, 0x1f, $+0x3fe40"
+        "tbz w8, 0x1f, $-0x1c0"
     );
     test_display(
         [0x09, 0x1f, 0x00, 0x13],
@@ -605,7 +604,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x13, 0x3b, 0x04, 0xb0],
-        "adrp x19, 0x8761000"
+        "adrp x19, $+0x8761000"
     );
     test_display(
         [0x13, 0xfd, 0xdf, 0xc8],
@@ -625,11 +624,11 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x1d, 0x00, 0x80, 0xd2],
-        "movz x29, 0x0"
+        "mov x29, 0x0"
     );
     test_display(
         [0x1e, 0x00, 0x80, 0xd2],
-        "movz x30, 0x0"
+        "mov x30, 0x0"
     );
     test_display(
         [0x1f, 0x00, 0x00, 0x71],
@@ -677,7 +676,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x20, 0x00, 0x80, 0x52],
-        "movz w0, 0x1"
+        "mov w0, 0x1"
     );
     test_display(
         [0x20, 0xb1, 0x8a, 0x9a],
@@ -785,7 +784,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x22, 0x09, 0x80, 0x52],
-        "movz w2, 0x49"
+        "mov w2, 0x49"
     );
     test_display(
         [0x22, 0xb1, 0x96, 0x9a],
@@ -797,7 +796,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x24, 0x01, 0x80, 0x52],
-        "movz w4, 0x9"
+        "mov w4, 0x9"
     );
     test_display(
         [0x26, 0x00, 0x00, 0x14],
@@ -881,7 +880,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x40, 0x7d, 0x80, 0x52],
-        "movz w0, 0x3ea"
+        "mov w0, 0x3ea"
     );
     test_display(
         [0x41, 0x01, 0x00, 0x54],
@@ -905,7 +904,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x42, 0x7d, 0x80, 0x52],
-        "movz w2, 0x3ea"
+        "mov w2, 0x3ea"
     );
     test_display(
         [0x42, 0xc0, 0x1b, 0x91],
@@ -1025,11 +1024,11 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x68, 0x00, 0xf8, 0x36],
-        "tbz w8, 0x1f, $+0x3000c"
+        "tbz w8, 0x1f, $+0xc"
     );
     test_display(
         [0x68, 0x01, 0xf8, 0x37],
-        "tbnz w8, 0x1f, $+0x3002c"
+        "tbnz w8, 0x1f, $+0x2c"
     );
     test_display(
         [0x68, 0x02, 0x00, 0xf9],
@@ -1097,7 +1096,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x82, 0x02, 0x80, 0x52],
-        "movz w2, 0x14"
+        "mov w2, 0x14"
     );
     test_display(
         [0x84, 0x48, 0x46, 0xf9],
@@ -1129,7 +1128,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x94, 0x00, 0xf8, 0x36],
-        "tbz w20, 0x1f, $+0x30010"
+        "tbz w20, 0x1f, $+0x10"
     );
     test_display(
         [0x94, 0x22, 0x0a, 0x91],
@@ -1201,7 +1200,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0xa1, 0x7e, 0x80, 0x52],
-        "movz w1, 0x3f5"
+        "mov w1, 0x3f5"
     );
     test_display(
         [0xa1, 0x83, 0x01, 0xd1],
@@ -1217,11 +1216,11 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0xa2, 0x01, 0x80, 0x52],
-        "movz w2, 0xd"
+        "mov w2, 0xd"
     );
     test_display(
         [0xa2, 0x04, 0x80, 0x52],
-        "movz w2, 0x25"
+        "mov w2, 0x25"
     );
     test_display(
         [0xa2, 0x23, 0x01, 0xd1],
@@ -1229,7 +1228,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0xa2, 0x23, 0x80, 0x52],
-        "movz w2, 0x11d"
+        "mov w2, 0x11d"
     );
     test_display(
         [0xa3, 0xe3, 0x01, 0xd1],
@@ -1385,15 +1384,15 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0xc0, 0x7e, 0x80, 0x52],
-        "movz w0, 0x3f6"
+        "mov w0, 0x3f6"
     );
     test_display(
         [0xc0, 0x80, 0x80, 0x52],
-        "movz w0, 0x406"
+        "mov w0, 0x406"
     );
     test_display(
         [0xc2, 0x47, 0x80, 0x52],
-        "movz w2, 0x23e"
+        "mov w2, 0x23e"
     );
     test_display(
         [0xc9, 0x1e, 0x00, 0x13],
@@ -1409,7 +1408,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0xe0, 0x03, 0x00, 0x32],
-        "orr w0, wzr, 0x1"
+        "mov w0, 0x1"
     );
     test_display(
         [0xe0, 0x03, 0x00, 0x91],
@@ -1417,11 +1416,11 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0xe0, 0x03, 0x1f, 0x32],
-        "orr w0, wzr, 0x2"
+        "mov w0, 0x2"
     );
     test_display(
         [0xe0, 0x07, 0x00, 0x32],
-        "orr w0, wzr, 0x3"
+        "mov w0, 0x3"
     );
     test_display(
         [0xe0, 0x07, 0x00, 0xf9],
@@ -1441,7 +1440,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0xe0, 0x0f, 0x00, 0x32],
-        "orr w0, wzr, 0xf"
+        "mov w0, 0xf"
     );
     test_display(
         [0xe0, 0x0f, 0x40, 0xf9],
@@ -1513,7 +1512,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0xe1, 0x03, 0x1f, 0x32],
-        "orr w1, wzr, 0x2"
+        "mov w1, 0x2"
     );
     test_display(
         [0xe1, 0x03, 0x40, 0xf9],
@@ -1541,7 +1540,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0xe2, 0x07, 0x1d, 0x32],
-        "orr w2, wzr, 0x18"
+        "mov w2, 0x18"
     );
     test_display(
         [0xe2, 0x23, 0x00, 0x91],
@@ -1553,19 +1552,19 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0xe3, 0x03, 0x00, 0x32],
-        "orr w3, wzr, 0x1"
+        "mov w3, 0x1"
     );
     test_display(
         [0xe3, 0x03, 0x1f, 0x32],
-        "orr w3, wzr, 0x2"
+        "mov w3, 0x2"
     );
     test_display(
         [0xe4, 0x07, 0x00, 0x32],
-        "orr w4, wzr, 0x3"
+        "mov w4, 0x3"
     );
     test_display(
         [0xe4, 0x0b, 0x00, 0x32],
-        "orr w4, wzr, 0x7"
+        "mov w4, 0x7"
     );
     test_display(
         [0xe6, 0x03, 0x00, 0x91],
@@ -1573,7 +1572,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0xe8, 0x01, 0xf8, 0x37],
-        "tbnz w8, 0x1f, $+0x3003c"
+        "tbnz w8, 0x1f, $+0x3c"
     );
     test_display(
         [0xe8, 0x02, 0x41, 0xb2],
@@ -1581,7 +1580,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0xe8, 0x03, 0x00, 0x32],
-        "orr w8, wzr, 0x1"
+        "mov w8, 0x1"
     );
     test_display(
         [0xe8, 0x0f, 0x00, 0xf9],
@@ -1653,7 +1652,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0xe9, 0x03, 0x01, 0x32],
-        "orr w9, wzr, 0x80000000"
+        "mov w9, 0x80000000"
     );
     test_display(
         [0xe9, 0x07, 0x40, 0xf9],
@@ -1789,7 +1788,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0xf5, 0x03, 0x00, 0x32],
-        "orr w21, wzr, 0x1"
+        "mov w21, 0x1"
     );
     test_display(
         [0xf5, 0x03, 0x00, 0xf9],
@@ -1797,7 +1796,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0xf5, 0x03, 0x1f, 0x32],
-        "orr w21, wzr, 0x2"
+        "mov w21, 0x2"
     );
     test_display(
         [0xf5, 0x07, 0x00, 0xf9],
@@ -2029,7 +2028,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0xe3, 0x07, 0x00, 0x32],
-        "orr w3, wzr, 0x3"
+        "mov w3, 0x3"
     );
     test_display(
         [0xff, 0xff, 0x01, 0xa9],
@@ -4195,6 +4194,54 @@ fn test_openblas_misc_ops() {
         ([0x00, 0x82, 0x87, 0xf9], "prfm pldl1keep, [x16, 0xf00]"),
     ];
 
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_fmul() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x92, 0x8a, 0x5f], "fmul s0, s16, v10.s[0]"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_fmov_general() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x4b, 0x02, 0x67, 0x9e], "fmov d11, x18"),
+        ([0xfc, 0x03, 0x67, 0x9e], "fmov d28, xzr"),
+        ([0x06, 0x00, 0x66, 0x9e], "fmov x6, d0"),
+        ([0x11, 0x00, 0x66, 0x9e], "fmov x17, d0"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_cvt_general() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0xd8, 0x21, 0x5e], "scvtf s0, s0"),
+        ([0x82, 0xd8, 0x61, 0x5e], "scvtf d2, d4"),
+        ([0x42, 0x78, 0x61, 0x0e], "fcvtl v2.2d, v2.2s"),
+        ([0x63, 0x78, 0x61, 0x0e], "fcvtl v3.2d, v3.2s"),
+    ];
     let errs = run_tests(TESTS);
 
     for err in errs.iter() {
