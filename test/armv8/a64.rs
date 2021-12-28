@@ -4250,3 +4250,20 @@ fn test_cvt_general() {
 
     assert!(errs.is_empty());
 }
+
+#[test]
+fn test_fabd_general() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x20, 0xd4, 0xa0, 0x7e], "fabd s0, s1, s0"),
+        ([0x21, 0xd4, 0xa0, 0x7e], "fabd s1, s1, s0"),
+        ([0xd6, 0xd6, 0xf9, 0x7e], "fabd d22, d22, d25"),
+        ([0x21, 0xd4, 0xfa, 0x7e], "fabd d1, d1, d26"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}

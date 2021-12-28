@@ -1578,6 +1578,9 @@ impl Display for Instruction {
             Opcode::FCVTL => {
                 write!(fmt, "fcvtl");
             }
+            Opcode::FCVTL2 => {
+                write!(fmt, "fcvtl2");
+            }
             Opcode::FCVTNS => {
                 write!(fmt, "fcvtns");
             }
@@ -2177,6 +2180,7 @@ pub enum Opcode {
     FCVTN,
     FCMGT,
     FCVTL,
+    FCVTL2,
     FCVTNS,
     FCVTPS,
     FCVTMS,
@@ -3801,7 +3805,11 @@ impl Decoder<ARMv8> for InstDecoder {
                                         (opc, table[(((size & 1) << 1) | q) as usize]?)
                                     };
 
-                                    inst.opcode = opc;
+                                    if opc == Opcode::FCVTL && q != 0 {
+                                        inst.opcode = Opcode::FCVTL2;
+                                    } else {
+                                        inst.opcode = opc;
+                                    }
                                     inst.operands = [
                                         Operand::SIMDRegisterElements(datasize_a, Rd as u16, elemsize_a),
                                         Operand::SIMDRegisterElements(datasize_b, Rn as u16, elemsize_b),
@@ -4291,7 +4299,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Operand::Nothing,
                                 ];
                             }
-//                            return Err(DecodeError::IncompleteDecoder);
                         } else if (op3 & 0b000_111111) == 0b000_000000 {
                             // op2 = x1xx, op3 = xxx000000
                             // `Conversion between floating-point and fixed-point`
@@ -4829,11 +4836,11 @@ impl Decoder<ARMv8> for InstDecoder {
                                 } else if opcode < 0b11000 {
                                     // TODO: validate operands
                                     const OPCODES_U0_LOW: &[Result<(Opcode, &'static OperandSizeTable), DecodeError>] = &[
-                                        Ok((Opcode::SHADD, TABLE_A)),
-                                        Ok((Opcode::SQADD, TABLE_A)),
-                                        Ok((Opcode::SRHADD, TABLE_A)),
                                         Err(DecodeError::InvalidOpcode),
-                                        Ok((Opcode::SHSUB, TABLE_A)),
+                                        Ok((Opcode::SQADD, TABLE_A)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::SQSUB, TABLE_A)),
                                         Ok((Opcode::CMGT, TABLE_A)),
                                         Ok((Opcode::CMGE, TABLE_A)),
@@ -4841,25 +4848,25 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Ok((Opcode::SQSHL, TABLE_A)),
                                         Ok((Opcode::SRSHL, TABLE_A)),
                                         Ok((Opcode::SQRSHL, TABLE_A)),
-                                        Ok((Opcode::SMAX, TABLE_A)),
-                                        Ok((Opcode::SMIN, TABLE_A)),
-                                        Ok((Opcode::SABD, TABLE_A)),
-                                        Ok((Opcode::SABA, TABLE_A)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::ADD, TABLE_A)),
                                         Ok((Opcode::CMTST, TABLE_A)),
-                                        Ok((Opcode::MLA, TABLE_A)),
-                                        Ok((Opcode::MUL, TABLE_A)),
-                                        Ok((Opcode::SMAXP, TABLE_A)),
-                                        Ok((Opcode::SMINP, TABLE_A)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::SQDMULH, TABLE_A)),
-                                        Ok((Opcode::ADDP, TABLE_A)),
+                                        Err(DecodeError::InvalidOpcode),
                                     ];
                                     const OPCODES_U1_LOW: &[Result<(Opcode, &'static OperandSizeTable), DecodeError>] = &[
-                                        Ok((Opcode::UHADD, TABLE_A)),
-                                        Ok((Opcode::UQADD, TABLE_A)),
-                                        Ok((Opcode::URHADD, TABLE_A)),
                                         Err(DecodeError::InvalidOpcode),
-                                        Ok((Opcode::UHSUB, TABLE_A)),
+                                        Ok((Opcode::UQADD, TABLE_A)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::UQSUB, TABLE_A)),
                                         Ok((Opcode::CMHI, TABLE_A)),
                                         Ok((Opcode::CMHS, TABLE_A)),
@@ -4867,16 +4874,16 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Ok((Opcode::UQSHL, TABLE_A)),
                                         Ok((Opcode::URSHL, TABLE_A)),
                                         Ok((Opcode::UQRSHL, TABLE_A)),
-                                        Ok((Opcode::UMAX, TABLE_A)),
-                                        Ok((Opcode::UMIN, TABLE_A)),
-                                        Ok((Opcode::UABD, TABLE_A)),
-                                        Ok((Opcode::UABA, TABLE_A)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::SUB, TABLE_A)),
                                         Ok((Opcode::CMEQ, TABLE_A)),
-                                        Ok((Opcode::MLS, TABLE_A)),
-                                        Ok((Opcode::PMUL, TABLE_A)),
-                                        Ok((Opcode::UMAXP, TABLE_A)),
-                                        Ok((Opcode::UMINP, TABLE_A)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::SQRDMULH, TABLE_A)),
                                         Err(DecodeError::InvalidOpcode),
                                     ];
@@ -4889,48 +4896,49 @@ impl Decoder<ARMv8> for InstDecoder {
                                     let (va_width, va_elem, vb_width, vb_elem) = table[((size << 1) | q) as usize]?;
                                     inst.opcode = opcode;
                                     inst.operands = [
-                                        Operand::SIMDRegisterElements(va_width, Rd as u16, va_elem),
-                                        Operand::SIMDRegisterElements(vb_width, Rn as u16, vb_elem),
-                                        Operand::SIMDRegisterElements(vb_width, Rm as u16, vb_elem),
+                                        Operand::SIMDRegister(va_elem, Rd as u16),
+                                        Operand::SIMDRegister(vb_elem, Rn as u16),
+                                        Operand::SIMDRegister(vb_elem, Rm as u16),
                                         Operand::Nothing,
                                     ]
                                 } else {
                                     // indexed by ((opcode - 0b11000) << 1) | (size >> 1)
-                                    const OPCODES_U0_HIGH: &[Result<(Opcode, &'static OperandSizeTable), DecodeError>] = &[
-                                        Ok((Opcode::FMAXNM, TABLE_C)),
-                                        Ok((Opcode::FMINNM, TABLE_C)),
-                                        Ok((Opcode::FMLA, TABLE_C)),
-                                        Ok((Opcode::FMLS, TABLE_C)),
-                                        Ok((Opcode::FADD, TABLE_C)),
-                                        Ok((Opcode::FSUB, TABLE_C)),
+                                    const OPCODES_U0_HIGH: &[Result<(Opcode, &'static OperandSizeTable), DecodeError>; 16] = &[
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::FMULX, TABLE_C)),
                                         Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::FCMEQ, TABLE_C)),
                                         Err(DecodeError::InvalidOpcode),
-                                        Ok((Opcode::FMLAL, TABLE_C)), // only if size & 0b01 is 0
-                                        Ok((Opcode::FMLSL, TABLE_C)), // only if size & 0b01 is 0
-                                        Ok((Opcode::FMAX, TABLE_C)),
-                                        Ok((Opcode::FMIN, TABLE_C)),
-                                        Ok((Opcode::FRECPS, TABLE_C)),
-                                        Ok((Opcode::FRSQRTS, TABLE_C)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
                                     ];
-                                    const OPCODES_U1_HIGH: &[Result<(Opcode, &'static OperandSizeTable), DecodeError>] = &[
-                                        Ok((Opcode::FMAXNMP, TABLE_C)),
-                                        Ok((Opcode::FMINNMP, TABLE_C)),
-                                        Ok((Opcode::FMLAL2, TABLE_C)),
-                                        Ok((Opcode::FMLSL2, TABLE_C)),
+                                    const OPCODES_U1_HIGH: &[Result<(Opcode, &'static OperandSizeTable), DecodeError>; 16] = &[
                                         Err(DecodeError::InvalidOpcode),
-                                        Ok((Opcode::FADDP, TABLE_C)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        // 0b11010
+                                        Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::FABD, TABLE_C)),
-                                        Ok((Opcode::FMUL, TABLE_C)),
                                         Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        // 0b11100
                                         Ok((Opcode::FCMGE, TABLE_C)),
                                         Ok((Opcode::FCMGT, TABLE_C)),
                                         Ok((Opcode::FACGE, TABLE_C)),
                                         Ok((Opcode::FACGT, TABLE_C)),
-                                        Ok((Opcode::FMAXP, TABLE_C)),
-                                        Ok((Opcode::FMINP, TABLE_C)),
-                                        Ok((Opcode::FDIV, TABLE_C)),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
+                                        Err(DecodeError::InvalidOpcode),
                                         Err(DecodeError::InvalidOpcode),
                                     ];
                                     let index = ((opcode - 0b11000) << 1) | (size >> 1);
@@ -4944,13 +4952,12 @@ impl Decoder<ARMv8> for InstDecoder {
                                     let (va_width, va_elem, vb_width, vb_elem) = table[(((size & 0b01) << 1) | q) as usize]?;
                                     inst.opcode = opcode;
                                     inst.operands = [
-                                        Operand::SIMDRegisterElements(va_width, Rd as u16, va_elem),
-                                        Operand::SIMDRegisterElements(vb_width, Rn as u16, vb_elem),
-                                        Operand::SIMDRegisterElements(vb_width, Rm as u16, vb_elem),
+                                        Operand::SIMDRegister(va_elem, Rd as u16),
+                                        Operand::SIMDRegister(vb_elem, Rn as u16),
+                                        Operand::SIMDRegister(vb_elem, Rm as u16),
                                         Operand::Nothing,
                                     ]
                                 };
-//                                return Err(DecodeError::IncompleteDecoder);
                             } else {
                                 if op3 & 0b10 == 0b00 {
                                     // `Advanced SIMD scalar three different`
