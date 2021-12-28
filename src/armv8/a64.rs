@@ -1827,6 +1827,84 @@ impl Display for Instruction {
             Opcode::PRFM => {
                 write!(fmt, "prfm");
             }
+            Opcode::AESE => {
+                write!(fmt, "aese");
+            }
+            Opcode::AESD => {
+                write!(fmt, "aesd");
+            }
+            Opcode::AESMC => {
+                write!(fmt, "aesmc");
+            }
+            Opcode::AESIMC => {
+                write!(fmt, "aesimc");
+            }
+            Opcode::SHA1H => {
+                write!(fmt, "sha1h");
+            }
+            Opcode::SHA1SU1 => {
+                write!(fmt, "sha1su1");
+            }
+            Opcode::SHA256SU0 => {
+                write!(fmt, "sha256su0");
+            }
+            Opcode::SM3TT1A => {
+                write!(fmt, "sm3tt1a");
+            }
+            Opcode::SM3TT1B => {
+                write!(fmt, "sm3tt1b");
+            }
+            Opcode::SM3TT2A => {
+                write!(fmt, "sm3tt2a");
+            }
+            Opcode::SM3TT2B => {
+                write!(fmt, "sm3tt2b");
+            }
+            Opcode::SHA512H => {
+                write!(fmt, "sha512h");
+            }
+            Opcode::SHA512H2 => {
+                write!(fmt, "sha512h2");
+            }
+            Opcode::SHA512SU1 => {
+                write!(fmt, "sha512su1");
+            }
+            Opcode::RAX1 => {
+                write!(fmt, "rax1");
+            }
+            Opcode::SM3PARTW1 => {
+                write!(fmt, "sm3partw1");
+            }
+            Opcode::SM3PARTW2 => {
+                write!(fmt, "sm3partw2");
+            }
+            Opcode::SM4EKEY => {
+                write!(fmt, "sm4ekey");
+            }
+            Opcode::BCAX => {
+                write!(fmt, "bcax");
+            }
+            Opcode::SM3SSI => {
+                write!(fmt, "sm3ssi");
+            }
+            Opcode::SHA512SU0 => {
+                write!(fmt, "sha512su0");
+            }
+            Opcode::SM4E => {
+                write!(fmt, "sm4e");
+            }
+            Opcode::EOR3 => {
+                write!(fmt, "eor3");
+            }
+            Opcode::XAR => {
+                write!(fmt, "xar");
+            }
+            Opcode::LDRAA => {
+                write!(fmt, "ldraa");
+            }
+            Opcode::LDRAB => {
+                write!(fmt, "ldrab");
+            }
         };
 
         if self.operands[0] != Operand::Nothing {
@@ -2306,6 +2384,36 @@ pub enum Opcode {
     URSQRTE,
 
     PRFM,
+
+    AESE,
+    AESD,
+    AESMC,
+    AESIMC,
+
+    SHA1H,
+    SHA1SU1,
+    SHA256SU0,
+
+    SM3TT1A,
+    SM3TT1B,
+    SM3TT2A,
+    SM3TT2B,
+    SHA512H,
+    SHA512H2,
+    SHA512SU1,
+    RAX1,
+    SM3PARTW1,
+    SM3PARTW2,
+    SM4EKEY,
+    BCAX,
+    SM3SSI,
+    SHA512SU0,
+    SM4E,
+    EOR3,
+    XAR,
+
+    LDRAA,
+    LDRAB,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -5543,14 +5651,66 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::IncompleteDecoder);
                                     } else if op2 & 0b0111 == 0b0101 && op0 == 0b0101 {
                                         // `Cryptographic two-register SHA`
+                                        let Rd = word & 0b11111;
+                                        let Rn = (word >> 5) & 0b11111;
                                         let opcode = (word >> 12) & 0b11111;
                                         let size = (word >> 22) & 0b11;
-                                        return Err(DecodeError::IncompleteDecoder);
+
+                                        if size != 0b00 {
+                                            return Err(DecodeError::InvalidOpcode);
+                                        }
+
+                                        let opcode = match opcode {
+                                            0b00000 => Opcode::SHA1H,
+                                            0b00001 => Opcode::SHA1SU1,
+                                            0b00010 => Opcode::SHA256SU0,
+                                            _ => {
+                                                return Err(DecodeError::InvalidOpcode);
+                                            }
+                                        };
+                                        inst.opcode = opcode;
+                                        if opcode == Opcode::SHA1H {
+                                            inst.operands = [
+                                                Operand::SIMDRegister(SIMDSizeCode::S, Rd as u16),
+                                                Operand::SIMDRegister(SIMDSizeCode::S, Rn as u16),
+                                                Operand::Nothing,
+                                                Operand::Nothing,
+                                            ];
+                                        } else {
+                                            inst.operands = [
+                                                Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd as u16, SIMDSizeCode::S),
+                                                Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn as u16, SIMDSizeCode::S),
+                                                Operand::Nothing,
+                                                Operand::Nothing,
+                                            ];
+                                        }
                                     } else if op2 & 0b0111 == 0b0101 && op0 == 0b0100 {
                                         // `Cryptographic AES`
+                                        let Rd = word & 0b11111;
+                                        let Rn = (word >> 5) & 0b11111;
                                         let opcode = (word >> 12) & 0b11111;
                                         let size = (word >> 22) & 0b11;
-                                        return Err(DecodeError::IncompleteDecoder);
+
+                                        if size != 0b00 {
+                                            return Err(DecodeError::InvalidOpcode);
+                                        }
+
+                                        let opcode = match opcode {
+                                            0b00100 => Opcode::AESE,
+                                            0b00101 => Opcode::AESD,
+                                            0b00110 => Opcode::AESMC,
+                                            0b00111 => Opcode::AESIMC,
+                                            _ => {
+                                                return Err(DecodeError::InvalidOpcode);
+                                            }
+                                        };
+                                        inst.opcode = opcode;
+                                        inst.operands = [
+                                            Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd as u16, SIMDSizeCode::B),
+                                            Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn as u16, SIMDSizeCode::B),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
                                     } else {
                                         // unallocated
                                         return Err(DecodeError::InvalidOpcode);
@@ -5852,9 +6012,181 @@ impl Decoder<ARMv8> for InstDecoder {
                             }
                         }
                     }
+                } else if op0 == 0b1100 {
+                    let Rd = (word & 0b11111) as u16;
+                    let Rn = ((word >> 5) & 0b11111) as u16;
+
+                    if op1 == 0b00 {
+                        if op2 & 0b1100 == 0b1000 {
+                            // `Cryptographic three-register, imm2`
+                            let Rm = ((word >> 16) & 0b11111) as u16;
+                            let opcode = (word >> 10) & 0b11;
+                            let imm2 = (word >> 12) & 0b11;
+
+                            inst.opcode = [
+                                Opcode::SM3TT1A,
+                                Opcode::SM3TT1B,
+                                Opcode::SM3TT2A,
+                                Opcode::SM3TT2B,
+                            ][opcode as usize];
+
+                            inst.operands = [
+                                Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd, SIMDSizeCode::S),
+                                Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn, SIMDSizeCode::S),
+                                Operand::SIMDRegisterElementsLane(SIMDSizeCode::Q, Rn, SIMDSizeCode::S, imm2 as u8),
+                                Operand::Nothing,
+                            ];
+                        } else if op2 & 0b1100 == 0b1100 {
+                            // `Cryptographic three-register SHA512`
+                            let Rm = ((word >> 16) & 0b11111) as u16;
+                            let opcode = (word >> 10) & 0b11;
+                            let O = (word >> 14) & 0b1;
+                            let Oop = (O << 2) | opcode;
+
+                            match Oop {
+                                0b000 => {
+                                    inst.opcode = Opcode::SHA512H;
+                                    inst.operands = [
+                                        Operand::SIMDRegister(SIMDSizeCode::Q, Rd),
+                                        Operand::SIMDRegister(SIMDSizeCode::Q, Rn),
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rm, SIMDSizeCode::D),
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                0b001 => {
+                                    inst.opcode = Opcode::SHA512H2;
+                                    inst.operands = [
+                                        Operand::SIMDRegister(SIMDSizeCode::Q, Rd),
+                                        Operand::SIMDRegister(SIMDSizeCode::Q, Rn),
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rm, SIMDSizeCode::D),
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                0b010 => {
+                                    inst.opcode = Opcode::SHA512SU1;
+                                    inst.operands = [
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd, SIMDSizeCode::D),
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn, SIMDSizeCode::D),
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rm, SIMDSizeCode::D),
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                0b011 => {
+                                    inst.opcode = Opcode::RAX1;
+                                    inst.operands = [
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd, SIMDSizeCode::D),
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn, SIMDSizeCode::D),
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rm, SIMDSizeCode::D),
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                0b100 => {
+                                    inst.opcode = Opcode::SM3PARTW1;
+                                    inst.operands = [
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd, SIMDSizeCode::S),
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn, SIMDSizeCode::S),
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rm, SIMDSizeCode::S),
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                0b101 => {
+                                    inst.opcode = Opcode::SM3PARTW2;
+                                    inst.operands = [
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd, SIMDSizeCode::S),
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn, SIMDSizeCode::S),
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rm, SIMDSizeCode::S),
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                0b110 => {
+                                    inst.opcode = Opcode::SM4EKEY;
+                                    inst.operands = [
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd, SIMDSizeCode::S),
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn, SIMDSizeCode::S),
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rm, SIMDSizeCode::S),
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                _ => {
+                                    return Err(DecodeError::InvalidOpcode);
+                                }
+                            }
+                        } else {
+                            // `Cryptographic four-register`
+                            let Ra = ((word >> 10) & 0b11111) as u16;
+                            let Rm = ((word >> 16) & 0b11111) as u16;
+                            let Op0 = (word >> 21) & 0b11;
+
+                            if Op0 == 0b00 {
+                                inst.opcode = Opcode::EOR3;
+                                inst.operands = [
+                                    Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd, SIMDSizeCode::B),
+                                    Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn, SIMDSizeCode::B),
+                                    Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rm, SIMDSizeCode::B),
+                                    Operand::SIMDRegisterElements(SIMDSizeCode::Q, Ra, SIMDSizeCode::B),
+                                ];
+                            } else if Op0 == 0b01 {
+                                inst.opcode = Opcode::BCAX;
+                                inst.operands = [
+                                    Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd, SIMDSizeCode::B),
+                                    Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn, SIMDSizeCode::B),
+                                    Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rm, SIMDSizeCode::B),
+                                    Operand::SIMDRegisterElements(SIMDSizeCode::Q, Ra, SIMDSizeCode::B),
+                                ];
+                            } else if Op0 == 0b10 {
+                                inst.opcode = Opcode::SM3SSI;
+                                inst.operands = [
+                                    Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd, SIMDSizeCode::S),
+                                    Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn, SIMDSizeCode::S),
+                                    Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rm, SIMDSizeCode::S),
+                                    Operand::SIMDRegisterElements(SIMDSizeCode::Q, Ra, SIMDSizeCode::S),
+                                ];
+                            } else {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+                        }
+                    } else if op1 == 0b01 {
+                        if op2 & 0b1100 == 0b0000 {
+                            let imm6 = ((word >> 10) & 0b111111) as u16;
+                            let Rm = ((word >> 16) & 0b11111) as u16;
+
+                            inst.opcode = Opcode::XAR;
+                            inst.operands = [
+                                Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd, SIMDSizeCode::D),
+                                Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn, SIMDSizeCode::D),
+                                Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rm, SIMDSizeCode::D),
+                                Operand::Imm16(imm6 as u16),
+                            ];
+                            // `XAR`
+                        } else {
+                            // `Cryptographic two-register sha512`
+                            let opcode = (word >> 10) & 0b11;
+                            if opcode == 0b00 {
+                                inst.opcode = Opcode::SHA512SU0;
+                                inst.operands = [
+                                    Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd, SIMDSizeCode::D),
+                                    Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn, SIMDSizeCode::D),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else if opcode == 0b01 {
+                                inst.opcode = Opcode::SM4E;
+                                inst.operands = [
+                                    Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd, SIMDSizeCode::S),
+                                    Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn, SIMDSizeCode::S),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+                        }
+                    } else {
+                        return Err(DecodeError::InvalidOpcode);
+                    }
                 } else {
-                    // op0 != 0xx0, op0 != x0x1
-                    return Err(DecodeError::IncompleteDecoder);
+                    // rest of this space is unallocated
+                    return Err(DecodeError::InvalidOpcode);
                 }
             }
             Section::Unallocated => {
@@ -7410,14 +7742,38 @@ impl Decoder<ARMv8> for InstDecoder {
                             match category {
                                 0b00 => {
                                     // Atomic memory operations
-                                    // V==1
+                                    // V==0
                                     return Err(DecodeError::IncompleteDecoder);
                                 }
                                 0b01 |
                                 0b11 => {
                                     // Load/store register (pac)
-                                    // V==1
-                                    return Err(DecodeError::IncompleteDecoder);
+                                    // V==0
+                                    let w = (word >> 11) & 1;
+                                    let imm9 = ((word >> 12) & 0b1_1111_1111) as i16;
+                                    let imm9 = (imm9 << 7) >> 7;
+                                    let m = (word >> 23) & 1;
+                                    let size = (word >> 30) & 0b11;
+                                    if size != 0b11 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+
+                                    if m == 0 {
+                                        inst.opcode = Opcode::LDRAA;
+                                    } else {
+                                        inst.opcode = Opcode::LDRAB;
+                                    }
+
+                                    inst.operands = [
+                                        Operand::Register(SizeCode::X, Rt),
+                                        if w == 0 {
+                                            Operand::RegOffset(Rn, imm9)
+                                        } else {
+                                            Operand::RegPreIndex(Rn, imm9 as i32, true)
+                                        },
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
                                 }
                                 0b10 => {
                                     // Load/store register (register offset)
