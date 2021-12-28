@@ -4303,3 +4303,19 @@ fn test_indexed() {
 
     assert!(errs.is_empty());
 }
+
+#[test]
+fn test_simd_abs() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0xf8, 0xa0, 0x0e], "fabs v0.2s, v0.2s"),
+        ([0x21, 0xf8, 0xa0, 0x4e], "fabs v1.4s, v1.4s"),
+        ([0xf7, 0xc3, 0x60, 0x1e], "fabs d23, d31"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}

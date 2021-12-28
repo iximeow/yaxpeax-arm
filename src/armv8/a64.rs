@@ -3825,6 +3825,13 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Err(DecodeError::InvalidOperand), Ok((Q, D, Q, D)),
                                 ];
 
+                                const TABLE_I: &'static OperandSizeTable = &[
+                                    Ok((D, S, D, S)), Ok((Q, S, Q, S)),
+                                    Err(DecodeError::InvalidOperand), Ok((Q, D, Q, D)),
+                                    Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
+                                    Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
+                                ];
+
                                 if op2 & 0b0111 == 0b0100 {
                                     // `Advanced SIMD two-register miscellaneous`
                                     const OPCODES_U0_LOW: &[Result<(Opcode, &'static OperandSizeTable), DecodeError>; 20] = &[
@@ -3840,11 +3847,11 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Ok((Opcode::CMEQ, TABLE_D)),
                                         Ok((Opcode::CMLT, TABLE_D)),
                                         Ok((Opcode::ABS, TABLE_D)),
-                                        // 0b01100
-                                        Err(DecodeError::InvalidOpcode),
-                                        Err(DecodeError::InvalidOpcode),
-                                        Err(DecodeError::InvalidOpcode),
-                                        Err(DecodeError::InvalidOpcode),
+                                        // 0b01100, all four size=1x
+                                        Ok((Opcode::FCMGT, TABLE_I)),
+                                        Ok((Opcode::FCMEQ, TABLE_I)),
+                                        Ok((Opcode::FCMLT, TABLE_I)),
+                                        Ok((Opcode::FABS, TABLE_I)),
                                         // 0b10000
                                         Err(DecodeError::InvalidOpcode),
                                         Err(DecodeError::InvalidOpcode),
@@ -3896,11 +3903,11 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Ok((Opcode::CMLE, TABLE_D)),
                                         Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::NEG, TABLE_D)),
-                                        // 0b01100
+                                        // 0b01100, all four size=1x
+                                        Ok((Opcode::FCMGE, TABLE_I)),
+                                        Ok((Opcode::FCMLE, TABLE_I)),
                                         Err(DecodeError::InvalidOpcode),
-                                        Err(DecodeError::InvalidOpcode),
-                                        Err(DecodeError::InvalidOpcode),
-                                        Err(DecodeError::InvalidOpcode),
+                                        Ok((Opcode::FNEG, TABLE_I)),
                                         // 0b10000
                                         Err(DecodeError::InvalidOpcode),
                                         Err(DecodeError::InvalidOpcode),
