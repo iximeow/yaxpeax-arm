@@ -124,7 +124,7 @@ fn test_decode_misc() {
             opcode: Opcode::ADRP,
             operands: [
                 Operand::Register(SizeCode::X, 2),
-                Operand::Immediate(0x8725000),
+                Operand::Offset(0x8725000),
                 Operand::Nothing,
                 Operand::Nothing
             ]
@@ -140,11 +140,11 @@ fn test_decode_misc() {
     );
     test_display(
         [0x1d, 0xff, 0xff, 0xd2],
-        "mov x29, 0xfff8, lsl 48"
+        "mov x29, 0xfff8000000000000"
     );
     test_display(
         [0x22, 0x39, 0x04, 0xb0],
-        "adrp x2, 0x8725000"
+        "adrp x2, $+0x8725000"
     );
 }
 
