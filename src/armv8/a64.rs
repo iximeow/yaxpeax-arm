@@ -5806,13 +5806,10 @@ impl Decoder<ARMv8> for InstDecoder {
                                             (SIMDSizeCode::S, ((immh & 0b0011) << 4)| immb)
                                         }
                                         0 => {
-                                            if !Q {
-                                                return Err(DecodeError::InvalidOperand);
-                                            } else {
-                                                // `Advanced SIMD modified immediate`
-                                                return Err(DecodeError::IncompleteDecoder);
-                                            }
-                                            (SIMDSizeCode::D, ((immh & 0b0111) << 4)| immb)
+                                            // the +q version of this check would be `Advanced SIMD
+                                            // modified immediate`, checked well before we got
+                                            // here. so assume q is 0, error.
+                                            return Err(DecodeError::InvalidOperand);
                                         }
                                         _ => {
                                             return Err(DecodeError::InvalidOperand);
