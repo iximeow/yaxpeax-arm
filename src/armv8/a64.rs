@@ -765,8 +765,8 @@ impl Display for Instruction {
             Opcode::MSRb(a) => {
                 write!(fmt, "msr(b) {:#x}", a)?;
             }
-            Opcode::MRS(v) => {
-                write!(fmt, "mrs({:#x})", v)?;
+            Opcode::MRS => {
+                write!(fmt, "mrs")?;
             }
             Opcode::SYS => {
                 write!(fmt, "sys")?;
@@ -1933,7 +1933,7 @@ pub enum Opcode {
     DRPS,
     MSRa(u8, u8),
     MSRb(u32),
-    MRS(u32),
+    MRS,
     SYS,
     SYSL,
     ISB,
@@ -2321,6 +2321,7 @@ pub enum Operand {
     RegPostIndex(u16, i32),
     RegPostIndexReg(u16, u16),
     PrefetchOp(u16),
+    SystemReg(u16),
 }
 
 impl Display for Operand {
@@ -2363,6 +2364,15 @@ impl Display for Operand {
                         ["l1", "l2", "l3"][target as usize],
                         ["keep", "strm"][policy as usize],
                     )
+                }
+            }
+            Operand::SystemReg(reg) => {
+                // TODO: look up system register names better
+                match reg {
+                    0x4000 => fmt.write_str("midr_el1"),
+                    0x5e82 => fmt.write_str("tpidr_el0"),
+                    0x5f02 => fmt.write_str("cntvct_el0"),
+                    _ => write!(fmt, "sysreg:{:x}", reg),
                 }
             }
             Operand::SIMDRegister(size, reg) => {
@@ -8585,7 +8595,15 @@ impl Decoder<ARMv8> for InstDecoder {
                                 }
                                 0b110 |
                                 0b111 => {
-                                    inst.opcode = Opcode::MRS(word & 0x0fffff);
+                                    let Rt = word & 0b11111;
+                                    let systemreg = (word >> 5) & 0b1_111_1111_1111_111;
+                                    inst.opcode = Opcode::MRS;
+                                    inst.operands = [
+                                        Operand::Register(SizeCode::X, Rt as u16),
+                                        Operand::SystemReg(systemreg as u16),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
                                 }
                                 _ => {
                                     inst.opcode = Opcode::Invalid;
