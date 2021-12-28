@@ -4267,3 +4267,19 @@ fn test_fabd_general() {
 
     assert!(errs.is_empty());
 }
+
+#[test]
+fn test_ext() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0xa5, 0x40, 0x05, 0x6e], "ext v5.16b, v5.16b, v5.16b, 0x8"),
+        ([0xc7, 0x40, 0x06, 0x6e], "ext v7.16b, v6.16b, v6.16b, 0x8"),
+        ([0xc7, 0x20, 0x06, 0x2e], "ext v7.8b, v6.8b, v6.8b, 0x4"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}

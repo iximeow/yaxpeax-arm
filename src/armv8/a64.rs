@@ -4138,11 +4138,11 @@ impl Decoder<ARMv8> for InstDecoder {
                                     }
                                 }
                             } else {
-                                if op3 & 0b000100001 == 0b000000001 && op0 & 0b1011 == 0b0010 {
+                                if op3 & 0b000100001 == 0b000000000 && op0 & 0b1011 == 0b0010 {
                                     // `Advanced SIMD extract`
                                     let Rd = (word >> 0) & 0b11111;
-                                    let Rn = (word >> 6) & 0b11111;
-                                    let imm4 = (word >> 11) & 0b111;
+                                    let Rn = (word >> 5) & 0b11111;
+                                    let imm4 = (word >> 11) & 0b1111;
                                     let Rm = (word >> 16) & 0b11111;
                                     let op2 = (word >> 22) & 0b11;
                                     let Q = (word >> 30) & 1 == 1;
