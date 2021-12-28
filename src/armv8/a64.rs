@@ -7513,7 +7513,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::STUR, SizeCode::X)),
                                         Ok((Opcode::LDUR, SizeCode::X)),
-                                        Err(DecodeError::IncompleteDecoder), // PRFM is not supported yet
+                                        Ok((Opcode::PRFM, SizeCode::X)),
                                         Err(DecodeError::InvalidOpcode),
                                     ];
 
@@ -7521,7 +7521,11 @@ impl Decoder<ARMv8> for InstDecoder {
                                     inst.opcode = opcode;
 
                                     inst.operands = [
-                                        Operand::Register(size, Rt),
+                                        if size_opc == 0b1110 {
+                                            Operand::PrefetchOp(Rt)
+                                        } else {
+                                            Operand::Register(size, Rt)
+                                        },
                                         Operand::RegOffset(Rn, imm9),
                                         Operand::Nothing,
                                         Operand::Nothing,
