@@ -1905,6 +1905,438 @@ impl Display for Instruction {
             Opcode::LDRAB => {
                 write!(fmt, "ldrab");
             }
+            Opcode::LDAPRH(ar) => {
+                let inst = if ar == 0 {
+                    "ldaprh"
+                } else if ar == 0b01 {
+                    "ldaprlh"
+                } else if ar == 0b10 {
+                    "ldaprah"
+                } else {
+                    "ldapralh"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::SWP(ar) => {
+                let inst = if ar == 0 {
+                    "swp"
+                } else if ar == 0b01 {
+                    "swlp"
+                } else if ar == 0b10 {
+                    "swap"
+                } else {
+                    "swalp"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::SWPB(ar) => {
+                let inst = if ar == 0 {
+                    "swpb"
+                } else if ar == 0b01 {
+                    "swplb"
+                } else if ar == 0b10 {
+                    "swpab"
+                } else {
+                    "swpalb"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::SWPH(ar) => {
+                let inst = if ar == 0 {
+                    "swph"
+                } else if ar == 0b01 {
+                    "swplh"
+                } else if ar == 0b10 {
+                    "swpah"
+                } else {
+                    "swpalh"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDADDB(ar) => {
+                let inst = if ar == 0 {
+                    "ldaddb"
+                } else if ar == 0b01 {
+                    "ldaddlb"
+                } else if ar == 0b10 {
+                    "ldaddab"
+                } else {
+                    "ldaddalb"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDCLRB(ar) => {
+                let inst = if ar == 0 {
+                    "ldclrb"
+                } else if ar == 0b01 {
+                    "ldclrlb"
+                } else if ar == 0b10 {
+                    "ldclrab"
+                } else {
+                    "ldclralb"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDEORB(ar) => {
+                let inst = if ar == 0 {
+                    "ldeorb"
+                } else if ar == 0b01 {
+                    "ldeorlb"
+                } else if ar == 0b10 {
+                    "ldeorab"
+                } else {
+                    "ldeoralb"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDSETB(ar) => {
+                let inst = if ar == 0 {
+                    "ldsetb"
+                } else if ar == 0b01 {
+                    "ldsetlb"
+                } else if ar == 0b10 {
+                    "ldsetab"
+                } else {
+                    "ldsetalb"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDSMAXB(ar) => {
+                let inst = if ar == 0 {
+                    "ldsmaxb"
+                } else if ar == 0b01 {
+                    "ldsmaxlb"
+                } else if ar == 0b10 {
+                    "ldsmaxab"
+                } else {
+                    "ldsmaxalb"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDSMINB(ar) => {
+                let inst = if ar == 0 {
+                    "ldsminb"
+                } else if ar == 0b01 {
+                    "ldsminlb"
+                } else if ar == 0b10 {
+                    "ldsminab"
+                } else {
+                    "ldsminalb"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDUMAXB(ar) => {
+                let inst = if ar == 0 {
+                    "ldumaxb"
+                } else if ar == 0b01 {
+                    "ldumaxlb"
+                } else if ar == 0b10 {
+                    "ldumaxab"
+                } else {
+                    "ldumaxalb"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDUMINB(ar) => {
+                let inst = if ar == 0 {
+                    "lduminb"
+                } else if ar == 0b01 {
+                    "lduminlb"
+                } else if ar == 0b10 {
+                    "lduminab"
+                } else {
+                    "lduminalb"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDADDH(ar) => {
+                let inst = if ar == 0 {
+                    "ldaddh"
+                } else if ar == 0b01 {
+                    "ldaddlh"
+                } else if ar == 0b10 {
+                    "ldaddah"
+                } else {
+                    "ldaddalh"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDCLRH(ar) => {
+                let inst = if ar == 0 {
+                    "ldclrh"
+                } else if ar == 0b01 {
+                    "ldclrlh"
+                } else if ar == 0b10 {
+                    "ldclrah"
+                } else {
+                    "ldclralh"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDEORH(ar) => {
+                let inst = if ar == 0 {
+                    "ldeorh"
+                } else if ar == 0b01 {
+                    "ldeorlh"
+                } else if ar == 0b10 {
+                    "ldeorah"
+                } else {
+                    "ldeoralh"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDSETH(ar) => {
+                let inst = if ar == 0 {
+                    "ldseth"
+                } else if ar == 0b01 {
+                    "ldsetlh"
+                } else if ar == 0b10 {
+                    "ldsetah"
+                } else {
+                    "ldsetalh"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDSMAXH(ar) => {
+                let inst = if ar == 0 {
+                    "ldsmaxh"
+                } else if ar == 0b01 {
+                    "ldsmaxlh"
+                } else if ar == 0b10 {
+                    "ldsmaxah"
+                } else {
+                    "ldsmaxalh"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDSMINH(ar) => {
+                let inst = if ar == 0 {
+                    "ldsminh"
+                } else if ar == 0b01 {
+                    "ldsminlh"
+                } else if ar == 0b10 {
+                    "ldsminah"
+                } else {
+                    "ldsminalh"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDUMAXH(ar) => {
+                let inst = if ar == 0 {
+                    "ldumaxh"
+                } else if ar == 0b01 {
+                    "ldumaxlh"
+                } else if ar == 0b10 {
+                    "ldumaxah"
+                } else {
+                    "ldumaxalh"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDUMINH(ar) => {
+                let inst = if ar == 0 {
+                    "lduminh"
+                } else if ar == 0b01 {
+                    "lduminlh"
+                } else if ar == 0b10 {
+                    "lduminah"
+                } else {
+                    "lduminalh"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDADD(ar) => {
+                let inst = if ar == 0 {
+                    "ldadd"
+                } else if ar == 0b01 {
+                    "ldaddl"
+                } else if ar == 0b10 {
+                    "ldadda"
+                } else {
+                    "ldaddal"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDCLR(ar) => {
+                let inst = if ar == 0 {
+                    "ldclr"
+                } else if ar == 0b01 {
+                    "ldclrl"
+                } else if ar == 0b10 {
+                    "ldclra"
+                } else {
+                    "ldclral"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDEOR(ar) => {
+                let inst = if ar == 0 {
+                    "ldeor"
+                } else if ar == 0b01 {
+                    "ldeorl"
+                } else if ar == 0b10 {
+                    "ldeora"
+                } else {
+                    "ldeoral"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDSET(ar) => {
+                let inst = if ar == 0 {
+                    "ldset"
+                } else if ar == 0b01 {
+                    "ldsetl"
+                } else if ar == 0b10 {
+                    "ldseta"
+                } else {
+                    "ldsetal"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDSMAX(ar) => {
+                let inst = if ar == 0 {
+                    "ldsmax"
+                } else if ar == 0b01 {
+                    "ldsmaxl"
+                } else if ar == 0b10 {
+                    "ldsmaxa"
+                } else {
+                    "ldsmaxal"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDSMIN(ar) => {
+                let inst = if ar == 0 {
+                    "ldsmin"
+                } else if ar == 0b01 {
+                    "ldsminl"
+                } else if ar == 0b10 {
+                    "ldsmina"
+                } else {
+                    "ldsminal"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDUMAX(ar) => {
+                let inst = if ar == 0 {
+                    "ldumax"
+                } else if ar == 0b01 {
+                    "ldumaxl"
+                } else if ar == 0b10 {
+                    "ldumaxa"
+                } else {
+                    "ldumaxal"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDUMIN(ar) => {
+                let inst = if ar == 0 {
+                    "ldumin"
+                } else if ar == 0b01 {
+                    "lduminl"
+                } else if ar == 0b10 {
+                    "ldumina"
+                } else {
+                    "lduminal"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDADD(ar) => {
+                let inst = if ar == 0 {
+                    "ldadd"
+                } else if ar == 0b01 {
+                    "ldaddl"
+                } else if ar == 0b10 {
+                    "ldadda"
+                } else {
+                    "ldaddal"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDCLR(ar) => {
+                let inst = if ar == 0 {
+                    "ldclr"
+                } else if ar == 0b01 {
+                    "ldclrl"
+                } else if ar == 0b10 {
+                    "ldclra"
+                } else {
+                    "ldclral"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDEOR(ar) => {
+                let inst = if ar == 0 {
+                    "ldeor"
+                } else if ar == 0b01 {
+                    "ldeorl"
+                } else if ar == 0b10 {
+                    "ldeora"
+                } else {
+                    "ldeoral"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDSET(ar) => {
+                let inst = if ar == 0 {
+                    "ldset"
+                } else if ar == 0b01 {
+                    "ldsetl"
+                } else if ar == 0b10 {
+                    "ldseta"
+                } else {
+                    "ldsetal"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDSMAX(ar) => {
+                let inst = if ar == 0 {
+                    "ldsmax"
+                } else if ar == 0b01 {
+                    "ldsmaxl"
+                } else if ar == 0b10 {
+                    "ldsmaxa"
+                } else {
+                    "ldsmaxal"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDSMIN(ar) => {
+                let inst = if ar == 0 {
+                    "ldsmin"
+                } else if ar == 0b01 {
+                    "ldsminl"
+                } else if ar == 0b10 {
+                    "ldsmina"
+                } else {
+                    "ldsminal"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDUMAX(ar) => {
+                let inst = if ar == 0 {
+                    "ldumax"
+                } else if ar == 0b01 {
+                    "ldumaxl"
+                } else if ar == 0b10 {
+                    "ldumaxa"
+                } else {
+                    "ldumaxal"
+                };
+                fmt.write_str(inst);
+            }
+            Opcode::LDUMIN(ar) => {
+                let inst = if ar == 0 {
+                    "ldumin"
+                } else if ar == 0b01 {
+                    "lduminl"
+                } else if ar == 0b10 {
+                    "ldumina"
+                } else {
+                    "lduminal"
+                };
+                fmt.write_str(inst);
+            }
         };
 
         if self.operands[0] != Operand::Nothing {
@@ -2414,6 +2846,35 @@ pub enum Opcode {
 
     LDRAA,
     LDRAB,
+
+    LDAPRH(u8),
+    SWP(u8),
+    SWPB(u8),
+    SWPH(u8),
+    LDADDB(u8),
+    LDCLRB(u8),
+    LDEORB(u8),
+    LDSETB(u8),
+    LDSMAXB(u8),
+    LDSMINB(u8),
+    LDUMAXB(u8),
+    LDUMINB(u8),
+    LDADDH(u8),
+    LDCLRH(u8),
+    LDEORH(u8),
+    LDSETH(u8),
+    LDSMAXH(u8),
+    LDSMINH(u8),
+    LDUMAXH(u8),
+    LDUMINH(u8),
+    LDADD(u8),
+    LDCLR(u8),
+    LDEOR(u8),
+    LDSET(u8),
+    LDSMAX(u8),
+    LDSMIN(u8),
+    LDUMAX(u8),
+    LDUMIN(u8),
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -7826,7 +8287,102 @@ impl Decoder<ARMv8> for InstDecoder {
                                 0b00 => {
                                     // Atomic memory operations
                                     // V==0
-                                    return Err(DecodeError::IncompleteDecoder);
+
+                                    // A and R bits mean... "acquire" and "release"
+                                    let sz = (word >> 30) & 0b11;
+                                    let ar = ((word >> 22) & 0b11) as u8;
+                                    let o3 = (word >> 15) & 1;
+                                    let opcode = (word >> 12) & 0b111;
+                                    let Rs = (word >> 16) & 0b11111;
+
+                                    let size = if sz == 0b11 {
+                                        SizeCode::X
+                                    } else {
+                                        SizeCode::W
+                                    };
+
+                                    if o3 == 0 {
+                                        let opc = match (sz << 3) | opcode {
+                                            0b00_000 => Opcode::LDADDB(ar),
+                                            0b00_001 => Opcode::LDCLRB(ar),
+                                            0b00_010 => Opcode::LDEORB(ar),
+                                            0b00_011 => Opcode::LDSETB(ar),
+                                            0b00_100 => Opcode::LDSMAXB(ar),
+                                            0b00_101 => Opcode::LDSMINB(ar),
+                                            0b00_110 => Opcode::LDUMAXB(ar),
+                                            0b00_111 => Opcode::LDUMINB(ar),
+                                            0b01_000 => Opcode::LDADDH(ar),
+                                            0b01_001 => Opcode::LDCLRH(ar),
+                                            0b01_010 => Opcode::LDEORH(ar),
+                                            0b01_011 => Opcode::LDSETH(ar),
+                                            0b01_100 => Opcode::LDSMAXH(ar),
+                                            0b01_101 => Opcode::LDSMINH(ar),
+                                            0b01_110 => Opcode::LDUMAXH(ar),
+                                            0b01_111 => Opcode::LDUMINH(ar),
+                                            0b10_000 => Opcode::LDADD(ar),
+                                            0b10_001 => Opcode::LDCLR(ar),
+                                            0b10_010 => Opcode::LDEOR(ar),
+                                            0b10_011 => Opcode::LDSET(ar),
+                                            0b10_100 => Opcode::LDSMAX(ar),
+                                            0b10_101 => Opcode::LDSMIN(ar),
+                                            0b10_110 => Opcode::LDUMAX(ar),
+                                            0b10_111 => Opcode::LDUMIN(ar),
+                                            0b11_000 => Opcode::LDADD(ar),
+                                            0b11_001 => Opcode::LDCLR(ar),
+                                            0b11_010 => Opcode::LDEOR(ar),
+                                            0b11_011 => Opcode::LDSET(ar),
+                                            0b11_100 => Opcode::LDSMAX(ar),
+                                            0b11_101 => Opcode::LDSMIN(ar),
+                                            0b11_110 => Opcode::LDUMAX(ar),
+                                            0b11_111 => Opcode::LDUMIN(ar),
+                                            _ => { unreachable!("sz|opc is 5 bits") }
+                                        };
+                                        inst.opcode = opc;
+                                        inst.operands = [
+                                            Operand::Register(size, Rs as u16),
+                                            Operand::Register(size, Rt as u16),
+                                            Operand::RegOffset(Rn, 0),
+                                            Operand::Nothing,
+                                        ];
+                                    } else {
+                                        if opcode == 0b000 {
+                                            inst.opcode = if sz == 0b00 {
+                                                Opcode::SWPB(ar)
+                                            } else if sz == 0b01 {
+                                                Opcode::SWPH(ar)
+                                            } else if sz == 0b10 {
+                                                Opcode::SWP(ar)
+                                            } else {
+                                                Opcode::SWP(ar)
+                                            };
+
+                                            inst.operands = [
+                                                Operand::Register(size, Rs as u16),
+                                                Operand::Register(size, Rt as u16),
+                                                Operand::RegOffset(Rn, 0),
+                                                Operand::Nothing,
+                                            ];
+                                        } else if opcode == 0b100 {
+                                            inst.opcode = if sz == 0b01 {
+                                                Opcode::LDAPRH(ar)
+                                            } else if sz == 0b00 {
+                                                return Err(DecodeError::InvalidOpcode);
+                                            } else {
+                                                // sz = 1x
+                                                Opcode::LDAPRH(ar)
+                                            };
+
+                                            // TOOD: should_is_must, Rs = 11111
+                                            inst.operands = [
+                                                Operand::Register(size, Rt as u16),
+                                                Operand::RegOffset(Rn, 0),
+                                                Operand::Nothing,
+                                                Operand::Nothing,
+                                            ];
+                                        } else {
+                                            return Err(DecodeError::InvalidOpcode);
+                                        }
+                                    }
                                 }
                                 0b01 |
                                 0b11 => {
