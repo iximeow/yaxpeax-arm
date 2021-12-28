@@ -3089,26 +3089,174 @@ impl Decoder<ARMv8> for InstDecoder {
                                     return Err(DecodeError::InvalidOpcode);
                                 }
                                 0b0_0000 => {
-                                    if size < 0b10 {
+                                    // FMLAL
+                                    if size != 0b10 {
                                         return Err(DecodeError::InvalidOpcode);
                                     }
-                                    // FMLAL
-                                }
-                                0b0_0001 => {
-                                    // TODO:
-                                    // FMLA (not size=0b01)
+                                    if (word >> 29 & 1) == 0 {
+                                        inst.opcode = Opcode::FMLAL;
+                                    } else {
+                                        inst.opcode = Opcode::FMLAL2;
+                                    }
+
+                                    let index = (H << 2) | (L << 1) | M;
+
+                                    let datasize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
+
+                                    inst.operands = [
+                                        Operand::SIMDRegisterElements(datasize, Rd as u16, SIMDSizeCode::S),
+                                        Operand::SIMDRegisterElements(datasize, Rn as u16, SIMDSizeCode::H),
+                                        Operand::SIMDRegisterElementsLane(SIMDSizeCode::Q, Rm as u16, SIMDSizeCode::H, index as u8),
+                                        Operand::Nothing,
+                                    ];
                                 }
                                 0b0_0100 => {
-                                    // TODO:
-                                    // FMLSL (not size<0b10)
+                                    // FMLSL
+                                    if size != 0b10 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                    if (word >> 29 & 1) == 0 {
+                                        inst.opcode = Opcode::FMLSL;
+                                    } else {
+                                        inst.opcode = Opcode::FMLSL2;
+                                    }
+
+                                    let index = (H << 2) | (L << 1) | M;
+
+                                    let datasize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
+
+                                    inst.operands = [
+                                        Operand::SIMDRegisterElements(datasize, Rd as u16, SIMDSizeCode::S),
+                                        Operand::SIMDRegisterElements(datasize, Rn as u16, SIMDSizeCode::H),
+                                        Operand::SIMDRegisterElementsLane(SIMDSizeCode::Q, Rm as u16, SIMDSizeCode::H, index as u8),
+                                        Operand::Nothing,
+                                    ];
+                                }
+                                0b0_0001 => {
+                                    // FMLA (not size=0b01)
+                                    if size == 0b01 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+
+                                    inst.opcode = Opcode::FMLA;
+
+                                    let sz = size & 1;
+
+                                    if sz == 1 && L == 1 {
+                                        return Err(DecodeError::InvalidOperand);
+                                    }
+
+                                    if sz == 1 && Q == 0 {
+                                        return Err(DecodeError::InvalidOperand);
+                                    }
+
+                                    let (index, Rm, size) = if size == 0b00 {
+                                        let index = (H << 2) | (L << 1) | M;
+                                        (index, Rm, SIMDSizeCode::H)
+                                    } else if size == 0b10 {
+                                        // `sz == 0`
+                                        let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
+                                        (index, Rm, SIMDSizeCode::S)
+                                    } else {
+                                        // `sz == 1`
+                                        let index = H;
+                                        let Rm = (M << 4) | Rm;
+                                        (index, Rm, SIMDSizeCode::D)
+                                    };
+
+                                    let datasize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
+
+                                    inst.operands = [
+                                        Operand::SIMDRegisterElements(datasize, Rd as u16, size),
+                                        Operand::SIMDRegisterElements(datasize, Rn as u16, size),
+                                        Operand::SIMDRegisterElementsLane(SIMDSizeCode::Q, Rm as u16, size, index as u8),
+                                        Operand::Nothing,
+                                    ];
                                 }
                                 0b0_0101 => {
-                                    // TODO:
                                     // FMLS (not size=0b01)
+                                    if size == 0b01 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+
+                                    inst.opcode = Opcode::FMLS;
+
+                                    let sz = size & 1;
+
+                                    if sz == 1 && L == 1 {
+                                        return Err(DecodeError::InvalidOperand);
+                                    }
+
+                                    if sz == 1 && Q == 0 {
+                                        return Err(DecodeError::InvalidOperand);
+                                    }
+
+                                    let (index, Rm, size) = if size == 0b00 {
+                                        let index = (H << 2) | (L << 1) | M;
+                                        (index, Rm, SIMDSizeCode::H)
+                                    } else if size == 0b10 {
+                                        // `sz == 0`
+                                        let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
+                                        (index, Rm, SIMDSizeCode::S)
+                                    } else {
+                                        // `sz == 1`
+                                        let index = H;
+                                        let Rm = (M << 4) | Rm;
+                                        (index, Rm, SIMDSizeCode::D)
+                                    };
+
+                                    let datasize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
+
+                                    inst.operands = [
+                                        Operand::SIMDRegisterElements(datasize, Rd as u16, size),
+                                        Operand::SIMDRegisterElements(datasize, Rn as u16, size),
+                                        Operand::SIMDRegisterElementsLane(SIMDSizeCode::Q, Rm as u16, size, index as u8),
+                                        Operand::Nothing,
+                                    ];
                                 }
                                 0b0_1001 => {
-                                    // TODO:
                                     // FMUL (not size=0b01)
+                                    if size == 0b01 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+
+                                    inst.opcode = Opcode::FMUL;
+
+                                    let sz = size & 1;
+
+                                    if sz == 1 && L == 1 {
+                                        return Err(DecodeError::InvalidOperand);
+                                    }
+
+                                    if sz == 1 && Q == 0 {
+                                        return Err(DecodeError::InvalidOperand);
+                                    }
+
+                                    let (index, Rm, size) = if size == 0b00 {
+                                        let index = (H << 2) | (L << 1) | M;
+                                        (index, Rm, SIMDSizeCode::H)
+                                    } else if size == 0b10 {
+                                        // `sz == 0`
+                                        let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
+                                        (index, Rm, SIMDSizeCode::S)
+                                    } else {
+                                        // `sz == 1`
+                                        let index = H;
+                                        let Rm = (M << 4) | Rm;
+                                        (index, Rm, SIMDSizeCode::D)
+                                    };
+
+                                    let datasize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
+
+                                    inst.operands = [
+                                        Operand::SIMDRegisterElements(datasize, Rd as u16, size),
+                                        Operand::SIMDRegisterElements(datasize, Rn as u16, size),
+                                        Operand::SIMDRegisterElementsLane(SIMDSizeCode::Q, Rm as u16, size, index as u8),
+                                        Operand::Nothing,
+                                    ];
                                 }
                                 0b1_0000 => {
                                     if size == 0b00 || size == 0b11 {

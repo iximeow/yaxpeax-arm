@@ -4283,3 +4283,23 @@ fn test_ext() {
 
     assert!(errs.is_empty());
 }
+
+#[test]
+fn test_indexed() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x10, 0x11, 0x80, 0x0f], "fmla v16.2s, v8.2s, v0.s[0]"),
+        ([0x39, 0x58, 0x88, 0x0f], "fmls v25.2s, v1.2s, v8.s[2]"),
+        ([0x08, 0x92, 0x8a, 0x0f], "fmul v8.2s, v16.2s, v10.s[0]"),
+        ([0x01, 0x12, 0x8b, 0x0f], "fmla v1.2s, v16.2s, v11.s[0]"),
+        ([0x8c, 0x12, 0x8e, 0x0f], "fmla v12.2s, v20.2s, v14.s[0]"),
+        ([0xc6, 0x12, 0x8e, 0x0f], "fmla v6.2s, v22.2s, v14.s[0]"),
+        ([0x3c, 0x58, 0xa9, 0x0f], "fmls v28.2s, v1.2s, v9.s[3]"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
