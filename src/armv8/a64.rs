@@ -3661,13 +3661,20 @@ impl Decoder<ARMv8> for InstDecoder {
                                             (U0_OPCODES[opcode as usize], SIZES[size as usize])
                                         }
                                     } else {
-                                        const U0_HIGH_OPCODES: &[Opcode] = &[
-                                            Opcode::FMAXNM, Opcode::FMLA,
-                                            Opcode::FADD, Opcode::FMULX,
-                                            Opcode::FCMEQ, Opcode::FMLAL,
-                                            Opcode::FMAX, Opcode::FRECPS
+                                        const U0_HIGH_OPCODES: &[Result<Opcode, DecodeError>] = &[
+                                            Ok(Opcode::FMAXNM), Ok(Opcode::FMINNM),
+                                            Ok(Opcode::FMLA), Ok(Opcode::FMLS),
+                                            Ok(Opcode::FADD), Ok(Opcode::FSUB),
+                                            Ok(Opcode::FMULX), Err(DecodeError::InvalidOpcode),
+                                            Ok(Opcode::FCMEQ), Err(DecodeError::InvalidOpcode),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                            Ok(Opcode::FMAX), Ok(Opcode::FMIN),
+                                            Ok(Opcode::FRECPS), Ok(Opcode::FRSQRTS),
                                         ];
-                                        (U0_HIGH_OPCODES[opcode as usize - 0b11000], [SIMDSizeCode::S, SIMDSizeCode::D][((word >> 22) & 1) as usize])
+                                        (
+                                            U0_HIGH_OPCODES[(((opcode - 0b11000) << 1) | (word >> 23) & 1) as usize]?,
+                                            [SIMDSizeCode::S, SIMDSizeCode::D][((word >> 22) & 1) as usize]
+                                        )
                                     }
                                 } else {
                                     if opcode < 0b11000 {
@@ -3681,13 +3688,20 @@ impl Decoder<ARMv8> for InstDecoder {
                                             (U1_OPCODES[opcode as usize], SIZES[size as usize])
                                         }
                                     } else {
-                                        const U1_HIGH_OPCODES: &[Opcode] = &[
-                                            Opcode::FMAXNMP, Opcode::FMLAL,
-                                            Opcode::FADDP, Opcode::FMUL,
-                                            Opcode::FCMGE, Opcode::FACGE,
-                                            Opcode::FMAXP, Opcode::FDIV
+                                        const U1_HIGH_OPCODES: &[Result<Opcode, DecodeError>] = &[
+                                            Ok(Opcode::FMAXNMP), Ok(Opcode::FMINNMP),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                            Ok(Opcode::FADDP), Ok(Opcode::FABD),
+                                            Ok(Opcode::FMUL), Err(DecodeError::InvalidOpcode),
+                                            Ok(Opcode::FCMGE), Ok(Opcode::FCMGT),
+                                            Ok(Opcode::FACGE), Ok(Opcode::FACGT),
+                                            Ok(Opcode::FMAXP), Ok(Opcode::FMINP),
+                                            Ok(Opcode::FDIV), Err(DecodeError::InvalidOpcode),
                                         ];
-                                        (U1_HIGH_OPCODES[opcode as usize - 0b11000], [SIMDSizeCode::S, SIMDSizeCode::D][((word >> 22) & 1) as usize])
+                                        (
+                                            U1_HIGH_OPCODES[(((opcode - 0b11000) << 1) | (word >> 23) & 1) as usize]?,
+                                            [SIMDSizeCode::S, SIMDSizeCode::D][((word >> 22) & 1) as usize]
+                                        )
                                     }
                                 };
 
