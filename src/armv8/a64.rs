@@ -759,11 +759,8 @@ impl Display for Instruction {
             Opcode::DRPS => {
                 write!(fmt, "drps")?;
             },
-            Opcode::MSRa(a, b) => {
-                write!(fmt, "msr(a) {}, {}", a, b)?;
-            }
-            Opcode::MSRb(a) => {
-                write!(fmt, "msr(b) {:#x}", a)?;
+            Opcode::MSR => {
+                write!(fmt, "msr")?;
             }
             Opcode::MRS => {
                 write!(fmt, "mrs")?;
@@ -1931,8 +1928,7 @@ pub enum Opcode {
     RET,
     ERET,
     DRPS,
-    MSRa(u8, u8),
-    MSRb(u32),
+    MSR,
     MRS,
     SYS,
     SYSL,
@@ -2322,6 +2318,7 @@ pub enum Operand {
     RegPostIndexReg(u16, u16),
     PrefetchOp(u16),
     SystemReg(u16),
+    PstateField(u8),
 }
 
 impl Display for Operand {
@@ -2374,6 +2371,11 @@ impl Display for Operand {
                     0x5f02 => fmt.write_str("cntvct_el0"),
                     _ => write!(fmt, "sysreg:{:x}", reg),
                 }
+            }
+            Operand::PstateField(reg) => {
+                // `MSR (immediate)` writes to the `PSTATE` register, setting a few bit patterns as
+                // selected by `reg`.
+                write!(fmt, "pstate.{:x}", reg)
             }
             Operand::SIMDRegister(size, reg) => {
                 match size {
@@ -8565,10 +8567,28 @@ impl Decoder<ARMv8> for InstDecoder {
                                                 };
                                             },
                                             0b0100 => {
-                                                inst.opcode = Opcode::MSRa(op1 as u8, op2 as u8);
-                                                inst.operands[0] = Operand::Imm16(
-                                                    ((word >> 8) & 0xf) as u16
-                                                );
+                                                inst.opcode = Opcode::MSR;
+
+                                                if op1 == 0b001 || op1 == 0b010 || op1 >= 0b100 {
+                                                    return Err(DecodeError::InvalidOperand);
+                                                } else if op1 == 0b000 && op2 >= 0b110 {
+                                                    return Err(DecodeError::InvalidOperand);
+                                                } else if op1 == 0b011 && op2 == 0b000 {
+                                                    return Err(DecodeError::InvalidOperand);
+                                                } else if op1 == 0b011 && op2 == 0b011 {
+                                                    return Err(DecodeError::InvalidOperand);
+                                                } else if op1 == 0b011 && op2 == 0b101 {
+                                                    return Err(DecodeError::InvalidOperand);
+                                                }
+
+                                                inst.operands = [
+                                                    Operand::PstateField(((op1 << 3) | op2 << 3) as u8),
+                                                    Operand::Imm16(
+                                                        ((word >> 8) & 0xf) as u16
+                                                    ),
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                ];
                                             }
                                             _ => {
                                                 inst.opcode = Opcode::Invalid;
@@ -8584,7 +8604,15 @@ impl Decoder<ARMv8> for InstDecoder {
                                 }
                                 0b010 |
                                 0b011 => {
-                                    inst.opcode = Opcode::MSRb(word & 0x0fffff);
+                                    inst.opcode = Opcode::MSR;
+                                    let Rt = word & 0b1111;
+                                    let systemreg = (word >> 5) & 0b1_111_1111_1111_111;
+                                    inst.operands = [
+                                        Operand::SystemReg(systemreg as u16),
+                                        Operand::Register(SizeCode::X, Rt as u16),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
                                 }
                                 0b100 => {
                                     inst.opcode = Opcode::Invalid;
