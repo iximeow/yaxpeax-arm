@@ -1,5 +1,9 @@
 //#[cfg(feature="use-serde")]
 //use serde::{Serialize, Deserialize};
+//
+// many variables, among other things, will use the manual's spelling (e.g. fields named `Rm`
+// rather than `rm` or `reg_m`). rust doesn't like this, but it's how we're gonna be.
+#![allow(non_snake_case)]
 
 use core::fmt::{self, Display, Formatter};
 
@@ -271,47 +275,6 @@ pub struct Instruction {
 impl Display for Instruction {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         match self.opcode {
-            Opcode::Invalid => {
-                write!(fmt, "invalid")?;
-            },
-            Opcode::DMB => {
-                if let Operand::Imm16(option) = self.operands[0] {
-                    return match option {
-                        0b0001 => write!(fmt, "dmb oshld"),
-                        0b0010 => write!(fmt, "dmb oshst"),
-                        0b0011 => write!(fmt, "dmb osh"),
-                        0b0101 => write!(fmt, "dmb nshld"),
-                        0b0110 => write!(fmt, "dmb nshst"),
-                        0b0111 => write!(fmt, "dmb nsh"),
-                        0b1001 => write!(fmt, "dmb ishld"),
-                        0b1010 => write!(fmt, "dmb ishst"),
-                        0b1011 => write!(fmt, "dmb ish"),
-                        0b1101 => write!(fmt, "dmb ld"),
-                        0b1110 => write!(fmt, "dmb st"),
-                        0b1111 => write!(fmt, "dmb sy"),
-                        _ => write!(fmt, "dmb {:x}", option)
-                    };
-                }
-            }
-            Opcode::DSB => {
-                if let Operand::Imm16(option) = self.operands[0] {
-                    return match option {
-                        0b0001 => write!(fmt, "dsb oshld"),
-                        0b0010 => write!(fmt, "dsb oshst"),
-                        0b0011 => write!(fmt, "dsb osh"),
-                        0b0101 => write!(fmt, "dsb nshld"),
-                        0b0110 => write!(fmt, "dsb nshst"),
-                        0b0111 => write!(fmt, "dsb nsh"),
-                        0b1001 => write!(fmt, "dsb ishld"),
-                        0b1010 => write!(fmt, "dsb ishst"),
-                        0b1011 => write!(fmt, "dsb ish"),
-                        0b1101 => write!(fmt, "dsb ld"),
-                        0b1110 => write!(fmt, "dsb st"),
-                        0b1111 => write!(fmt, "dsb sy"),
-                        _ => write!(fmt, "dsb {:x}", option)
-                    };
-                }
-            }
             Opcode::ISB => {
                 // the default/reserved/expected value for the immediate in `isb` is `0b1111`.
                 if let Operand::Imm16(15) = self.operands[0] {
@@ -335,9 +298,6 @@ impl Display for Instruction {
                 };
                 return write!(fmt, "mov {}, {:#x}", self.operands[0], imm);
             },
-            Opcode::MOVK => {
-                write!(fmt, "movk")?;
-            },
             Opcode::MOVZ => {
                 let imm = if let Operand::ImmShift(imm, shift) = self.operands[1] {
                     (imm as u64) << shift
@@ -354,27 +314,6 @@ impl Display for Instruction {
                     unreachable!("movn operand 0 is always Register");
                 };
                 return write!(fmt, "mov {}, {:#x}", self.operands[0], imm);
-            },
-            Opcode::ADC => {
-                write!(fmt, "adc")?;
-            },
-            Opcode::ADCS => {
-                write!(fmt, "adcs")?;
-            },
-            Opcode::SBC => {
-                write!(fmt, "sbc")?;
-            },
-            Opcode::SBCS => {
-                write!(fmt, "sbcs")?;
-            },
-            Opcode::AND => {
-                write!(fmt, "and")?;
-            },
-            Opcode::BIC => {
-                write!(fmt, "bic")?;
-            },
-            Opcode::BICS => {
-                write!(fmt, "bics")?;
             },
             Opcode::ORR => {
                 if let Operand::Register(_, 31) = self.operands[1] {
@@ -395,12 +334,6 @@ impl Display for Instruction {
                     return write!(fmt, "mvn {}, {}", self.operands[0], self.operands[2]);
                 }
                 write!(fmt, "orn")?;
-            },
-            Opcode::EOR => {
-                write!(fmt, "eor")?;
-            },
-            Opcode::EON => {
-                write!(fmt, "eon")?;
             },
             Opcode::ANDS => {
                 if let Operand::Register(_, 31) = self.operands[0] {
@@ -445,9 +378,6 @@ impl Display for Instruction {
                     return write!(fmt, "sub {}, {}, {}", self.operands[0], self.operands[1], Operand::RegisterOrSP(size, reg));
                 }
                 write!(fmt, "sub")?;
-            },
-            Opcode::BFM => {
-                write!(fmt, "bfm")?;
             },
             Opcode::UBFM => {
                 if let Operand::Immediate(0) = self.operands[2] {
@@ -565,12 +495,6 @@ impl Display for Instruction {
                 };
                 return write!(fmt, "sbfx {}, {}, {}, {}", self.operands[0], self.operands[1], self.operands[2], width);
             },
-            Opcode::ADR => {
-                write!(fmt, "adr")?;
-            },
-            Opcode::ADRP => {
-                write!(fmt, "adrp")?;
-            },
             Opcode::EXTR => {
                 if let (Operand::Register(_, Rn), Operand::Register(_, Rm)) = (self.operands[1], self.operands[2]) {
                     if Rn == Rm {
@@ -578,216 +502,6 @@ impl Display for Instruction {
                     }
                 }
                 write!(fmt, "extr")?;
-            },
-            Opcode::LDP => {
-                write!(fmt, "ldp")?;
-            },
-            Opcode::LDPSW => {
-                write!(fmt, "ldpsw")?;
-            },
-            Opcode::LDR => {
-                write!(fmt, "ldr")?;
-            },
-            Opcode::LDRB => {
-                write!(fmt, "ldrb")?;
-            },
-            Opcode::LDRSB => {
-                write!(fmt, "ldrsb")?;
-            },
-            Opcode::LDRSH => {
-                write!(fmt, "ldrsh")?;
-            },
-            Opcode::LDRSW => {
-                write!(fmt, "ldrsw")?;
-            },
-            Opcode::LDRH => {
-                write!(fmt, "ldrh")?;
-            },
-            Opcode::LDTR => {
-                write!(fmt, "ldtr")?;
-            },
-            Opcode::LDTRB => {
-                write!(fmt, "ldtrb")?;
-            },
-            Opcode::LDTRSB => {
-                write!(fmt, "ldtrsb")?;
-            },
-            Opcode::LDTRSH => {
-                write!(fmt, "ldtrsh")?;
-            },
-            Opcode::LDTRSW => {
-                write!(fmt, "ldtrsw")?;
-            },
-            Opcode::LDTRH => {
-                write!(fmt, "ldtrh")?;
-            },
-            Opcode::LDUR => {
-                write!(fmt, "ldur")?;
-            },
-            Opcode::LDURB => {
-                write!(fmt, "ldurb")?;
-            },
-            Opcode::LDURSB => {
-                write!(fmt, "ldursb")?;
-            },
-            Opcode::LDURSW => {
-                write!(fmt, "ldursw")?;
-            },
-            Opcode::LDURSH => {
-                write!(fmt, "ldursh")?;
-            },
-            Opcode::LDURH => {
-                write!(fmt, "ldurh")?;
-            },
-            Opcode::LDAR => {
-                write!(fmt, "ldar")?;
-            },
-            Opcode::LDARB => {
-                write!(fmt, "ldarb")?;
-            },
-            Opcode::LDAXRB => {
-                write!(fmt, "ldaxrb")?;
-            },
-            Opcode::LDARH => {
-                write!(fmt, "ldarh")?;
-            },
-            Opcode::LDAXP => {
-                write!(fmt, "ldaxp")?;
-            },
-            Opcode::LDAXR => {
-                write!(fmt, "ldaxr")?;
-            },
-            Opcode::LDAXRH => {
-                write!(fmt, "ldaxrh")?;
-            },
-            Opcode::LDXP => {
-                write!(fmt, "ldxp")?;
-            },
-            Opcode::LDXR => {
-                write!(fmt, "ldxr")?;
-            },
-            Opcode::LDXRB => {
-                write!(fmt, "ldxrb")?;
-            },
-            Opcode::LDXRH => {
-                write!(fmt, "ldxrh")?;
-            },
-            Opcode::STP => {
-                write!(fmt, "stp")?;
-            },
-            Opcode::STR => {
-                write!(fmt, "str")?;
-            },
-            Opcode::STRB => {
-                write!(fmt, "strb")?;
-            },
-            Opcode::STRH => {
-                write!(fmt, "strh")?;
-            },
-            Opcode::STRW => {
-                write!(fmt, "strw")?;
-            },
-            Opcode::STTR => {
-                write!(fmt, "sttr")?;
-            },
-            Opcode::STTRB => {
-                write!(fmt, "sttrb")?;
-            },
-            Opcode::STTRH => {
-                write!(fmt, "sttrh")?;
-            },
-            Opcode::STUR => {
-                write!(fmt, "stur")?;
-            },
-            Opcode::STURB => {
-                write!(fmt, "sturb")?;
-            },
-            Opcode::STURH => {
-                write!(fmt, "sturh")?;
-            },
-            Opcode::STLR => {
-                write!(fmt, "stlr")?;
-            },
-            Opcode::STLRB => {
-                write!(fmt, "stlrb")?;
-            },
-            Opcode::STLRH => {
-                write!(fmt, "stlrh")?;
-            },
-            Opcode::STLXP => {
-                write!(fmt, "stlxp")?;
-            },
-            Opcode::STLXR => {
-                write!(fmt, "stlxr")?;
-            },
-            Opcode::STLXRB => {
-                write!(fmt, "stlxrb")?;
-            },
-            Opcode::STLXRH => {
-                write!(fmt, "stlxrh")?;
-            },
-            Opcode::STXP => {
-                write!(fmt, "stxp")?;
-            },
-            Opcode::STXR => {
-                write!(fmt, "stxr")?;
-            },
-            Opcode::STXRB => {
-                write!(fmt, "stxrb")?;
-            },
-            Opcode::STXRH => {
-                write!(fmt, "stxrh")?;
-            },
-            Opcode::TBZ => {
-                write!(fmt, "tbz")?;
-            },
-            Opcode::TBNZ => {
-                write!(fmt, "tbnz")?;
-            },
-            Opcode::CBZ => {
-                write!(fmt, "cbz")?;
-            },
-            Opcode::CBNZ => {
-                write!(fmt, "cbnz")?;
-            },
-            Opcode::B => {
-                write!(fmt, "b")?;
-            },
-            Opcode::BR => {
-                write!(fmt, "br")?;
-            },
-            Opcode::Bcc(cond) => {
-                write!(fmt, "b.{}", Operand::ConditionCode(cond))?;
-            },
-            Opcode::BL => {
-                write!(fmt, "bl")?;
-            },
-            Opcode::BLR => {
-                write!(fmt, "blr")?;
-            },
-            Opcode::SVC => {
-                write!(fmt, "svc")?;
-            },
-            Opcode::HVC => {
-                write!(fmt, "hvc")?;
-            },
-            Opcode::SMC => {
-                write!(fmt, "smc")?;
-            },
-            Opcode::BRK => {
-                write!(fmt, "brk")?;
-            },
-            Opcode::HLT => {
-                write!(fmt, "hlt")?;
-            },
-            Opcode::DCPS1 => {
-                write!(fmt, "dcps1")?;
-            },
-            Opcode::DCPS2 => {
-                write!(fmt, "dcps2")?;
-            },
-            Opcode::DCPS3 => {
-                write!(fmt, "dcps3")?;
             },
             Opcode::RET => {
                 write!(fmt, "ret")?;
@@ -797,18 +511,6 @@ impl Display for Instruction {
                     return Ok(());
                 }
             },
-            Opcode::ERET => {
-                write!(fmt, "eret")?;
-            },
-            Opcode::DRPS => {
-                write!(fmt, "drps")?;
-            },
-            Opcode::MSR => {
-                write!(fmt, "msr")?;
-            }
-            Opcode::MRS => {
-                write!(fmt, "mrs")?;
-            }
             Opcode::SYS(ops) => {
                 return write!(fmt, "sys {:#x}, {}, {}, {:#x}, {}",
                     ops.op1(),
@@ -827,21 +529,6 @@ impl Display for Instruction {
                     ops.op2(),
                 );
             }
-            Opcode::ISB => {
-                write!(fmt, "isb")?;
-            }
-            Opcode::DSB => {
-                write!(fmt, "dsb")?;
-            }
-            Opcode::DMB => {
-                write!(fmt, "dmb")?;
-            }
-            Opcode::SB => {
-                write!(fmt, "sb")?;
-            }
-            Opcode::SSSB => {
-                write!(fmt, "sssb")?;
-            }
             Opcode::HINT(v) => {
                 match v {
                     0 => { write!(fmt, "nop")?; },
@@ -853,14 +540,8 @@ impl Display for Instruction {
                     _ => { write!(fmt, "hint({:#x})", v)?; }
                 }
             }
-            Opcode::CLREX => {
-                write!(fmt, "clrex")?;
-            }
-            Opcode::CSEL => {
-                write!(fmt, "csel")?;
-            }
             Opcode::CSNEG => {
-                if let (Operand::Register(size, rn), Operand::Register(_size, rm), Operand::ConditionCode(cond)) = (self.operands[1], self.operands[2], self.operands[3]) {
+                if let (Operand::Register(_size, rn), Operand::Register(_, rm), Operand::ConditionCode(cond)) = (self.operands[1], self.operands[2], self.operands[3]) {
                     if rn == rm {
                         return write!(fmt, "cneg {}, {}, {}", self.operands[0], self.operands[2], Operand::ConditionCode(cond ^ 0x01));
                     }
@@ -897,36 +578,6 @@ impl Display for Instruction {
                 }
                 write!(fmt, "csinv")?;
             }
-            Opcode::PACIA => {
-                write!(fmt, "pacia")?;
-            }
-            Opcode::PACIZA => {
-                write!(fmt, "paciza")?;
-            }
-            Opcode::CCMN => {
-                write!(fmt, "ccmn")?;
-            }
-            Opcode::CCMP => {
-                write!(fmt, "ccmp")?;
-            }
-            Opcode::RBIT => {
-                write!(fmt, "rbit")?;
-            }
-            Opcode::REV16 => {
-                write!(fmt, "rev16")?;
-            }
-            Opcode::REV => {
-                write!(fmt, "rev")?;
-            }
-            Opcode::REV32 => {
-                write!(fmt, "rev32")?;
-            }
-            Opcode::CLZ => {
-                write!(fmt, "clz")?;
-            }
-            Opcode::CLS => {
-                write!(fmt, "cls")?;
-            }
             Opcode::MADD => {
                 if let Operand::Register(_, 31) = self.operands[3] {
                     return write!(fmt, "mul {}, {}, {}", self.operands[0], self.operands[1], self.operands[2])
@@ -951,9 +602,6 @@ impl Display for Instruction {
                 }
                 write!(fmt, "smsubl")?;
             }
-            Opcode::SMULH => {
-                write!(fmt, "smulh")?;
-            }
             Opcode::UMADDL => {
                 if let Operand::Register(_, 31) = self.operands[3] {
                     return write!(fmt, "umull {}, {}, {}", self.operands[0], self.operands[1], self.operands[2])
@@ -965,15 +613,6 @@ impl Display for Instruction {
                     return write!(fmt, "umnegl {}, {}, {}", self.operands[0], self.operands[1], self.operands[2])
                 }
                 write!(fmt, "umsubl")?;
-            }
-            Opcode::UMULH => {
-                write!(fmt, "umulh")?;
-            }
-            Opcode::UDIV => {
-                write!(fmt, "udiv")?;
-            }
-            Opcode::SDIV => {
-                write!(fmt, "sdiv")?;
             }
             Opcode::LSLV => {
                 // lslv == lsl (register) and, quoth the manual, `lsl is always the preferred
@@ -995,1366 +634,23 @@ impl Display for Instruction {
                 // disassembly`.
                 write!(fmt, "ror")?;
             }
-            Opcode::CRC32B => {
-                write!(fmt, "crc32b")?;
-            }
-            Opcode::CRC32H => {
-                write!(fmt, "crc32h")?;
-            }
-            Opcode::CRC32W => {
-                write!(fmt, "crc32w")?;
-            }
-            Opcode::CRC32X => {
-                write!(fmt, "crc32x")?;
-            }
-            Opcode::CRC32CB => {
-                write!(fmt, "crc32cb")?;
-            }
-            Opcode::CRC32CH => {
-                write!(fmt, "crc32ch")?;
-            }
-            Opcode::CRC32CW => {
-                write!(fmt, "crc32cw")?;
-            }
-            Opcode::CRC32CX => {
-                write!(fmt, "crc32cx")?;
-            }
-            Opcode::STNP => {
-                write!(fmt, "stnp")?;
-            }
-            Opcode::LDNP => {
-                write!(fmt, "ldnp")?;
-            }
-            Opcode::ST1 => {
-                write!(fmt, "st1")?;
-            }
-            Opcode::ST2 => {
-                write!(fmt, "st2")?;
-            }
-            Opcode::ST3 => {
-                write!(fmt, "st3")?;
-            }
-            Opcode::ST4 => {
-                write!(fmt, "st4")?;
-            }
-            Opcode::LD1R => {
-                write!(fmt, "ld1r")?;
-            }
-            Opcode::LD2R => {
-                write!(fmt, "ld2r")?;
-            }
-            Opcode::LD3R => {
-                write!(fmt, "ld3r")?;
-            }
-            Opcode::LD4R => {
-                write!(fmt, "ld4r")?;
-            }
-            Opcode::LD1 => {
-                write!(fmt, "ld1")?;
-            }
-            Opcode::LD2 => {
-                write!(fmt, "ld2")?;
-            }
-            Opcode::LD3 => {
-                write!(fmt, "ld3")?;
-            }
-            Opcode::LD4 => {
-                write!(fmt, "ld4")?;
-            }
-            Opcode::FMADD => {
-                write!(fmt, "fmadd")?;
-            }
-            Opcode::FMSUB => {
-                write!(fmt, "fmsub")?;
-            }
-            Opcode::FNMADD => {
-                write!(fmt, "fnmadd")?;
-            }
-            Opcode::FNMSUB => {
-                write!(fmt, "fnmsub")?;
-            }
-            Opcode::SCVTF => {
-                write!(fmt, "scvtf")?;
-            }
-            Opcode::UCVTF => {
-                write!(fmt, "ucvtf")?;
-            }
-            Opcode::FCVTZS => {
-                write!(fmt, "fcvtzs")?;
-            }
-            Opcode::FCVTZU => {
-                write!(fmt, "fcvtzu")?;
-            }
-            Opcode::FMOV => {
-                write!(fmt, "fmov")?;
-            }
-            Opcode::FABS => {
-                write!(fmt, "fabs")?;
-            }
-            Opcode::FNEG => {
-                write!(fmt, "fneg")?;
-            }
-            Opcode::FSQRT => {
-                write!(fmt, "fsqrt")?;
-            }
-            Opcode::FRINTN => {
-                write!(fmt, "frintn")?;
-            }
-            Opcode::FRINTP => {
-                write!(fmt, "frintp")?;
-            }
-            Opcode::FRINTM => {
-                write!(fmt, "frintm")?;
-            }
-            Opcode::FRINTZ => {
-                write!(fmt, "frintz")?;
-            }
-            Opcode::FRINTA => {
-                write!(fmt, "frinta")?;
-            }
-            Opcode::FRINTX => {
-                write!(fmt, "frintx")?;
-            }
-            Opcode::FRINTI => {
-                write!(fmt, "frinti")?;
-            },
-            Opcode::FRINT32Z => {
-                write!(fmt, "frint32z")?;
-            }
-            Opcode::FRINT32X => {
-                write!(fmt, "frint32x")?;
-            }
-            Opcode::FRINT64Z => {
-                write!(fmt, "frint64z")?;
-            }
-            Opcode::FRINT64X => {
-                write!(fmt, "frint64x")?;
-            }
-            Opcode::BFCVT => {
-                write!(fmt, "bfcvt")?;
-            }
-            Opcode::FCVT => {
-                write!(fmt, "fcvt")?;
-            }
-            Opcode::FCMP => {
-                write!(fmt, "fcmp")?;
-            }
-            Opcode::FCMPE => {
-                write!(fmt, "fcmpe")?;
-            }
-            Opcode::FMUL => {
-                write!(fmt, "fmul");
-            }
-            Opcode::FDIV => {
-                write!(fmt, "fdiv");
-            }
-            Opcode::FADD => {
-                write!(fmt, "fadd");
-            }
-            Opcode::FSUB => {
-                write!(fmt, "fsub");
-            }
-            Opcode::FMAX => {
-                write!(fmt, "fmax");
-            }
-            Opcode::FMIN => {
-                write!(fmt, "fmin");
-            }
-            Opcode::FMAXNM => {
-                write!(fmt, "fmaxnm");
-            }
-            Opcode::FMINNM => {
-                write!(fmt, "fminnm");
-            }
-            Opcode::FNMUL => {
-                write!(fmt, "fnmul");
-            }
-            Opcode::FCSEL => {
-                write!(fmt, "fcsel");
-            }
-            Opcode::FCCMP => {
-                write!(fmt, "fccmp");
-            }
-            Opcode::FCCMPE => {
-                write!(fmt, "fccmpe");
-            }
-            Opcode::FMULX => {
-                write!(fmt, "fmulx");
-            }
-            Opcode::FMLSL => {
-                write!(fmt, "fmlsl");
-            }
-            Opcode::FMLAL => {
-                write!(fmt, "fmlal");
-            }
-            Opcode::SQRDMLSH => {
-                write!(fmt, "sqrdmlsh");
-            }
-            Opcode::UDOT => {
-                write!(fmt, "udot");
-            }
-            Opcode::SQRDMLAH => {
-                write!(fmt, "sqrdmlah");
-            }
-            Opcode::UMULL => {
-                write!(fmt, "umull");
-            }
-            Opcode::UMULL2 => {
-                write!(fmt, "umull2");
-            }
-            Opcode::UMLSL => {
-                write!(fmt, "umlsl");
-            }
-            Opcode::UMLSL2 => {
-                write!(fmt, "umlsl2");
-            }
-            Opcode::MLS => {
-                write!(fmt, "mls");
-            }
-            Opcode::UMLAL => {
-                write!(fmt, "umlal");
-            }
-            Opcode::UMLAL2 => {
-                write!(fmt, "umlal2");
-            }
-            Opcode::MLA => {
-                write!(fmt, "mla");
-            }
-            Opcode::SDOT => {
-                write!(fmt, "sdot");
-            }
-            Opcode::SQRDMULH2 => {
-                write!(fmt, "sqrdmulh2");
-            }
-            Opcode::SQDMULH => {
-                write!(fmt, "sqdmulh");
-            }
-            Opcode::SQDMULH2 => {
-                write!(fmt, "sqdmulh2");
-            }
-            Opcode::SQDMULL => {
-                write!(fmt, "sqdmull");
-            }
-            Opcode::SQDMULL2 => {
-                write!(fmt, "sqdmull2");
-            }
-            Opcode::SMULL => {
-                write!(fmt, "smull");
-            }
-            Opcode::SMULL2 => {
-                write!(fmt, "smull2");
-            }
-            Opcode::MUL => {
-                write!(fmt, "mul");
-            }
-            Opcode::SQDMLSL => {
-                write!(fmt, "sqdmlsl");
-            }
-            Opcode::SQDMLSL2 => {
-                write!(fmt, "sqdmlsl2");
-            }
-            Opcode::SMLSL => {
-                write!(fmt, "smlsl");
-            }
-            Opcode::SMLSL2 => {
-                write!(fmt, "smlsl2");
-            }
-            Opcode::SQDMLAL => {
-                write!(fmt, "sqdmlal");
-            }
-            Opcode::SQDMLAL2 => {
-                write!(fmt, "sqdmlal2");
-            }
-            Opcode::SMLAL => {
-                write!(fmt, "smlal");
-            }
-            Opcode::SMLAL2 => {
-                write!(fmt, "smlal2");
-            }
-            Opcode::SQRDMULH => {
-                write!(fmt, "sqrdmulh");
-            }
-            Opcode::FCMLA => {
-                write!(fmt, "fcmla");
-            }
-            Opcode::SSHR => {
-                write!(fmt, "sshr");
-            }
-            Opcode::SSRA => {
-                write!(fmt, "ssra");
-            }
-            Opcode::SRSHR => {
-                write!(fmt, "srshr");
-            }
-            Opcode::SRSRA => {
-                write!(fmt, "srsra");
-            }
-            Opcode::SHL => {
-                write!(fmt, "shl");
-            }
-            Opcode::SQSHL => {
-                write!(fmt, "sqshl");
-            }
-            Opcode::SHRN => {
-                write!(fmt, "shrn");
-            }
-            Opcode::RSHRN => {
-                write!(fmt, "rshrn");
-            }
-            Opcode::SQSHRN => {
-                write!(fmt, "sqshrn");
-            }
-            Opcode::SQRSHRN => {
-                write!(fmt, "sqrshrn");
-            }
-            Opcode::SSHLL => {
-                write!(fmt, "sshll");
-            }
-            Opcode::USHLL => {
-                write!(fmt, "sshll");
-            }
-            Opcode::USHR => {
-                write!(fmt, "ushr");
-            }
-            Opcode::USRA => {
-                write!(fmt, "usra");
-            }
-            Opcode::URSHR => {
-                write!(fmt, "urshr");
-            }
-            Opcode::URSRA => {
-                write!(fmt, "ursra");
-            }
-            Opcode::SRI => {
-                write!(fmt, "sri");
-            }
-            Opcode::SLI => {
-                write!(fmt, "sli");
-            }
-            Opcode::SQSHLU => {
-                write!(fmt, "sqshlu");
-            }
-            Opcode::UQSHL => {
-                write!(fmt, "uqshl");
-            }
-            Opcode::SQSHRUN => {
-                write!(fmt, "sqshrun");
-            }
-            Opcode::SQRSHRUN => {
-                write!(fmt, "sqrshrun");
-            }
-            Opcode::UQSHRN => {
-                write!(fmt, "uqshrn");
-            }
-            Opcode::UQRSHRN => {
-                write!(fmt, "uqrshrn");
-            }
-            Opcode::SSHLL => {
-                write!(fmt, "sshll");
-            }
-            Opcode::MOVI => {
-                write!(fmt, "movi");
-            }
-            Opcode::MVNI => {
-                write!(fmt, "mvni");
-            }
-            Opcode::SHADD => {
-                write!(fmt, "shadd");
-            }
-            Opcode::SQADD => {
-                write!(fmt, "sqadd");
-            }
-            Opcode::SRHADD => {
-                write!(fmt, "srhadd");
-            }
-            Opcode::SHSUB => {
-                write!(fmt, "shsub");
-            }
-            Opcode::SQSUB => {
-                write!(fmt, "sqsub");
-            }
-            Opcode::CMGT => {
-                write!(fmt, "cmgt");
-            }
-            Opcode::CMGE => {
-                write!(fmt, "cmge");
-            }
-            Opcode::SSHL => {
-                write!(fmt, "sshl");
-            }
-            Opcode::SRSHL => {
-                write!(fmt, "srshl");
-            }
-            Opcode::SQRSHL => {
-                write!(fmt, "sqrshl");
-            }
-            Opcode::SMAX => {
-                write!(fmt, "smax");
-            }
-            Opcode::SMIN => {
-                write!(fmt, "smin");
-            }
-            Opcode::SABD => {
-                write!(fmt, "sabd");
-            }
-            Opcode::SABA => {
-                write!(fmt, "saba");
-            }
-            Opcode::CMTST => {
-                write!(fmt, "cmtst");
-            }
-            Opcode::SMAXP => {
-                write!(fmt, "smaxp");
-            }
-            Opcode::SMINP => {
-                write!(fmt, "sminp");
-            }
-            Opcode::ADDP => {
-                write!(fmt, "addp");
-            }
-            Opcode::UHADD => {
-                write!(fmt, "uhadd");
-            }
-            Opcode::UQADD => {
-                write!(fmt, "uqadd");
-            }
-            Opcode::URHADD => {
-                write!(fmt, "urhadd");
-            }
-            Opcode::UHSUB => {
-                write!(fmt, "uhsub");
-            }
-            Opcode::UQSUB => {
-                write!(fmt, "uqsub");
-            }
-            Opcode::CMHI => {
-                write!(fmt, "cmhi");
-            }
-            Opcode::CMHS => {
-                write!(fmt, "cmhs");
-            }
-            Opcode::USHL => {
-                write!(fmt, "ushl");
-            }
-            Opcode::URSHL => {
-                write!(fmt, "urshl");
-            }
-            Opcode::UQRSHL => {
-                write!(fmt, "uqrshl");
-            }
-            Opcode::UMAX => {
-                write!(fmt, "umax");
-            }
-            Opcode::UMIN => {
-                write!(fmt, "umin");
-            }
-            Opcode::UABD => {
-                write!(fmt, "uabd");
-            }
-            Opcode::UABA => {
-                write!(fmt, "uaba");
-            }
-            Opcode::CMEQ => {
-                write!(fmt, "cmeq");
-            }
-            Opcode::PMUL => {
-                write!(fmt, "pmul");
-            }
-            Opcode::UMAXP => {
-                write!(fmt, "umaxp");
-            }
-            Opcode::UMINP => {
-                write!(fmt, "uminp");
-            }
-            Opcode::FMLA => {
-                write!(fmt, "fmla");
-            }
-            Opcode::FCMEQ => {
-                write!(fmt, "fcmeq");
-            }
-            Opcode::FRECPS => {
-                write!(fmt, "frecps");
-            }
-            Opcode::BSL => {
-                write!(fmt, "bsl");
-            }
-            Opcode::BIT => {
-                write!(fmt, "bit");
-            }
-            Opcode::BIF => {
-                write!(fmt, "bif");
-            }
-            Opcode::FMAXNMP => {
-                write!(fmt, "fmaxnmp");
-            }
-            Opcode::FMINMNP => {
-                write!(fmt, "fminmnp");
-            }
-            Opcode::FADDP => {
-                write!(fmt, "faddp");
-            }
-            Opcode::FCMGE => {
-                write!(fmt, "fcmge");
-            }
-            Opcode::FACGE => {
-                write!(fmt, "facge");
-            }
-            Opcode::FMAXP => {
-                write!(fmt, "fmaxp");
-            }
-            Opcode::SADDL => {
-                write!(fmt, "saddl");
-            }
-            Opcode::SADDL2 => {
-                write!(fmt, "saddl2");
-            }
-            Opcode::SADDW => {
-                write!(fmt, "saddw");
-            }
-            Opcode::SADDW2 => {
-                write!(fmt, "saddw2");
-            }
-            Opcode::SSUBL => {
-                write!(fmt, "ssubl");
-            }
-            Opcode::SSUBL2 => {
-                write!(fmt, "ssubl2");
-            }
-            Opcode::SSUBW => {
-                write!(fmt, "ssubw");
-            }
-            Opcode::SSUBW2 => {
-                write!(fmt, "ssubw2");
-            }
-            Opcode::ADDHN => {
-                write!(fmt, "addhn");
-            }
-            Opcode::ADDHN2 => {
-                write!(fmt, "addhn2");
-            }
-            Opcode::SABAL => {
-                write!(fmt, "sabal");
-            }
-            Opcode::SABAL2 => {
-                write!(fmt, "sabal2");
-            }
-            Opcode::SUBHN => {
-                write!(fmt, "subhn");
-            }
-            Opcode::SUBHN2 => {
-                write!(fmt, "subhn2");
-            }
-            Opcode::SABDL => {
-                write!(fmt, "sabdl");
-            }
-            Opcode::SABDL2 => {
-                write!(fmt, "sabdl2");
-            }
-            Opcode::PMULL => {
-                write!(fmt, "pmull");
-            }
-            Opcode::PMULL2 => {
-                write!(fmt, "pmull2");
-            }
-            Opcode::UADDL => {
-                write!(fmt, "uaddl");
-            }
-            Opcode::UADDL2 => {
-                write!(fmt, "uaddl2");
-            }
-            Opcode::UADDW => {
-                write!(fmt, "uaddw");
-            }
-            Opcode::UADDW2 => {
-                write!(fmt, "uaddw2");
-            }
-            Opcode::USUBL => {
-                write!(fmt, "usubl");
-            }
-            Opcode::USUBL2 => {
-                write!(fmt, "usubl2");
-            }
-            Opcode::USUBW => {
-                write!(fmt, "usubw");
-            }
-            Opcode::USUBW2 => {
-                write!(fmt, "usubw2");
-            }
-            Opcode::RADDHN => {
-                write!(fmt, "raddhn");
-            }
-            Opcode::RADDHN2 => {
-                write!(fmt, "raddhn2");
-            }
-            Opcode::RSUBHN => {
-                write!(fmt, "rsubhn");
-            }
-            Opcode::RSUBHN2 => {
-                write!(fmt, "rsubhn2");
-            }
-            Opcode::UABAL => {
-                write!(fmt, "uabal");
-            }
-            Opcode::UABAL2 => {
-                write!(fmt, "uabal2");
-            }
-            Opcode::UABDL => {
-                write!(fmt, "uabdl");
-            }
-            Opcode::UABDL2 => {
-                write!(fmt, "uabdl2");
-            }
-            Opcode::REV64 => {
-                write!(fmt, "rev64");
-            }
-            Opcode::SADDLP => {
-                write!(fmt, "saddlp");
-            }
-            Opcode::SUQADD => {
-                write!(fmt, "suqadd");
-            }
-            Opcode::CNT => {
-                write!(fmt, "cnt");
-            }
-            Opcode::SADALP => {
-                write!(fmt, "sadalp");
-            }
-            Opcode::SQABS => {
-                write!(fmt, "sqabs");
-            }
-            Opcode::CMLT => {
-                write!(fmt, "cmlt");
-            }
-            Opcode::ABS => {
-                write!(fmt, "abs");
-            }
-            Opcode::XTN => {
-                write!(fmt, "xtn");
-            }
-            Opcode::SQXTN => {
-                write!(fmt, "sqxtn");
-            }
-            Opcode::FCVTN => {
-                write!(fmt, "fcvtn");
-            }
-            Opcode::FCMGT => {
-                write!(fmt, "fcmgt");
-            }
-            Opcode::FCVTL => {
-                write!(fmt, "fcvtl");
-            }
-            Opcode::FCVTL2 => {
-                write!(fmt, "fcvtl2");
-            }
-            Opcode::FCVTNS => {
-                write!(fmt, "fcvtns");
-            }
-            Opcode::FCVTPS => {
-                write!(fmt, "fcvtps");
-            }
-            Opcode::FCVTMS => {
-                write!(fmt, "fcvtms");
-            }
-            Opcode::FCVTAS => {
-                write!(fmt, "fcvtas");
-            }
-            Opcode::URECPE => {
-                write!(fmt, "urecpe");
-            }
-            Opcode::FRECPE => {
-                write!(fmt, "frecpe");
-            }
-            Opcode::UADDLP => {
-                write!(fmt, "uaddlp");
-            }
-            Opcode::USQADD => {
-                write!(fmt, "usqadd");
-            }
-            Opcode::UADALP => {
-                write!(fmt, "uadalp");
-            }
-            Opcode::SQNEG => {
-                write!(fmt, "sqneg");
-            }
-            Opcode::CMLE => {
-                write!(fmt, "cmle");
-            }
-            Opcode::NEG => {
-                write!(fmt, "neg");
-            }
-            Opcode::SQXTUN => {
-                write!(fmt, "sqxtun");
-            }
-            Opcode::SHLL => {
-                write!(fmt, "shll");
-            }
-            Opcode::UQXTN => {
-                write!(fmt, "uqxtn");
-            }
-            Opcode::FCVTXN => {
-                write!(fmt, "fcvtxn");
-            }
-            Opcode::FCVTNU => {
-                write!(fmt, "fcvtnu");
-            }
-            Opcode::FCVTMU => {
-                write!(fmt, "fcvtmu");
-            }
-            Opcode::FCVTAU => {
-                write!(fmt, "fcvtau");
-            }
             Opcode::INS => {
                 // `ins (element)` and `ins (general)` both have `mov` as an alias. manual reports
                 // that `mov` is the preferred disassembly.
-                write!(fmt, "mov");
-            }
-            Opcode::EXT => {
-                write!(fmt, "ext");
+                write!(fmt, "mov")?;
             }
             Opcode::DUP => {
                 if let Operand::Register(_, _) = self.operands[1] {
                     // `dup (general)`
-                    write!(fmt, "dup");
+                    write!(fmt, "dup")?;
                 } else {
                     // `dup (element)`
                     // manual says `mov` is the preferred disassembly here? but capstone uses
                     // `dup`.
-                    write!(fmt, "dup");
+                    write!(fmt, "dup")?;
                 }
             }
-            Opcode::UZP1 => {
-                write!(fmt, "uzp1");
-            }
-            Opcode::TRN1 => {
-                write!(fmt, "trn1");
-            }
-            Opcode::ZIP1 => {
-                write!(fmt, "zip1");
-            }
-            Opcode::UZP2 => {
-                write!(fmt, "uzp2");
-            }
-            Opcode::TRN2 => {
-                write!(fmt, "trn2");
-            }
-            Opcode::ZIP2 => {
-                write!(fmt, "zip2");
-            }
-            Opcode::SMOV => {
-                write!(fmt, "smov");
-            }
-            Opcode::UMOV => {
-                write!(fmt, "umov");
-            }
-            Opcode::SQSHRN2 => {
-                write!(fmt, "sqshrn2");
-            }
-            Opcode::SQRSHRN2 => {
-                write!(fmt, "sqrshrn2");
-            }
-            Opcode::SQSHRUN2 => {
-                write!(fmt, "sqshrun2");
-            }
-            Opcode::SQRSHRUN2 => {
-                write!(fmt, "sqrshrun2");
-            }
-            Opcode::UQSHRN2 => {
-                write!(fmt, "uqshrn2");
-            }
-            Opcode::UQRSHRN2 => {
-                write!(fmt, "uqrshrn2");
-            }
-            Opcode::FMLS => {
-                write!(fmt, "fmls");
-            }
-            Opcode::FRECPX => {
-                write!(fmt, "frecpx");
-            }
-            Opcode::FRSQRTE => {
-                write!(fmt, "frsqrte");
-            }
-            Opcode::FCVTPU => {
-                write!(fmt, "fcvtpu");
-            }
-            Opcode::FCMLT => {
-                write!(fmt, "fcmlt");
-            }
-            Opcode::FCMLE => {
-                write!(fmt, "fcmle");
-            }
-            Opcode::FMAXNMV => {
-                write!(fmt, "fmaxnmv");
-            }
-            Opcode::FMINNMV => {
-                write!(fmt, "fminnmv");
-            }
-            Opcode::FMAXV => {
-                write!(fmt, "fmaxv");
-            }
-            Opcode::FMINV => {
-                write!(fmt, "fminv");
-            }
-            Opcode::UADDLV => {
-                write!(fmt, "uaddlv");
-            }
-            Opcode::SADDLV => {
-                write!(fmt, "saddlv");
-            }
-            Opcode::UMAXV => {
-                write!(fmt, "umaxv");
-            }
-            Opcode::SMAXV => {
-                write!(fmt, "smaxv");
-            }
-            Opcode::UMINV => {
-                write!(fmt, "uminv");
-            }
-            Opcode::SMINV => {
-                write!(fmt, "sminv");
-            }
-            Opcode::ADDV => {
-                write!(fmt, "addv");
-            }
-            Opcode::FRSQRTS => {
-                write!(fmt, "frsqrts");
-            }
-            Opcode::FMINNMP => {
-                write!(fmt, "fminnmp");
-            }
-            Opcode::FMLAL2 => {
-                write!(fmt, "fmlal2");
-            }
-            Opcode::FMLSL2 => {
-                write!(fmt, "fmlsl2");
-            }
-            Opcode::FABD => {
-                write!(fmt, "fabd");
-            }
-            Opcode::FACGT => {
-                write!(fmt, "facgt");
-            }
-            Opcode::FMINP => {
-                write!(fmt, "fminp");
-            }
-            Opcode::FJCVTZS => {
-                write!(fmt, "fjcvtzs");
-            }
-            Opcode::URSQRTE => {
-                write!(fmt, "ursqrte");
-            }
-            Opcode::PRFM => {
-                write!(fmt, "prfm");
-            }
-            Opcode::AESE => {
-                write!(fmt, "aese");
-            }
-            Opcode::AESD => {
-                write!(fmt, "aesd");
-            }
-            Opcode::AESMC => {
-                write!(fmt, "aesmc");
-            }
-            Opcode::AESIMC => {
-                write!(fmt, "aesimc");
-            }
-            Opcode::SHA1H => {
-                write!(fmt, "sha1h");
-            }
-            Opcode::SHA1SU1 => {
-                write!(fmt, "sha1su1");
-            }
-            Opcode::SHA256SU0 => {
-                write!(fmt, "sha256su0");
-            }
-            Opcode::SM3TT1A => {
-                write!(fmt, "sm3tt1a");
-            }
-            Opcode::SM3TT1B => {
-                write!(fmt, "sm3tt1b");
-            }
-            Opcode::SM3TT2A => {
-                write!(fmt, "sm3tt2a");
-            }
-            Opcode::SM3TT2B => {
-                write!(fmt, "sm3tt2b");
-            }
-            Opcode::SHA512H => {
-                write!(fmt, "sha512h");
-            }
-            Opcode::SHA512H2 => {
-                write!(fmt, "sha512h2");
-            }
-            Opcode::SHA512SU1 => {
-                write!(fmt, "sha512su1");
-            }
-            Opcode::RAX1 => {
-                write!(fmt, "rax1");
-            }
-            Opcode::SM3PARTW1 => {
-                write!(fmt, "sm3partw1");
-            }
-            Opcode::SM3PARTW2 => {
-                write!(fmt, "sm3partw2");
-            }
-            Opcode::SM4EKEY => {
-                write!(fmt, "sm4ekey");
-            }
-            Opcode::BCAX => {
-                write!(fmt, "bcax");
-            }
-            Opcode::SM3SSI => {
-                write!(fmt, "sm3ssi");
-            }
-            Opcode::SHA512SU0 => {
-                write!(fmt, "sha512su0");
-            }
-            Opcode::SM4E => {
-                write!(fmt, "sm4e");
-            }
-            Opcode::EOR3 => {
-                write!(fmt, "eor3");
-            }
-            Opcode::XAR => {
-                write!(fmt, "xar");
-            }
-            Opcode::LDRAA => {
-                write!(fmt, "ldraa");
-            }
-            Opcode::LDRAB => {
-                write!(fmt, "ldrab");
-            }
-            Opcode::LDAPRH(ar) => {
-                let inst = if ar == 0 {
-                    "ldaprh"
-                } else if ar == 0b01 {
-                    "ldaprlh"
-                } else if ar == 0b10 {
-                    "ldaprah"
-                } else {
-                    "ldapralh"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::SWP(ar) => {
-                let inst = if ar == 0 {
-                    "swp"
-                } else if ar == 0b01 {
-                    "swlp"
-                } else if ar == 0b10 {
-                    "swap"
-                } else {
-                    "swalp"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::SWPB(ar) => {
-                let inst = if ar == 0 {
-                    "swpb"
-                } else if ar == 0b01 {
-                    "swplb"
-                } else if ar == 0b10 {
-                    "swpab"
-                } else {
-                    "swpalb"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::SWPH(ar) => {
-                let inst = if ar == 0 {
-                    "swph"
-                } else if ar == 0b01 {
-                    "swplh"
-                } else if ar == 0b10 {
-                    "swpah"
-                } else {
-                    "swpalh"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDADDB(ar) => {
-                let inst = if ar == 0 {
-                    "ldaddb"
-                } else if ar == 0b01 {
-                    "ldaddlb"
-                } else if ar == 0b10 {
-                    "ldaddab"
-                } else {
-                    "ldaddalb"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDCLRB(ar) => {
-                let inst = if ar == 0 {
-                    "ldclrb"
-                } else if ar == 0b01 {
-                    "ldclrlb"
-                } else if ar == 0b10 {
-                    "ldclrab"
-                } else {
-                    "ldclralb"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDEORB(ar) => {
-                let inst = if ar == 0 {
-                    "ldeorb"
-                } else if ar == 0b01 {
-                    "ldeorlb"
-                } else if ar == 0b10 {
-                    "ldeorab"
-                } else {
-                    "ldeoralb"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDSETB(ar) => {
-                let inst = if ar == 0 {
-                    "ldsetb"
-                } else if ar == 0b01 {
-                    "ldsetlb"
-                } else if ar == 0b10 {
-                    "ldsetab"
-                } else {
-                    "ldsetalb"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDSMAXB(ar) => {
-                let inst = if ar == 0 {
-                    "ldsmaxb"
-                } else if ar == 0b01 {
-                    "ldsmaxlb"
-                } else if ar == 0b10 {
-                    "ldsmaxab"
-                } else {
-                    "ldsmaxalb"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDSMINB(ar) => {
-                let inst = if ar == 0 {
-                    "ldsminb"
-                } else if ar == 0b01 {
-                    "ldsminlb"
-                } else if ar == 0b10 {
-                    "ldsminab"
-                } else {
-                    "ldsminalb"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDUMAXB(ar) => {
-                let inst = if ar == 0 {
-                    "ldumaxb"
-                } else if ar == 0b01 {
-                    "ldumaxlb"
-                } else if ar == 0b10 {
-                    "ldumaxab"
-                } else {
-                    "ldumaxalb"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDUMINB(ar) => {
-                let inst = if ar == 0 {
-                    "lduminb"
-                } else if ar == 0b01 {
-                    "lduminlb"
-                } else if ar == 0b10 {
-                    "lduminab"
-                } else {
-                    "lduminalb"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDADDH(ar) => {
-                let inst = if ar == 0 {
-                    "ldaddh"
-                } else if ar == 0b01 {
-                    "ldaddlh"
-                } else if ar == 0b10 {
-                    "ldaddah"
-                } else {
-                    "ldaddalh"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDCLRH(ar) => {
-                let inst = if ar == 0 {
-                    "ldclrh"
-                } else if ar == 0b01 {
-                    "ldclrlh"
-                } else if ar == 0b10 {
-                    "ldclrah"
-                } else {
-                    "ldclralh"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDEORH(ar) => {
-                let inst = if ar == 0 {
-                    "ldeorh"
-                } else if ar == 0b01 {
-                    "ldeorlh"
-                } else if ar == 0b10 {
-                    "ldeorah"
-                } else {
-                    "ldeoralh"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDSETH(ar) => {
-                let inst = if ar == 0 {
-                    "ldseth"
-                } else if ar == 0b01 {
-                    "ldsetlh"
-                } else if ar == 0b10 {
-                    "ldsetah"
-                } else {
-                    "ldsetalh"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDSMAXH(ar) => {
-                let inst = if ar == 0 {
-                    "ldsmaxh"
-                } else if ar == 0b01 {
-                    "ldsmaxlh"
-                } else if ar == 0b10 {
-                    "ldsmaxah"
-                } else {
-                    "ldsmaxalh"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDSMINH(ar) => {
-                let inst = if ar == 0 {
-                    "ldsminh"
-                } else if ar == 0b01 {
-                    "ldsminlh"
-                } else if ar == 0b10 {
-                    "ldsminah"
-                } else {
-                    "ldsminalh"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDUMAXH(ar) => {
-                let inst = if ar == 0 {
-                    "ldumaxh"
-                } else if ar == 0b01 {
-                    "ldumaxlh"
-                } else if ar == 0b10 {
-                    "ldumaxah"
-                } else {
-                    "ldumaxalh"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDUMINH(ar) => {
-                let inst = if ar == 0 {
-                    "lduminh"
-                } else if ar == 0b01 {
-                    "lduminlh"
-                } else if ar == 0b10 {
-                    "lduminah"
-                } else {
-                    "lduminalh"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDADD(ar) => {
-                let inst = if ar == 0 {
-                    "ldadd"
-                } else if ar == 0b01 {
-                    "ldaddl"
-                } else if ar == 0b10 {
-                    "ldadda"
-                } else {
-                    "ldaddal"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDCLR(ar) => {
-                let inst = if ar == 0 {
-                    "ldclr"
-                } else if ar == 0b01 {
-                    "ldclrl"
-                } else if ar == 0b10 {
-                    "ldclra"
-                } else {
-                    "ldclral"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDEOR(ar) => {
-                let inst = if ar == 0 {
-                    "ldeor"
-                } else if ar == 0b01 {
-                    "ldeorl"
-                } else if ar == 0b10 {
-                    "ldeora"
-                } else {
-                    "ldeoral"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDSET(ar) => {
-                let inst = if ar == 0 {
-                    "ldset"
-                } else if ar == 0b01 {
-                    "ldsetl"
-                } else if ar == 0b10 {
-                    "ldseta"
-                } else {
-                    "ldsetal"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDSMAX(ar) => {
-                let inst = if ar == 0 {
-                    "ldsmax"
-                } else if ar == 0b01 {
-                    "ldsmaxl"
-                } else if ar == 0b10 {
-                    "ldsmaxa"
-                } else {
-                    "ldsmaxal"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDSMIN(ar) => {
-                let inst = if ar == 0 {
-                    "ldsmin"
-                } else if ar == 0b01 {
-                    "ldsminl"
-                } else if ar == 0b10 {
-                    "ldsmina"
-                } else {
-                    "ldsminal"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDUMAX(ar) => {
-                let inst = if ar == 0 {
-                    "ldumax"
-                } else if ar == 0b01 {
-                    "ldumaxl"
-                } else if ar == 0b10 {
-                    "ldumaxa"
-                } else {
-                    "ldumaxal"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDUMIN(ar) => {
-                let inst = if ar == 0 {
-                    "ldumin"
-                } else if ar == 0b01 {
-                    "lduminl"
-                } else if ar == 0b10 {
-                    "ldumina"
-                } else {
-                    "lduminal"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDADD(ar) => {
-                let inst = if ar == 0 {
-                    "ldadd"
-                } else if ar == 0b01 {
-                    "ldaddl"
-                } else if ar == 0b10 {
-                    "ldadda"
-                } else {
-                    "ldaddal"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDCLR(ar) => {
-                let inst = if ar == 0 {
-                    "ldclr"
-                } else if ar == 0b01 {
-                    "ldclrl"
-                } else if ar == 0b10 {
-                    "ldclra"
-                } else {
-                    "ldclral"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDEOR(ar) => {
-                let inst = if ar == 0 {
-                    "ldeor"
-                } else if ar == 0b01 {
-                    "ldeorl"
-                } else if ar == 0b10 {
-                    "ldeora"
-                } else {
-                    "ldeoral"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDSET(ar) => {
-                let inst = if ar == 0 {
-                    "ldset"
-                } else if ar == 0b01 {
-                    "ldsetl"
-                } else if ar == 0b10 {
-                    "ldseta"
-                } else {
-                    "ldsetal"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDSMAX(ar) => {
-                let inst = if ar == 0 {
-                    "ldsmax"
-                } else if ar == 0b01 {
-                    "ldsmaxl"
-                } else if ar == 0b10 {
-                    "ldsmaxa"
-                } else {
-                    "ldsmaxal"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDSMIN(ar) => {
-                let inst = if ar == 0 {
-                    "ldsmin"
-                } else if ar == 0b01 {
-                    "ldsminl"
-                } else if ar == 0b10 {
-                    "ldsmina"
-                } else {
-                    "ldsminal"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDUMAX(ar) => {
-                let inst = if ar == 0 {
-                    "ldumax"
-                } else if ar == 0b01 {
-                    "ldumaxl"
-                } else if ar == 0b10 {
-                    "ldumaxa"
-                } else {
-                    "ldumaxal"
-                };
-                fmt.write_str(inst);
-            }
-            Opcode::LDUMIN(ar) => {
-                let inst = if ar == 0 {
-                    "ldumin"
-                } else if ar == 0b01 {
-                    "lduminl"
-                } else if ar == 0b10 {
-                    "ldumina"
-                } else {
-                    "lduminal"
-                };
-                fmt.write_str(inst);
-            }
+            other => { write!(fmt, "{}", other)?; }
         };
 
         if self.operands[0] != Operand::Nothing {
@@ -2534,8 +830,8 @@ pub enum Opcode {
     SYS(SysOps),
     SYSL(SysOps),
     ISB,
-    DSB,
-    DMB,
+    DSB(u8),
+    DMB(u8),
     SB,
     SSSB,
     HINT(u8),
@@ -2918,6 +1214,811 @@ pub enum Opcode {
     LDSMIN(u8),
     LDUMAX(u8),
     LDUMIN(u8),
+}
+
+impl Display for Opcode {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        let text = match *self {
+            Opcode::Invalid => "invalid",
+            Opcode::MOVK => "movk",
+            Opcode::ADC => "adc",
+            Opcode::ADCS => "adcs",
+            Opcode::SBC => "sbc",
+            Opcode::SBCS => "sbcs",
+            Opcode::AND => "and",
+            Opcode::BIC => "bic",
+            Opcode::BICS => "bics",
+            Opcode::EOR => "eor",
+            Opcode::EON => "eon",
+            Opcode::BFM => "bfm",
+            Opcode::ADR => "adr",
+            Opcode::ADRP => "adrp",
+            Opcode::LDP => "ldp",
+            Opcode::LDPSW => "ldpsw",
+            Opcode::LDR => "ldr",
+            Opcode::LDRB => "ldrb",
+            Opcode::LDRSB => "ldrsb",
+            Opcode::LDRSH => "ldrsh",
+            Opcode::LDRSW => "ldrsw",
+            Opcode::LDRH => "ldrh",
+            Opcode::LDTR => "ldtr",
+            Opcode::LDTRB => "ldtrb",
+            Opcode::LDTRSB => "ldtrsb",
+            Opcode::LDTRSH => "ldtrsh",
+            Opcode::LDTRSW => "ldtrsw",
+            Opcode::LDTRH => "ldtrh",
+            Opcode::LDUR => "ldur",
+            Opcode::LDURB => "ldurb",
+            Opcode::LDURSB => "ldursb",
+            Opcode::LDURSW => "ldursw",
+            Opcode::LDURSH => "ldursh",
+            Opcode::LDURH => "ldurh",
+            Opcode::LDAR => "ldar",
+            Opcode::LDARB => "ldarb",
+            Opcode::LDAXRB => "ldaxrb",
+            Opcode::LDARH => "ldarh",
+            Opcode::LDAXP => "ldaxp",
+            Opcode::LDAXR => "ldaxr",
+            Opcode::LDAXRH => "ldaxrh",
+            Opcode::LDXP => "ldxp",
+            Opcode::LDXR => "ldxr",
+            Opcode::LDXRB => "ldxrb",
+            Opcode::LDXRH => "ldxrh",
+            Opcode::STP => "stp",
+            Opcode::STR => "str",
+            Opcode::STRB => "strb",
+            Opcode::STRH => "strh",
+            Opcode::STRW => "strw",
+            Opcode::STTR => "sttr",
+            Opcode::STTRB => "sttrb",
+            Opcode::STTRH => "sttrh",
+            Opcode::STUR => "stur",
+            Opcode::STURB => "sturb",
+            Opcode::STURH => "sturh",
+            Opcode::STLR => "stlr",
+            Opcode::STLRB => "stlrb",
+            Opcode::STLRH => "stlrh",
+            Opcode::STLXP => "stlxp",
+            Opcode::STLXR => "stlxr",
+            Opcode::STLXRB => "stlxrb",
+            Opcode::STLXRH => "stlxrh",
+            Opcode::STXP => "stxp",
+            Opcode::STXR => "stxr",
+            Opcode::STXRB => "stxrb",
+            Opcode::STXRH => "stxrh",
+            Opcode::TBZ => "tbz",
+            Opcode::TBNZ => "tbnz",
+            Opcode::CBZ => "cbz",
+            Opcode::CBNZ => "cbnz",
+            Opcode::B => "b",
+            Opcode::BR => "br",
+            Opcode::BL => "bl",
+            Opcode::BLR => "blr",
+            Opcode::SVC => "svc",
+            Opcode::HVC => "hvc",
+            Opcode::SMC => "smc",
+            Opcode::BRK => "brk",
+            Opcode::HLT => "hlt",
+            Opcode::DCPS1 => "dcps1",
+            Opcode::DCPS2 => "dcps2",
+            Opcode::DCPS3 => "dcps3",
+            Opcode::ERET => "eret",
+            Opcode::DRPS => "drps",
+            Opcode::MSR => "msr",
+            Opcode::MRS => "mrs",
+            Opcode::ISB => "isb",
+            Opcode::SB => "sb",
+            Opcode::SSSB => "sssb",
+            Opcode::CLREX => "clrex",
+            Opcode::CSEL => "csel",
+            Opcode::PACIA => "pacia",
+            Opcode::PACIZA => "paciza",
+            Opcode::CCMN => "ccmn",
+            Opcode::CCMP => "ccmp",
+            Opcode::RBIT => "rbit",
+            Opcode::REV16 => "rev16",
+            Opcode::REV => "rev",
+            Opcode::REV32 => "rev32",
+            Opcode::CLZ => "clz",
+            Opcode::CLS => "cls",
+            Opcode::CRC32B => "crc32b",
+            Opcode::CRC32H => "crc32h",
+            Opcode::CRC32W => "crc32w",
+            Opcode::CRC32X => "crc32x",
+            Opcode::CRC32CB => "crc32cb",
+            Opcode::CRC32CH => "crc32ch",
+            Opcode::CRC32CW => "crc32cw",
+            Opcode::CRC32CX => "crc32cx",
+            Opcode::STNP => "stnp",
+            Opcode::LDNP => "ldnp",
+            Opcode::ST1 => "st1",
+            Opcode::ST2 => "st2",
+            Opcode::ST3 => "st3",
+            Opcode::ST4 => "st4",
+            Opcode::LD1R => "ld1r",
+            Opcode::LD2R => "ld2r",
+            Opcode::LD3R => "ld3r",
+            Opcode::LD4R => "ld4r",
+            Opcode::LD1 => "ld1",
+            Opcode::LD2 => "ld2",
+            Opcode::LD3 => "ld3",
+            Opcode::LD4 => "ld4",
+            Opcode::FMADD => "fmadd",
+            Opcode::FMSUB => "fmsub",
+            Opcode::FNMADD => "fnmadd",
+            Opcode::FNMSUB => "fnmsub",
+            Opcode::SCVTF => "scvtf",
+            Opcode::UCVTF => "ucvtf",
+            Opcode::FCVTZS => "fcvtzs",
+            Opcode::FCVTZU => "fcvtzu",
+            Opcode::FMOV => "fmov",
+            Opcode::FABS => "fabs",
+            Opcode::FNEG => "fneg",
+            Opcode::FSQRT => "fsqrt",
+            Opcode::FRINTN => "frintn",
+            Opcode::FRINTP => "frintp",
+            Opcode::FRINTM => "frintm",
+            Opcode::FRINTZ => "frintz",
+            Opcode::FRINTA => "frinta",
+            Opcode::FRINTX => "frintx",
+            Opcode::FRINTI => "frinti",
+            Opcode::FRINT32Z => "frint32z",
+            Opcode::FRINT32X => "frint32x",
+            Opcode::FRINT64Z => "frint64z",
+            Opcode::FRINT64X => "frint64x",
+            Opcode::BFCVT => "bfcvt",
+            Opcode::FCVT => "fcvt",
+            Opcode::FCMP => "fcmp",
+            Opcode::FCMPE => "fcmpe",
+            Opcode::FMUL => "fmul",
+            Opcode::FDIV => "fdiv",
+            Opcode::FADD => "fadd",
+            Opcode::FSUB => "fsub",
+            Opcode::FMAX => "fmax",
+            Opcode::FMIN => "fmin",
+            Opcode::FMAXNM => "fmaxnm",
+            Opcode::FMINNM => "fminnm",
+            Opcode::FNMUL => "fnmul",
+            Opcode::FCSEL => "fcsel",
+            Opcode::FCCMP => "fccmp",
+            Opcode::FCCMPE => "fccmpe",
+            Opcode::FMULX => "fmulx",
+            Opcode::FMLSL => "fmlsl",
+            Opcode::FMLAL => "fmlal",
+            Opcode::SQRDMLSH => "sqrdmlsh",
+            Opcode::UDOT => "udot",
+            Opcode::SQRDMLAH => "sqrdmlah",
+            Opcode::UMULL => "umull",
+            Opcode::UMULL2 => "umull2",
+            Opcode::UMLSL => "umlsl",
+            Opcode::UMLSL2 => "umlsl2",
+            Opcode::MLS => "mls",
+            Opcode::UMLAL => "umlal",
+            Opcode::UMLAL2 => "umlal2",
+            Opcode::MLA => "mla",
+            Opcode::SDOT => "sdot",
+            Opcode::SQRDMULH2 => "sqrdmulh2",
+            Opcode::SQDMULH => "sqdmulh",
+            Opcode::SQDMULH2 => "sqdmulh2",
+            Opcode::SQDMULL => "sqdmull",
+            Opcode::SQDMULL2 => "sqdmull2",
+            Opcode::SMULL => "smull",
+            Opcode::SMULL2 => "smull2",
+            Opcode::MUL => "mul",
+            Opcode::SQDMLSL => "sqdmlsl",
+            Opcode::SQDMLSL2 => "sqdmlsl2",
+            Opcode::SMLSL => "smlsl",
+            Opcode::SMLSL2 => "smlsl2",
+            Opcode::SQDMLAL => "sqdmlal",
+            Opcode::SQDMLAL2 => "sqdmlal2",
+            Opcode::SMLAL => "smlal",
+            Opcode::SMLAL2 => "smlal2",
+            Opcode::SQRDMULH => "sqrdmulh",
+            Opcode::FCMLA => "fcmla",
+            Opcode::SSHR => "sshr",
+            Opcode::SSRA => "ssra",
+            Opcode::SRSHR => "srshr",
+            Opcode::SRSRA => "srsra",
+            Opcode::SHL => "shl",
+            Opcode::SQSHL => "sqshl",
+            Opcode::SHRN => "shrn",
+            Opcode::RSHRN => "rshrn",
+            Opcode::SQSHRN => "sqshrn",
+            Opcode::SQRSHRN => "sqrshrn",
+            Opcode::SSHLL => "sshll",
+            Opcode::USHLL => "sshll",
+            Opcode::USHR => "ushr",
+            Opcode::USRA => "usra",
+            Opcode::URSHR => "urshr",
+            Opcode::URSRA => "ursra",
+            Opcode::SRI => "sri",
+            Opcode::SLI => "sli",
+            Opcode::SQSHLU => "sqshlu",
+            Opcode::UQSHL => "uqshl",
+            Opcode::SQSHRUN => "sqshrun",
+            Opcode::SQRSHRUN => "sqrshrun",
+            Opcode::UQSHRN => "uqshrn",
+            Opcode::UQRSHRN => "uqrshrn",
+            Opcode::MOVI => "movi",
+            Opcode::MVNI => "mvni",
+            Opcode::SHADD => "shadd",
+            Opcode::SQADD => "sqadd",
+            Opcode::SRHADD => "srhadd",
+            Opcode::SHSUB => "shsub",
+            Opcode::SQSUB => "sqsub",
+            Opcode::CMGT => "cmgt",
+            Opcode::CMGE => "cmge",
+            Opcode::SSHL => "sshl",
+            Opcode::SRSHL => "srshl",
+            Opcode::SQRSHL => "sqrshl",
+            Opcode::SMAX => "smax",
+            Opcode::SMIN => "smin",
+            Opcode::SABD => "sabd",
+            Opcode::SABA => "saba",
+            Opcode::CMTST => "cmtst",
+            Opcode::SMAXP => "smaxp",
+            Opcode::SMINP => "sminp",
+            Opcode::ADDP => "addp",
+            Opcode::UHADD => "uhadd",
+            Opcode::UQADD => "uqadd",
+            Opcode::URHADD => "urhadd",
+            Opcode::UHSUB => "uhsub",
+            Opcode::UQSUB => "uqsub",
+            Opcode::CMHI => "cmhi",
+            Opcode::CMHS => "cmhs",
+            Opcode::USHL => "ushl",
+            Opcode::URSHL => "urshl",
+            Opcode::UQRSHL => "uqrshl",
+            Opcode::UMAX => "umax",
+            Opcode::UMIN => "umin",
+            Opcode::UABD => "uabd",
+            Opcode::UABA => "uaba",
+            Opcode::CMEQ => "cmeq",
+            Opcode::PMUL => "pmul",
+            Opcode::UMAXP => "umaxp",
+            Opcode::UMINP => "uminp",
+            Opcode::FMLA => "fmla",
+            Opcode::FCMEQ => "fcmeq",
+            Opcode::FRECPS => "frecps",
+            Opcode::BSL => "bsl",
+            Opcode::BIT => "bit",
+            Opcode::BIF => "bif",
+            Opcode::FMAXNMP => "fmaxnmp",
+            Opcode::FMINMNP => "fminmnp",
+            Opcode::FADDP => "faddp",
+            Opcode::FCMGE => "fcmge",
+            Opcode::FACGE => "facge",
+            Opcode::FMAXP => "fmaxp",
+            Opcode::SADDL => "saddl",
+            Opcode::SADDL2 => "saddl2",
+            Opcode::SADDW => "saddw",
+            Opcode::SADDW2 => "saddw2",
+            Opcode::SSUBL => "ssubl",
+            Opcode::SSUBL2 => "ssubl2",
+            Opcode::SSUBW => "ssubw",
+            Opcode::SSUBW2 => "ssubw2",
+            Opcode::ADDHN => "addhn",
+            Opcode::ADDHN2 => "addhn2",
+            Opcode::SABAL => "sabal",
+            Opcode::SABAL2 => "sabal2",
+            Opcode::SUBHN => "subhn",
+            Opcode::SUBHN2 => "subhn2",
+            Opcode::SABDL => "sabdl",
+            Opcode::SABDL2 => "sabdl2",
+            Opcode::PMULL => "pmull",
+            Opcode::PMULL2 => "pmull2",
+            Opcode::UADDL => "uaddl",
+            Opcode::UADDL2 => "uaddl2",
+            Opcode::UADDW => "uaddw",
+            Opcode::UADDW2 => "uaddw2",
+            Opcode::USUBL => "usubl",
+            Opcode::USUBL2 => "usubl2",
+            Opcode::USUBW => "usubw",
+            Opcode::USUBW2 => "usubw2",
+            Opcode::RADDHN => "raddhn",
+            Opcode::RADDHN2 => "raddhn2",
+            Opcode::RSUBHN => "rsubhn",
+            Opcode::RSUBHN2 => "rsubhn2",
+            Opcode::UABAL => "uabal",
+            Opcode::UABAL2 => "uabal2",
+            Opcode::UABDL => "uabdl",
+            Opcode::UABDL2 => "uabdl2",
+            Opcode::REV64 => "rev64",
+            Opcode::SADDLP => "saddlp",
+            Opcode::SUQADD => "suqadd",
+            Opcode::CNT => "cnt",
+            Opcode::SADALP => "sadalp",
+            Opcode::SQABS => "sqabs",
+            Opcode::CMLT => "cmlt",
+            Opcode::ABS => "abs",
+            Opcode::XTN => "xtn",
+            Opcode::SQXTN => "sqxtn",
+            Opcode::FCVTN => "fcvtn",
+            Opcode::FCMGT => "fcmgt",
+            Opcode::FCVTL => "fcvtl",
+            Opcode::FCVTL2 => "fcvtl2",
+            Opcode::FCVTNS => "fcvtns",
+            Opcode::FCVTPS => "fcvtps",
+            Opcode::FCVTMS => "fcvtms",
+            Opcode::FCVTAS => "fcvtas",
+            Opcode::URECPE => "urecpe",
+            Opcode::FRECPE => "frecpe",
+            Opcode::UADDLP => "uaddlp",
+            Opcode::USQADD => "usqadd",
+            Opcode::UADALP => "uadalp",
+            Opcode::SQNEG => "sqneg",
+            Opcode::CMLE => "cmle",
+            Opcode::NEG => "neg",
+            Opcode::SQXTUN => "sqxtun",
+            Opcode::SHLL => "shll",
+            Opcode::UQXTN => "uqxtn",
+            Opcode::FCVTXN => "fcvtxn",
+            Opcode::FCVTNU => "fcvtnu",
+            Opcode::FCVTMU => "fcvtmu",
+            Opcode::FCVTAU => "fcvtau",
+            Opcode::EXT => "ext",
+            Opcode::UZP1 => "uzp1",
+            Opcode::TRN1 => "trn1",
+            Opcode::ZIP1 => "zip1",
+            Opcode::UZP2 => "uzp2",
+            Opcode::TRN2 => "trn2",
+            Opcode::ZIP2 => "zip2",
+            Opcode::SMOV => "smov",
+            Opcode::UMOV => "umov",
+            Opcode::SQSHRN2 => "sqshrn2",
+            Opcode::SQRSHRN2 => "sqrshrn2",
+            Opcode::SQSHRUN2 => "sqshrun2",
+            Opcode::SQRSHRUN2 => "sqrshrun2",
+            Opcode::UQSHRN2 => "uqshrn2",
+            Opcode::UQRSHRN2 => "uqrshrn2",
+            Opcode::FMLS => "fmls",
+            Opcode::FRECPX => "frecpx",
+            Opcode::FRSQRTE => "frsqrte",
+            Opcode::FCVTPU => "fcvtpu",
+            Opcode::FCMLT => "fcmlt",
+            Opcode::FCMLE => "fcmle",
+            Opcode::FMAXNMV => "fmaxnmv",
+            Opcode::FMINNMV => "fminnmv",
+            Opcode::FMAXV => "fmaxv",
+            Opcode::FMINV => "fminv",
+            Opcode::UADDLV => "uaddlv",
+            Opcode::SADDLV => "saddlv",
+            Opcode::UMAXV => "umaxv",
+            Opcode::SMAXV => "smaxv",
+            Opcode::UMINV => "uminv",
+            Opcode::SMINV => "sminv",
+            Opcode::ADDV => "addv",
+            Opcode::FRSQRTS => "frsqrts",
+            Opcode::FMINNMP => "fminnmp",
+            Opcode::FMLAL2 => "fmlal2",
+            Opcode::FMLSL2 => "fmlsl2",
+            Opcode::FABD => "fabd",
+            Opcode::FACGT => "facgt",
+            Opcode::FMINP => "fminp",
+            Opcode::FJCVTZS => "fjcvtzs",
+            Opcode::URSQRTE => "ursqrte",
+            Opcode::PRFM => "prfm",
+            Opcode::AESE => "aese",
+            Opcode::AESD => "aesd",
+            Opcode::AESMC => "aesmc",
+            Opcode::AESIMC => "aesimc",
+            Opcode::SHA1H => "sha1h",
+            Opcode::SHA1SU1 => "sha1su1",
+            Opcode::SHA256SU0 => "sha256su0",
+            Opcode::SM3TT1A => "sm3tt1a",
+            Opcode::SM3TT1B => "sm3tt1b",
+            Opcode::SM3TT2A => "sm3tt2a",
+            Opcode::SM3TT2B => "sm3tt2b",
+            Opcode::SHA512H => "sha512h",
+            Opcode::SHA512H2 => "sha512h2",
+            Opcode::SHA512SU1 => "sha512su1",
+            Opcode::RAX1 => "rax1",
+            Opcode::SM3PARTW1 => "sm3partw1",
+            Opcode::SM3PARTW2 => "sm3partw2",
+            Opcode::SM4EKEY => "sm4ekey",
+            Opcode::BCAX => "bcax",
+            Opcode::SM3SSI => "sm3ssi",
+            Opcode::SHA512SU0 => "sha512su0",
+            Opcode::SM4E => "sm4e",
+            Opcode::EOR3 => "eor3",
+            Opcode::XAR => "xar",
+            Opcode::LDRAA => "ldraa",
+            Opcode::LDRAB => "ldrab",
+            Opcode::LDAPRH(ar) => {
+                if ar == 0 {
+                    "ldaprh"
+                } else if ar == 0b01 {
+                    "ldaprlh"
+                } else if ar == 0b10 {
+                    "ldaprah"
+                } else {
+                    "ldapralh"
+                }
+            }
+            Opcode::SWP(ar) => {
+                if ar == 0 {
+                    "swp"
+                } else if ar == 0b01 {
+                    "swlp"
+                } else if ar == 0b10 {
+                    "swap"
+                } else {
+                    "swalp"
+                }
+            }
+            Opcode::SWPB(ar) => {
+                if ar == 0 {
+                    "swpb"
+                } else if ar == 0b01 {
+                    "swplb"
+                } else if ar == 0b10 {
+                    "swpab"
+                } else {
+                    "swpalb"
+                }
+            }
+            Opcode::SWPH(ar) => {
+                if ar == 0 {
+                    "swph"
+                } else if ar == 0b01 {
+                    "swplh"
+                } else if ar == 0b10 {
+                    "swpah"
+                } else {
+                    "swpalh"
+                }
+            }
+            Opcode::LDADDB(ar) => {
+                if ar == 0 {
+                    "ldaddb"
+                } else if ar == 0b01 {
+                    "ldaddlb"
+                } else if ar == 0b10 {
+                    "ldaddab"
+                } else {
+                    "ldaddalb"
+                }
+            }
+            Opcode::LDCLRB(ar) => {
+                if ar == 0 {
+                    "ldclrb"
+                } else if ar == 0b01 {
+                    "ldclrlb"
+                } else if ar == 0b10 {
+                    "ldclrab"
+                } else {
+                    "ldclralb"
+                }
+            }
+            Opcode::LDEORB(ar) => {
+                if ar == 0 {
+                    "ldeorb"
+                } else if ar == 0b01 {
+                    "ldeorlb"
+                } else if ar == 0b10 {
+                    "ldeorab"
+                } else {
+                    "ldeoralb"
+                }
+            }
+            Opcode::LDSETB(ar) => {
+                if ar == 0 {
+                    "ldsetb"
+                } else if ar == 0b01 {
+                    "ldsetlb"
+                } else if ar == 0b10 {
+                    "ldsetab"
+                } else {
+                    "ldsetalb"
+                }
+            }
+            Opcode::LDSMAXB(ar) => {
+                if ar == 0 {
+                    "ldsmaxb"
+                } else if ar == 0b01 {
+                    "ldsmaxlb"
+                } else if ar == 0b10 {
+                    "ldsmaxab"
+                } else {
+                    "ldsmaxalb"
+                }
+            }
+            Opcode::LDSMINB(ar) => {
+                if ar == 0 {
+                    "ldsminb"
+                } else if ar == 0b01 {
+                    "ldsminlb"
+                } else if ar == 0b10 {
+                    "ldsminab"
+                } else {
+                    "ldsminalb"
+                }
+            }
+            Opcode::LDUMAXB(ar) => {
+                if ar == 0 {
+                    "ldumaxb"
+                } else if ar == 0b01 {
+                    "ldumaxlb"
+                } else if ar == 0b10 {
+                    "ldumaxab"
+                } else {
+                    "ldumaxalb"
+                }
+            }
+            Opcode::LDUMINB(ar) => {
+                if ar == 0 {
+                    "lduminb"
+                } else if ar == 0b01 {
+                    "lduminlb"
+                } else if ar == 0b10 {
+                    "lduminab"
+                } else {
+                    "lduminalb"
+                }
+            }
+            Opcode::LDADDH(ar) => {
+                if ar == 0 {
+                    "ldaddh"
+                } else if ar == 0b01 {
+                    "ldaddlh"
+                } else if ar == 0b10 {
+                    "ldaddah"
+                } else {
+                    "ldaddalh"
+                }
+            }
+            Opcode::LDCLRH(ar) => {
+                if ar == 0 {
+                    "ldclrh"
+                } else if ar == 0b01 {
+                    "ldclrlh"
+                } else if ar == 0b10 {
+                    "ldclrah"
+                } else {
+                    "ldclralh"
+                }
+            }
+            Opcode::LDEORH(ar) => {
+                if ar == 0 {
+                    "ldeorh"
+                } else if ar == 0b01 {
+                    "ldeorlh"
+                } else if ar == 0b10 {
+                    "ldeorah"
+                } else {
+                    "ldeoralh"
+                }
+            }
+            Opcode::LDSETH(ar) => {
+                if ar == 0 {
+                    "ldseth"
+                } else if ar == 0b01 {
+                    "ldsetlh"
+                } else if ar == 0b10 {
+                    "ldsetah"
+                } else {
+                    "ldsetalh"
+                }
+            }
+            Opcode::LDSMAXH(ar) => {
+                if ar == 0 {
+                    "ldsmaxh"
+                } else if ar == 0b01 {
+                    "ldsmaxlh"
+                } else if ar == 0b10 {
+                    "ldsmaxah"
+                } else {
+                    "ldsmaxalh"
+                }
+            }
+            Opcode::LDSMINH(ar) => {
+                if ar == 0 {
+                    "ldsminh"
+                } else if ar == 0b01 {
+                    "ldsminlh"
+                } else if ar == 0b10 {
+                    "ldsminah"
+                } else {
+                    "ldsminalh"
+                }
+            }
+            Opcode::LDUMAXH(ar) => {
+                if ar == 0 {
+                    "ldumaxh"
+                } else if ar == 0b01 {
+                    "ldumaxlh"
+                } else if ar == 0b10 {
+                    "ldumaxah"
+                } else {
+                    "ldumaxalh"
+                }
+            }
+            Opcode::LDUMINH(ar) => {
+                if ar == 0 {
+                    "lduminh"
+                } else if ar == 0b01 {
+                    "lduminlh"
+                } else if ar == 0b10 {
+                    "lduminah"
+                } else {
+                    "lduminalh"
+                }
+            }
+            Opcode::LDADD(ar) => {
+                if ar == 0 {
+                    "ldadd"
+                } else if ar == 0b01 {
+                    "ldaddl"
+                } else if ar == 0b10 {
+                    "ldadda"
+                } else {
+                    "ldaddal"
+                }
+            }
+            Opcode::LDCLR(ar) => {
+                if ar == 0 {
+                    "ldclr"
+                } else if ar == 0b01 {
+                    "ldclrl"
+                } else if ar == 0b10 {
+                    "ldclra"
+                } else {
+                    "ldclral"
+                }
+            }
+            Opcode::LDEOR(ar) => {
+                if ar == 0 {
+                    "ldeor"
+                } else if ar == 0b01 {
+                    "ldeorl"
+                } else if ar == 0b10 {
+                    "ldeora"
+                } else {
+                    "ldeoral"
+                }
+            }
+            Opcode::LDSET(ar) => {
+                if ar == 0 {
+                    "ldset"
+                } else if ar == 0b01 {
+                    "ldsetl"
+                } else if ar == 0b10 {
+                    "ldseta"
+                } else {
+                    "ldsetal"
+                }
+            }
+            Opcode::LDSMAX(ar) => {
+                if ar == 0 {
+                    "ldsmax"
+                } else if ar == 0b01 {
+                    "ldsmaxl"
+                } else if ar == 0b10 {
+                    "ldsmaxa"
+                } else {
+                    "ldsmaxal"
+                }
+            }
+            Opcode::LDSMIN(ar) => {
+                if ar == 0 {
+                    "ldsmin"
+                } else if ar == 0b01 {
+                    "ldsminl"
+                } else if ar == 0b10 {
+                    "ldsmina"
+                } else {
+                    "ldsminal"
+                }
+            }
+            Opcode::LDUMAX(ar) => {
+                if ar == 0 {
+                    "ldumax"
+                } else if ar == 0b01 {
+                    "ldumaxl"
+                } else if ar == 0b10 {
+                    "ldumaxa"
+                } else {
+                    "ldumaxal"
+                }
+            }
+            Opcode::LDUMIN(ar) => {
+                if ar == 0 {
+                    "ldumin"
+                } else if ar == 0b01 {
+                    "lduminl"
+                } else if ar == 0b10 {
+                    "ldumina"
+                } else {
+                    "lduminal"
+                }
+            }
+            Opcode::MOVN => "movn",
+            Opcode::MOVZ => "movz",
+            Opcode::ORR => "orr",
+            Opcode::ORN => "orn",
+            Opcode::ANDS => "ands",
+            Opcode::ADDS => "adds",
+            Opcode::ADD => "add",
+            Opcode::SUBS => "subs",
+            Opcode::SUB => "sub",
+            Opcode::UBFM => "ubfm",
+            Opcode::SBFM => "sbfm",
+            Opcode::EXTR => "extr",
+            Opcode::RET => "ret",
+            Opcode::SYS(_) => "sys",
+            Opcode::SYSL(_) => "sysl",
+            Opcode::CSNEG => "csneg",
+            Opcode::CSINC => "csinc",
+            Opcode::CSINV => "csinv",
+            Opcode::MADD => "madd",
+            Opcode::MSUB => "msub",
+            Opcode::SMADDL => "smaddl",
+            Opcode::SMSUBL => "smsubl",
+            Opcode::SMULH => "smulh",
+            Opcode::UMADDL => "umaddl",
+            Opcode::UMSUBL => "umsubl",
+            Opcode::UMULH => "umulh",
+            Opcode::UDIV => "udiv",
+            Opcode::SDIV => "sdiv",
+            Opcode::LSLV => "lslv",
+            Opcode::LSRV => "lsrv",
+            Opcode::ASRV => "asrv",
+            Opcode::RORV => "rorv",
+            Opcode::INS => "ins",
+            Opcode::DUP => "dup",
+
+            Opcode::Bcc(cond) => {
+                return write!(fmt, "b.{}", Operand::ConditionCode(cond));
+            },
+            Opcode::DMB(option) => {
+                return match option {
+                    0b0001 => write!(fmt, "dmb oshld"),
+                    0b0010 => write!(fmt, "dmb oshst"),
+                    0b0011 => write!(fmt, "dmb osh"),
+                    0b0101 => write!(fmt, "dmb nshld"),
+                    0b0110 => write!(fmt, "dmb nshst"),
+                    0b0111 => write!(fmt, "dmb nsh"),
+                    0b1001 => write!(fmt, "dmb ishld"),
+                    0b1010 => write!(fmt, "dmb ishst"),
+                    0b1011 => write!(fmt, "dmb ish"),
+                    0b1101 => write!(fmt, "dmb ld"),
+                    0b1110 => write!(fmt, "dmb st"),
+                    0b1111 => write!(fmt, "dmb sy"),
+                    _ => write!(fmt, "dmb {:x}", option)
+                };
+            }
+            Opcode::DSB(option) => {
+                return match option {
+                    0b0001 => write!(fmt, "dsb oshld"),
+                    0b0010 => write!(fmt, "dsb oshst"),
+                    0b0011 => write!(fmt, "dsb osh"),
+                    0b0101 => write!(fmt, "dsb nshld"),
+                    0b0110 => write!(fmt, "dsb nshst"),
+                    0b0111 => write!(fmt, "dsb nsh"),
+                    0b1001 => write!(fmt, "dsb ishld"),
+                    0b1010 => write!(fmt, "dsb ishst"),
+                    0b1011 => write!(fmt, "dsb ish"),
+                    0b1101 => write!(fmt, "dsb ld"),
+                    0b1110 => write!(fmt, "dsb st"),
+                    0b1111 => write!(fmt, "dsb sy"),
+                    _ => write!(fmt, "dsb {:x}", option)
+                };
+            }
+            Opcode::HINT(v) => {
+                return match v {
+                    0 => { write!(fmt, "nop") },
+                    1 => { write!(fmt, "yield") },
+                    2 => { write!(fmt, "wfe") },
+                    3 => { write!(fmt, "wfi") },
+                    4 => { write!(fmt, "sev") },
+                    5 => { write!(fmt, "sevl") },
+                    _ => { write!(fmt, "hint({:#x})", v) }
+                }
+            }
+        };
+
+        fmt.write_str(text)
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
