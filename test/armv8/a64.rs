@@ -4430,3 +4430,117 @@ fn test_tbl() {
 
     assert!(errs.is_empty());
 }
+
+#[test]
+fn test_saddw() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x10, 0x20, 0x0e], "saddw v0.8h, v0.8h, v0.8b"),
+        ([0x00, 0x60, 0x20, 0x0e], "subhn v0.8b, v0.8h, v0.8h"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_vector_cmge() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x98, 0x20, 0x0e], "cmeq v0.8b, v0.8b, #0"),
+        ([0x00, 0xc8, 0xa0, 0x0e], "fcmgt v0.2s, v0.2s, #0.0"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_xtn() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x28, 0x21, 0x0e], "xtn v0.8b, v0.8h"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_saddlv() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x38, 0x30, 0x0e], "saddlv h0, v0.8b"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_simd_same_three_fp16() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x04, 0x40, 0x0e], "fmaxnm v0.4h, v0.4h, v0.4h"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_simd_two_register_misc_fp16() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x88, 0x79, 0x0e], "frintn v0.4h, v0.4h"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_simd_three_same_extra() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x94, 0x90, 0x0e], "sdot v0.2s, v0.8b, v0.8b"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_rev64() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x08, 0xa0, 0x0e], "rev64 v0.2s, v0.2s"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
