@@ -1214,6 +1214,11 @@ pub enum Opcode {
     LDSMIN(u8),
     LDUMAX(u8),
     LDUMIN(u8),
+
+    CAS(u8),
+    CASH(u8),
+    CASB(u8),
+    CASP(u8),
 }
 
 impl Display for Opcode {
@@ -2015,6 +2020,50 @@ impl Display for Opcode {
                     _ => { write!(fmt, "hint({:#x})", v) }
                 }
             }
+            Opcode::CASB(ar) => {
+                if ar == 0 {
+                    "casb"
+                } else if ar == 0b01 {
+                    "caslb"
+                } else if ar == 0b10 {
+                    "casab"
+                } else {
+                    "casalb"
+                }
+            }
+            Opcode::CASH(ar) => {
+                if ar == 0 {
+                    "cash"
+                } else if ar == 0b01 {
+                    "caslh"
+                } else if ar == 0b10 {
+                    "casah"
+                } else {
+                    "casalh"
+                }
+            }
+            Opcode::CAS(ar) => {
+                if ar == 0 {
+                    "cas"
+                } else if ar == 0b01 {
+                    "casl"
+                } else if ar == 0b10 {
+                    "casa"
+                } else {
+                    "casal"
+                }
+            }
+            Opcode::CASP(ar) => {
+                if ar == 0 {
+                    "casp"
+                } else if ar == 0b01 {
+                    "caspl"
+                } else if ar == 0b10 {
+                    "caspa"
+                } else {
+                    "caspal"
+                }
+            }
         };
 
         fmt.write_str(text)
@@ -2061,6 +2110,7 @@ impl Display for ShiftStyle {
 pub enum Operand {
     Nothing,
     Register(SizeCode, u16),
+    RegisterPair(SizeCode, u16),
     SIMDRegister(SIMDSizeCode, u16),
     SIMDRegisterElements(SIMDSizeCode, u16, SIMDSizeCode),
     SIMDRegisterElementsLane(SIMDSizeCode, u16, SIMDSizeCode, u8),
@@ -2113,6 +2163,9 @@ impl Display for Operand {
                         }
                     }
                 }
+            },
+            Operand::RegisterPair(size, reg) => {
+                write!(fmt, "{}, {}", Operand::Register(*size, *reg), Operand::Register(*size, *reg + 1))
             },
             Operand::ControlReg(reg) => {
                 write!(fmt, "cr{}", reg)
@@ -2363,6 +2416,8 @@ impl Decoder<ARMv8> for InstDecoder {
             DataProcessingSimd2,
             DataProcessingImmediate,
             BranchExceptionSystem,
+            SME,
+            SVE,
         }
 
         // from ARM architecture refrence manual for ARMv8, C3.1
@@ -2379,9 +2434,9 @@ impl Decoder<ARMv8> for InstDecoder {
 
         let section_bits = word >> 25;
         let section = [
-            Section::Unallocated,                    // 0000
+            Section::SME,                            // 0000 // SME encodings
             Section::Unallocated,                    // 0001
-            Section::Unallocated,                    // 0010
+            Section::SVE,                            // 0010 // SVE encodings
             Section::Unallocated,                    // 0011
             Section::LoadStore,                      // 0100
             Section::DataProcessingReg,              // 0101
@@ -2400,6 +2455,12 @@ impl Decoder<ARMv8> for InstDecoder {
 //        crate::armv8::a64::std::eprintln!("word: {:#x}, bits: {:#b}", word, section_bits & 0xf);
 
         match section {
+            Section::SME => {
+                return Err(DecodeError::IncompleteDecoder);
+            },
+            Section::SVE => {
+                return Err(DecodeError::IncompleteDecoder);
+            }
             Section::DataProcessingSimd |
             Section::DataProcessingSimd2 => {
                 let op3 = (word >> 10) & 0b1_1111_1111;
@@ -5867,7 +5928,7 @@ impl Decoder<ARMv8> for InstDecoder {
                 }
             }
             Section::Unallocated => {
-                inst.opcode = Opcode::Invalid;
+                return Err(DecodeError::InvalidOpcode);
             }
             Section::DataProcessingReg => {
                 /*
@@ -6748,6 +6809,33 @@ impl Decoder<ARMv8> for InstDecoder {
                         let size = (word >> 30) & 0x3;
                         // load/store exclusive
                         // o2 == 0
+                        if Lo1 & 1 == 1 && size < 0b10 {
+                            // o1 == 1
+                            if Rt2 != 0b11111 {
+                                return Err(DecodeError::InvalidOperand);
+                            }
+
+                            let ar = ((Lo1 & 0b10) | o0) as u8;
+
+                            let size_code = if size & 0b01 == 0 {
+                                SizeCode::W
+                            } else {
+                                SizeCode::X
+                            };
+
+                            if Rt & 1 != 0 || Rs & 1 != 0 {
+                                return Err(DecodeError::InvalidOperand);
+                            }
+
+                            inst.opcode = Opcode::CASP(ar);
+                            inst.operands = [
+                                Operand::RegisterPair(size_code, Rs),
+                                Operand::RegisterPair(size_code, Rt),
+                                Operand::RegOffset(Rn, 0),
+                                Operand::Nothing,
+                            ];
+                            return Ok(());
+                        }
                         inst.opcode = match size {
                             size @ 0b00 |
                             size @ 0b01 => {
@@ -6868,13 +6956,44 @@ impl Decoder<ARMv8> for InstDecoder {
                     0b00001 => {
                         let Rt = (word & 0x1f) as u16;
                         let Rn = ((word >> 5) & 0x1f) as u16;
-                        let _Rt2 = ((word >> 10) & 0x1f) as u16;
+                        let Rt2 = ((word >> 10) & 0x1f) as u16;
                         let o0 = (word >> 15) & 1;
-                        let _Rs = (word >> 16) & 0x1f;
+                        let Rs = ((word >> 16) & 0x1f) as u16;
                         let Lo1 = (word >> 21) & 0x3;
                         let size = (word >> 30) & 0x3;
                         // load/store exclusive
                         // o2 == 1
+                        if Lo1 & 1 == 1 && size < 0b10 {
+                            // o1 == 1
+                            if Rt2 != 0b11111 {
+                                return Err(DecodeError::InvalidOperand);
+                            }
+
+                            let ar = ((Lo1 & 0b10) | o0) as u8;
+
+                            let (opcode, size_code) = if size == 0b00 {
+                                (Opcode::CASB(ar), SizeCode::W)
+                            } else if size == 0b01 {
+                                (Opcode::CASH(ar), SizeCode::W)
+                            } else if size == 0b10 {
+                                (Opcode::CAS(ar), SizeCode::W)
+                            } else {
+                                (Opcode::CAS(ar), SizeCode::X)
+                            };
+
+                            if Rt & 1 != 0 || Rn & 1 != 0 {
+                                return Err(DecodeError::InvalidOperand);
+                            }
+
+                            inst.opcode = opcode;
+                            inst.operands = [
+                                Operand::Register(size_code, Rs),
+                                Operand::Register(size_code, Rt),
+                                Operand::RegOffset(Rn, 0),
+                                Operand::Nothing,
+                            ];
+                            return Ok(());
+                        }
                         // STLRB -> Wt (Rt) Xn|SP (Rn)
                         // LDARB -> Wt (Rt) Xn|SP (Rn)
                         // STLRH -> Wt (Rt) Xn|SP (Rn)
