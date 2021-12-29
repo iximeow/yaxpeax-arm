@@ -11,7 +11,6 @@ mod armv8;
 use yaxpeax_arch::{Arch, Decoder, Reader, U8Reader};
 use std::fmt;
 
-#[ignore]
 #[test]
 fn test_armv7_does_not_panic() {
     let armv7 = <yaxpeax_arm::armv7::ARMv7 as Arch>::Decoder::default();
@@ -24,7 +23,6 @@ fn test_armv7_does_not_panic() {
         }
     }
 }
-#[ignore]
 #[test]
 fn test_armv7_thumb_does_not_panic() {
     let mut armv7_t = <yaxpeax_arm::armv7::ARMv7 as Arch>::Decoder::default();
