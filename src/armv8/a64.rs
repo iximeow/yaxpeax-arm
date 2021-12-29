@@ -3388,8 +3388,19 @@ impl Decoder<ARMv8> for InstDecoder {
 
                                 let imm = if opc == Opcode::FMOV {
                                     // simd expand
-                                    // TODO
-                                    todo!();
+                                    let a = (abc >> 2) as u64;
+                                    let b = ((abc >> 1) & 1) as u64;
+                                    let c = (abc & 1) as u64;
+                                    let defgh = defgh as u64;
+
+                                    // the expansion is the same (with more exponent bits) for the
+                                    // various widths
+                                    let value = (a << 63) |
+                                        (((b * 0b111_111_111) ^ 0b100_000_000) << 54) |
+                                        (defgh << 48);
+                                    let value = f64::from_bits(value);
+
+                                    Operand::ImmediateDouble(value)
                                 } else if opc == Opcode::ORR || opc == Opcode::BIC {
                                     // abcdefgh
                                     let abcdefgh = (abc << 5) | defgh;
