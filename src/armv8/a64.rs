@@ -8990,6 +8990,10 @@ impl Decoder<ARMv8> for InstDecoder {
                             Err(DecodeError::InvalidOpcode),
                             Ok((Opcode::ST1, 2)),
                             Err(DecodeError::InvalidOpcode),
+                            Err(DecodeError::InvalidOpcode),
+                            Err(DecodeError::InvalidOpcode),
+                            Err(DecodeError::InvalidOpcode),
+                            Err(DecodeError::InvalidOpcode),
                         ];
 
                         let (opcode, num_regs) = OPCODES[opcode_bits as usize]?;
@@ -9046,6 +9050,10 @@ impl Decoder<ARMv8> for InstDecoder {
                             Ok((Opcode::ST2, 2)),
                             Err(DecodeError::InvalidOpcode),
                             Ok((Opcode::ST1, 2)),
+                            Err(DecodeError::InvalidOpcode),
+                            Err(DecodeError::InvalidOpcode),
+                            Err(DecodeError::InvalidOpcode),
+                            Err(DecodeError::InvalidOpcode),
                             Err(DecodeError::InvalidOpcode),
                         ];
 
