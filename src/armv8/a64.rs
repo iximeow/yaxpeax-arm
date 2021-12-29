@@ -809,11 +809,23 @@ impl Display for Instruction {
             Opcode::MRS => {
                 write!(fmt, "mrs")?;
             }
-            Opcode::SYS => {
-                write!(fmt, "sys")?;
+            Opcode::SYS(ops) => {
+                return write!(fmt, "sys {:#x}, {}, {}, {:#x}, {}",
+                    ops.op1(),
+                    self.operands[0],
+                    self.operands[1],
+                    ops.op2(),
+                    self.operands[2],
+                );
             }
-            Opcode::SYSL => {
-                write!(fmt, "sys")?;
+            Opcode::SYSL(ops) => {
+                return write!(fmt, "sysl {}, {:#x}, {}, {}, {:#x}",
+                    self.operands[0],
+                    ops.op1(),
+                    self.operands[1],
+                    self.operands[2],
+                    ops.op2(),
+                );
             }
             Opcode::ISB => {
                 write!(fmt, "isb")?;
@@ -2387,6 +2399,29 @@ impl Default for Instruction {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
+#[repr(transparent)]
+pub struct SysOps {
+    data: u8
+}
+
+impl SysOps {
+    fn new(op1: u8, op2: u8) -> Self {
+        SysOps {
+            data: op1 | (op2 << 4)
+        }
+    }
+
+    #[inline]
+    pub fn op1(&self) -> u8 {
+        self.data & 0b1111
+    }
+    #[inline]
+    pub fn op2(&self) -> u8 {
+        (self.data >> 4) & 0b1111
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(u16)]
 pub enum Opcode {
     Invalid,
@@ -2490,8 +2525,8 @@ pub enum Opcode {
     DRPS,
     MSR,
     MRS,
-    SYS,
-    SYSL,
+    SYS(SysOps),
+    SYSL(SysOps),
     ISB,
     DSB,
     DMB,
@@ -2939,6 +2974,7 @@ pub enum Operand {
     RegPostIndexReg(u16, u16),
     PrefetchOp(u16),
     SystemReg(u16),
+    ControlReg(u16),
     PstateField(u8),
 }
 
@@ -2968,6 +3004,9 @@ impl Display for Operand {
                         }
                     }
                 }
+            },
+            Operand::ControlReg(reg) => {
+                write!(fmt, "cr{}", reg)
             },
             Operand::PrefetchOp(op) => {
                 let ty = (op >> 3) & 0b11;
@@ -9671,8 +9710,18 @@ impl Decoder<ARMv8> for InstDecoder {
                                     }
                                 }
                                 0b001 => {
-                                    inst.opcode = Opcode::SYS;
-                                    return Err(DecodeError::IncompleteDecoder);
+                                    let Rt = word & 0b1111;
+                                    let op2 = (word >> 5) & 0b111;
+                                    let CRm = (word >> 8) & 0b1111;
+                                    let CRn = (word >> 12) & 0b1111;
+                                    let op1 = (word >> 16) & 0b111;
+                                    inst.opcode = Opcode::SYS(SysOps::new(op1 as u8, op2 as u8));
+                                    inst.operands = [
+                                        Operand::Register(SizeCode::X, Rt as u16),
+                                        Operand::ControlReg(CRn as u16),
+                                        Operand::ControlReg(CRm as u16),
+                                        Operand::Nothing,
+                                    ];
                                 }
                                 0b010 |
                                 0b011 => {
@@ -9690,8 +9739,18 @@ impl Decoder<ARMv8> for InstDecoder {
                                     inst.opcode = Opcode::Invalid;
                                 }
                                 0b101 => {
-                                    inst.opcode = Opcode::SYSL;
-                                    return Err(DecodeError::IncompleteDecoder);
+                                    let Rt = word & 0b1111;
+                                    let op2 = (word >> 5) & 0b111;
+                                    let CRm = (word >> 8) & 0b1111;
+                                    let CRn = (word >> 12) & 0b1111;
+                                    let op1 = (word >> 16) & 0b111;
+                                    inst.opcode = Opcode::SYSL(SysOps::new(op1 as u8, op2 as u8));
+                                    inst.operands = [
+                                        Operand::ControlReg(CRn as u16),
+                                        Operand::ControlReg(CRm as u16),
+                                        Operand::Register(SizeCode::X, Rt as u16),
+                                        Operand::Nothing,
+                                    ];
                                 }
                                 0b110 |
                                 0b111 => {
