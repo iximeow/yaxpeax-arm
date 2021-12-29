@@ -2402,9 +2402,9 @@ impl Display for Operand {
             Operand::RegPostIndex(reg, offset) => {
                 if *offset != 0 {
                     if *offset < 0 {
-                        write!(fmt, "[{}], -{:#x}", Operand::RegisterOrSP(SizeCode::X, *reg), -*offset)
+                        write!(fmt, "[{}], #-{}", Operand::RegisterOrSP(SizeCode::X, *reg), -*offset)
                     } else {
-                        write!(fmt, "[{}], {:#x}", Operand::RegisterOrSP(SizeCode::X, *reg), offset)
+                        write!(fmt, "[{}], #{}", Operand::RegisterOrSP(SizeCode::X, *reg), offset)
                     }
                 } else {
                     write!(fmt, "[{}]", Operand::RegisterOrSP(SizeCode::X, *reg))
@@ -8444,7 +8444,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 Opcode::LD3R,
                                 Opcode::LD4R,
                             ];
-                            let opc_idx = (opcode_bits & 0x01) * 2 + S;
+                            let opc_idx = (opcode_bits & 0x01) * 2 + R;
                             inst.opcode = OPCODES[opc_idx as usize];
                             const SIZES: [SIMDSizeCode; 4] = [
                                 SIMDSizeCode::B,
@@ -8453,7 +8453,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 SIMDSizeCode::D,
                             ];
                             inst.operands = [
-                                Operand::SIMDRegisterGroup(datasize, Rt as u16, SIZES[size as usize], opc_idx as u8),
+                                Operand::SIMDRegisterGroup(datasize, Rt as u16, SIZES[size as usize], opc_idx as u8 + 1),
                                 Operand::RegPostIndex(Rn as u16, 0),
                                 Operand::Nothing,
                                 Operand::Nothing,
@@ -8571,7 +8571,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 Opcode::LD3R,
                                 Opcode::LD4R,
                             ];
-                            let opc_idx = (opcode_bits & 0x01) * 2 + S;
+                            let opc_idx = (opcode_bits & 0x01) * 2 + R;
                             inst.opcode = OPCODES[opc_idx as usize];
                             const SIZES: [SIMDSizeCode; 4] = [
                                 SIMDSizeCode::B,
@@ -8580,7 +8580,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 SIMDSizeCode::D,
                             ];
                             inst.operands = [
-                                Operand::SIMDRegisterGroup(datasize, Rt as u16, SIZES[size as usize], opc_idx as u8),
+                                Operand::SIMDRegisterGroup(datasize, Rt as u16, SIZES[size as usize], opc_idx as u8 + 1),
                                 if Rm == 31 {
                                     Operand::RegPostIndex(Rn as u16, ((opc_idx + 1) * (1 << size)) as i32)
                                 } else {

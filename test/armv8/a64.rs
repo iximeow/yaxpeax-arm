@@ -4401,3 +4401,32 @@ fn test_stll() {
 
     assert!(errs.is_empty());
 }
+
+#[test]
+fn test_ldst_structure() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0xe0, 0x40, 0x0d], "ld3r {v0.8b, v1.8b, v2.8b}, [x0]"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_tbl() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x00, 0x00, 0x0e], "tbl v0.8b, {v0.16b}, v0.8b"),
+        ([0x20, 0x00, 0x00, 0x0e], "tbl v0.8b, {v1.16b}, v0.8b"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
