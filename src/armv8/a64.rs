@@ -345,7 +345,7 @@ impl Display for Instruction {
                 if let Operand::Register(_, 31) = self.operands[0] {
                     return write!(fmt, "cmn {}, {}", self.operands[1], self.operands[2]);
                 } else if let Operand::RegShift(ShiftStyle::LSL, 0, size, reg) = self.operands[2] {
-                    return write!(fmt, "adds {}, {}, {}", self.operands[0], self.operands[1], Operand::RegisterOrSP(size, reg));
+                    return write!(fmt, "adds {}, {}, {}", self.operands[0], self.operands[1], Operand::Register(size, reg));
                 }
                 write!(fmt, "adds")?;
             },
@@ -357,7 +357,7 @@ impl Display for Instruction {
                         return write!(fmt, "mov {}, {}", self.operands[0], self.operands[1]);
                     }
                 } else if let Operand::RegShift(ShiftStyle::LSL, 0, size, reg) = self.operands[2] {
-                    return write!(fmt, "add {}, {}, {}", self.operands[0], self.operands[1], Operand::RegisterOrSP(size, reg));
+                    return write!(fmt, "add {}, {}, {}", self.operands[0], self.operands[1], Operand::Register(size, reg));
                 }
                 write!(fmt, "add")?;
             },
@@ -367,7 +367,7 @@ impl Display for Instruction {
                 } else if let Operand::Register(_, 31) = self.operands[1] {
                     return write!(fmt, "negs {}, {}", self.operands[0], self.operands[2])
                 } else if let Operand::RegShift(ShiftStyle::LSL, 0, size, reg) = self.operands[2] {
-                    return write!(fmt, "subs {}, {}, {}", self.operands[0], self.operands[1], Operand::RegisterOrSP(size, reg));
+                    return write!(fmt, "subs {}, {}, {}", self.operands[0], self.operands[1], Operand::Register(size, reg));
                 }
                 write!(fmt, "subs")?;
             },
@@ -375,7 +375,7 @@ impl Display for Instruction {
                 if let Operand::Register(_, 31) = self.operands[1] {
                     return write!(fmt, "neg {}, {}", self.operands[0], self.operands[2])
                 } else if let Operand::RegShift(ShiftStyle::LSL, 0, size, reg) = self.operands[2] {
-                    return write!(fmt, "sub {}, {}, {}", self.operands[0], self.operands[1], Operand::RegisterOrSP(size, reg));
+                    return write!(fmt, "sub {}, {}, {}", self.operands[0], self.operands[1], Operand::Register(size, reg));
                 }
                 write!(fmt, "sub")?;
             },
@@ -2342,16 +2342,20 @@ impl Display for Operand {
                 match size {
                     SizeCode::X => {
                         if (*shift_type == ShiftStyle::LSL || *shift_type == ShiftStyle::UXTX) && *amount == 0 {
-                            write!(fmt, "x{}", reg)
+                            write!(fmt, "{}", Operand::Register(SizeCode::X, *reg))
+                        } else if *amount != 0 {
+                            write!(fmt, "{}, {} #{}", Operand::Register(SizeCode::X, *reg), shift_type, amount)
                         } else {
-                            write!(fmt, "x{}, {} {}", reg, shift_type, amount)
+                            write!(fmt, "{}, {}", Operand::Register(SizeCode::X, *reg), shift_type)
                         }
                     },
                     SizeCode::W => {
                         if *shift_type == ShiftStyle::LSL && *amount == 0 {
-                            write!(fmt, "w{}", reg)
+                            write!(fmt, "{}", Operand::Register(SizeCode::W, *reg))
+                        } else if *amount != 0 {
+                            write!(fmt, "{}, {} #{}", Operand::Register(SizeCode::W, *reg), shift_type, amount)
                         } else {
-                            write!(fmt, "w{}, {} {}", reg, shift_type, amount)
+                            write!(fmt, "{}, {}", Operand::Register(SizeCode::W, *reg), shift_type)
                         }
                     }
                 }
@@ -6433,7 +6437,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             let option = (word >> 13) & 0x07;
                             let Rm = ((word >> 16) & 0x1f) as u16;
 
-                            inst.operands[0] = Operand::Register(size, Rd);
+                            inst.operands[0] = Operand::RegisterOrSP(size, Rd);
                             inst.operands[1] = Operand::RegisterOrSP(size, Rn);
 
                             let shift_size = match option {
@@ -6451,12 +6455,23 @@ impl Decoder<ARMv8> for InstDecoder {
                             };
 
                             const SHIFT_TYPES: &[ShiftStyle] = &[
-                                ShiftStyle::LSL, ShiftStyle::UXTH, ShiftStyle::UXTW, ShiftStyle::UXTX,
+                                ShiftStyle::UXTB, ShiftStyle::UXTH, ShiftStyle::UXTW, ShiftStyle::UXTX,
                                 ShiftStyle::SXTB, ShiftStyle::SXTH, ShiftStyle::SXTW, ShiftStyle::SXTX,
                             ];
 
+                            let shift_type = {
+                                let ty = SHIFT_TYPES[option as usize];
+                                if ty == ShiftStyle::UXTW && shift_size == SizeCode::W {
+                                    ShiftStyle::LSL
+                                } else if ty == ShiftStyle::UXTX && shift_size == SizeCode::X {
+                                    ShiftStyle::LSL
+                                } else {
+                                    ty
+                                }
+                            };
+
                             let shift = imm3 as u8;
-                            inst.operands[2] = Operand::RegShift(SHIFT_TYPES[option as usize], shift, shift_size, Rm);
+                            inst.operands[2] = Operand::RegShift(shift_type, shift, shift_size, Rm);
                        } else {
                             // shifted form
 
