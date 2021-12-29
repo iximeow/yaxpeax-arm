@@ -1917,6 +1917,8 @@ impl Default for ARMVersion {
     }
 }
 
+// nothing checks/rejects by arm version yet, but.. soon....
+#[allow(unused)]
 #[derive(Debug)]
 pub struct InstDecoder {
     mode: DecodeMode,

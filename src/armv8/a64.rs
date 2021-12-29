@@ -2537,13 +2537,13 @@ impl Decoder<ARMv8> for InstDecoder {
                                     let a = (abc >> 2) as u64;
                                     let b = ((abc >> 1) & 1) as u64;
                                     let c = (abc & 1) as u64;
-                                    let defgh = defgh as u64;
+                                    let cdefgh = (c << 5) | defgh as u64;
 
                                     // the expansion is the same (with more exponent bits) for the
                                     // various widths
                                     let value = (a << 63) |
                                         (((b * 0b111_111_111) ^ 0b100_000_000) << 54) |
-                                        (defgh << 48);
+                                        (cdefgh << 48);
                                     let value = f64::from_bits(value);
 
                                     Operand::ImmediateDouble(value)
@@ -3365,7 +3365,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                     if size == 0b01 {
                                         return Err(DecodeError::InvalidOpcode);
                                     }
-                                    let index = (H << 2) | (L << 1) | M;
 
                                     let (index, Rm) = if size == 0b10 {
                                         let index = (H << 2) | (L << 1) | M;
@@ -3407,8 +3406,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                     if size == 0b01 && Q == 1 {
                                         return Err(DecodeError::InvalidOperand);
                                     }
-
-                                    let index = (H << 2) | (L << 1) | M;
 
                                     let index = if size == 0b10 {
                                         H
@@ -4255,8 +4252,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                 return Err(DecodeError::InvalidOpcode);
                             }
 
-                            let rm_opcode = (mode << 2) | (opcode & 0b11);
-
                             let size = if sf == 0 {
                                 SizeCode::W
                             } else {
@@ -4332,8 +4327,6 @@ impl Decoder<ARMv8> for InstDecoder {
                             if mode != 0b00 && opcode >= 0b100 {
                                 return Err(DecodeError::InvalidOpcode);
                             }
-
-                            let rm_opcode = (mode << 2) | (opcode & 0b11);
 
                             let size = if sf == 0 {
                                 SizeCode::W
@@ -4823,13 +4816,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Err(DecodeError::InvalidOperand), Ok((Q, D, Q, D)),
                                 ];
 
-                                const TABLE_B: &'static OperandSizeTable = &[
-                                    Ok((D, B, D, B)), Ok((Q, B, Q, B)),
-                                    Ok((D, H, D, H)), Ok((Q, H, Q, H)),
-                                    Ok((D, S, D, S)), Ok((Q, S, Q, S)),
-                                    Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
-                                ];
-
                                 const TABLE_C: &'static OperandSizeTable = &[
                                     Ok((D, S, D, S)), Ok((Q, S, Q, S)),
                                     Err(DecodeError::InvalidOperand), Ok((Q, D, Q, D)),
@@ -4897,7 +4883,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         OPCODES_U0_LOW[opcode as usize]?
                                     };
 
-                                    let (va_width, va_elem, vb_width, vb_elem) = table[((size << 1) | q) as usize]?;
+                                    let (_va_width, va_elem, _vb_width, vb_elem) = table[((size << 1) | q) as usize]?;
                                     inst.opcode = opcode;
                                     inst.operands = [
                                         Operand::SIMDRegister(va_elem, Rd as u16),
@@ -4953,7 +4939,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         OPCODES_U0_HIGH[index as usize]?
                                     };
 
-                                    let (va_width, va_elem, vb_width, vb_elem) = table[(((size & 0b01) << 1) | q) as usize]?;
+                                    let (_va_width, va_elem, _vb_width, vb_elem) = table[(((size & 0b01) << 1) | q) as usize]?;
                                     inst.opcode = opcode;
                                     inst.operands = [
                                         Operand::SIMDRegister(va_elem, Rd as u16),
@@ -5050,13 +5036,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                             Ok((Q, D, Q, D)),
                                             Ok((Q, S, Q, S)),
                                             Ok((Q, D, Q, D)),
-                                        ];
-
-                                        const TABLE_H: &'static OperandSizeTable = &[
-                                            Ok((Q, H, Q, H)),
-                                            Ok((Q, H, Q, H)),
-                                            Ok((Q, H, Q, H)),
-                                            Ok((Q, H, Q, H)),
                                         ];
 
                                         // indexed by `opcode << 2 | size & 0b10 | U`
@@ -5271,7 +5250,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                         let Rd = word & 0b11111;
                                         let Rn = (word >> 5) & 0b11111;
                                         let opcode = (word >> 12) & 0b11111;
-                                        let opcode = (word >> 12) & 0b11111;
                                         let a = (word >> 23) & 1;
                                         let U = (word >> 29) & 1;
 
@@ -5449,7 +5427,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                     let Rn = (word >> 5) & 0b11111;
                                     let Rd = (word >> 0) & 0b11111;
 
-                                    let size = imm5.trailing_zeros();
                                     let (size, index) = match imm5.trailing_zeros() {
                                         0 => {
                                             (SIMDSizeCode::B, imm5 >> 1)
@@ -5688,11 +5665,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                     ];
                                 },
                                 OperandsKind::DifferentSizes => {
-                                    let vec_size = if Q {
-                                        SIMDSizeCode::Q
-                                    } else {
-                                        SIMDSizeCode::D
-                                    };
                                     let (dest_size, src_size, imm) = match immh.leading_zeros() {
                                         3 => {
                                             (SIMDSizeCode::B, SIMDSizeCode::H, immb)
@@ -5738,7 +5710,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             inst.operands = [
                                 Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd, SIMDSizeCode::S),
                                 Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn, SIMDSizeCode::S),
-                                Operand::SIMDRegisterElementsLane(SIMDSizeCode::Q, Rn, SIMDSizeCode::S, imm2 as u8),
+                                Operand::SIMDRegisterElementsLane(SIMDSizeCode::Q, Rm, SIMDSizeCode::S, imm2 as u8),
                                 Operand::Nothing,
                             ];
                         } else if op2 & 0b1100 == 0b1100 {
@@ -7862,7 +7834,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Err(DecodeError::InvalidOpcode),
                                     ];
 
-                                    let size_bits = (word >> 30) & 0x03;
                                     let option = (word >> 13) & 0x07;
                                     let Rt = word & 0x1f;
                                     let Rn = (word >> 5) & 0x1f;
@@ -8741,9 +8712,9 @@ impl Decoder<ARMv8> for InstDecoder {
                                                                 Operand::Nothing,
                                                             ];
                                                         } else {
-                                                            inst.opcode = Opcode::DSB;
+                                                            inst.opcode = Opcode::DSB(CRm as u8);
                                                             inst.operands = [
-                                                                Operand::Imm16(CRm as u16),
+                                                                Operand::Nothing,
                                                                 Operand::Nothing,
                                                                 Operand::Nothing,
                                                                 Operand::Nothing,
@@ -8751,9 +8722,9 @@ impl Decoder<ARMv8> for InstDecoder {
                                                         }
                                                     },
                                                     0b101 => {
-                                                        inst.opcode = Opcode::DMB;
+                                                        inst.opcode = Opcode::DMB(CRm as u8);
                                                         inst.operands = [
-                                                            Operand::Imm16(CRm as u16),
+                                                            Operand::Nothing,
                                                             Operand::Nothing,
                                                             Operand::Nothing,
                                                             Operand::Nothing,
