@@ -6844,14 +6844,14 @@ impl Decoder<ARMv8> for InstDecoder {
                                     inst.operands = [
                                         Operand::Register(SizeCode::W, Rs),
                                         Operand::Register(SizeCode::W, Rt),
-                                        Operand::RegisterOrSP(SizeCode::X, Rn),
+                                        Operand::RegOffset(Rn, 0),
                                         Operand::Nothing,
                                     ];
                                 } else if Lo1 == 0b10 {
                                     // load ops
                                     inst.operands = [
                                         Operand::Register(SizeCode::W, Rt),
-                                        Operand::RegisterOrSP(SizeCode::X, Rn),
+                                        Operand::RegOffset(Rn, 0),
                                         Operand::Nothing,
                                         Operand::Nothing,
                                     ];

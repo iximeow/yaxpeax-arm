@@ -4355,6 +4355,20 @@ fn test_weird_str() {
 }
 
 #[test]
+fn test_mismatches() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x00, 0x00, 0x08], "stxrb w0, w0, [x0]"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
 fn test_cas() {
     const TESTS: &[([u8; 4], &'static str)] = &[
         ([0x20, 0x7c, 0x20, 0x08], "casp w0, w1, w0, w1, [x1]"),
