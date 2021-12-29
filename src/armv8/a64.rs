@@ -1550,12 +1550,6 @@ impl Display for Instruction {
             Opcode::SABDL2 => {
                 write!(fmt, "sabdl2");
             }
-            Opcode::SQDMUL => {
-                write!(fmt, "sqdmul");
-            }
-            Opcode::SQDMUL2 => {
-                write!(fmt, "sqdmul2");
-            }
             Opcode::PMULL => {
                 write!(fmt, "pmull");
             }
@@ -1592,11 +1586,23 @@ impl Display for Instruction {
             Opcode::RADDHN2 => {
                 write!(fmt, "raddhn2");
             }
+            Opcode::RSUBHN => {
+                write!(fmt, "rsubhn");
+            }
+            Opcode::RSUBHN2 => {
+                write!(fmt, "rsubhn2");
+            }
             Opcode::UABAL => {
                 write!(fmt, "uabal");
             }
             Opcode::UABAL2 => {
                 write!(fmt, "uabal2");
+            }
+            Opcode::UABDL => {
+                write!(fmt, "uabdl");
+            }
+            Opcode::UABDL2 => {
+                write!(fmt, "uabdl2");
             }
             Opcode::REV64 => {
                 write!(fmt, "rev64");
@@ -2746,8 +2752,6 @@ pub enum Opcode {
     SUBHN2,
     SABDL,
     SABDL2,
-    SQDMUL,
-    SQDMUL2,
     PMULL,
     PMULL2,
     UADDL,
@@ -2760,8 +2764,12 @@ pub enum Opcode {
     USUBW2,
     RADDHN,
     RADDHN2,
+    RSUBHN,
+    RSUBHN2,
     UABAL,
     UABAL2,
+    UABDL,
+    UABDL2,
 
     REV64,
     SADDLP,
@@ -4351,7 +4359,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 let opcode = (word >> 11) & 0b1_1111;
                                 let Rm = (word >> 16) & 0b1_1111;
 
-                                const U0_OPCODES: &[Opcode] = &[
+                                const U0_OPCODES: &[Opcode; 0b11000] = &[
                                     Opcode::SHADD, Opcode::SQADD, Opcode::SRHADD, Opcode::AND, // or BIC, ORR, ORN
                                     Opcode::SHSUB, Opcode::SQSUB, Opcode::CMGT, Opcode::CMGE,
                                     Opcode::SSHL, Opcode::SQSHL, Opcode::SRSHL, Opcode::SQRSHL,
@@ -4359,13 +4367,13 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Opcode::ADD, Opcode::CMTST, Opcode::MLA, Opcode::MUL,
                                     Opcode::SMAXP, Opcode::SMINP, Opcode::SQDMULH, Opcode::ADDP,
                                 ];
-                                const U1_OPCODES: &[Opcode] = &[
+                                const U1_OPCODES: &[Opcode; 0b11000] = &[
                                     Opcode::UHADD, Opcode::UQADD, Opcode::URHADD, Opcode::EOR, // or BSL, BIT, BIF
                                     Opcode::UHSUB, Opcode::UQSUB, Opcode::CMHI, Opcode::CMHS,
                                     Opcode::USHL, Opcode::UQSHL, Opcode::URSHL, Opcode::UQRSHL,
                                     Opcode::UMAX, Opcode::UMIN, Opcode::UABD, Opcode::UABA,
                                     Opcode::SUB, Opcode::CMEQ, Opcode::MLS, Opcode::PMUL,
-                                    Opcode::UMAXP, Opcode::UMINP, Opcode::SQRDMULH,
+                                    Opcode::UMAXP, Opcode::UMINP, Opcode::SQRDMULH, Opcode::Invalid,
                                 ];
 
                                 let datasize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
@@ -4412,6 +4420,8 @@ impl Decoder<ARMv8> for InstDecoder {
                                                 Opcode::BIT, Opcode::BIF,
                                             ];
                                             (OPS[size as usize], SIMDSizeCode::B)
+                                        } else if opcode == 0b10111 {
+                                            return Err(DecodeError::InvalidOpcode);
                                         } else {
                                             (U1_OPCODES[opcode as usize], SIZES[size as usize])
                                         }
@@ -4445,7 +4455,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 let opcode = (word >> 12) & 0b1111;
                                 let Rm = (word >> 16) & 0b1_1111;
 
-                                const OPCODES: &[Result<Opcode, DecodeError>] = &[
+                                const OPCODES: &[Result<Opcode, DecodeError>; 64] = &[
                                     Ok(Opcode::SADDL), Ok(Opcode::SADDL2),
                                     Ok(Opcode::SADDW), Ok(Opcode::SADDW2),
                                     Ok(Opcode::SSUBL), Ok(Opcode::SSUBL2),
@@ -4459,16 +4469,18 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Ok(Opcode::SMLSL), Ok(Opcode::SMLSL2),
                                     Ok(Opcode::SQDMLSL), Ok(Opcode::SQDMLSL2),
                                     Ok(Opcode::SMULL), Ok(Opcode::SMULL2),
-                                    Ok(Opcode::SQDMUL), Ok(Opcode::SQDMUL2),
+                                    Ok(Opcode::SQDMULL), Ok(Opcode::SQDMULL2),
+                                    Ok(Opcode::PMULL), Ok(Opcode::PMULL2),
                                     Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
                                     // u == 1
-                                    Ok(Opcode::PMULL), Ok(Opcode::PMULL2),
                                     Ok(Opcode::UADDL), Ok(Opcode::UADDL2),
                                     Ok(Opcode::UADDW), Ok(Opcode::UADDW2),
                                     Ok(Opcode::USUBL), Ok(Opcode::USUBL2),
                                     Ok(Opcode::USUBW), Ok(Opcode::USUBW2),
                                     Ok(Opcode::RADDHN), Ok(Opcode::RADDHN2),
                                     Ok(Opcode::UABAL), Ok(Opcode::UABAL2),
+                                    Ok(Opcode::RSUBHN), Ok(Opcode::RSUBHN2),
+                                    Ok(Opcode::UABDL), Ok(Opcode::UABDL2),
                                     Ok(Opcode::UMLAL), Ok(Opcode::UMLAL2),
                                     Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
                                     Ok(Opcode::UMLSL), Ok(Opcode::UMLSL2),
