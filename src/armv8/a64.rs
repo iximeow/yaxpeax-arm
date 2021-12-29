@@ -2305,24 +2305,24 @@ impl Display for Operand {
                 }
             }
             Operand::Immediate(i) => {
-                write!(fmt, "{:#x}", i)
+                write!(fmt, "#{:x}", i)
             },
             Operand::ImmediateDouble(d) => {
                 write!(fmt, "{:}", d)
             },
             Operand::Imm16(i) => {
-                write!(fmt, "{:#x}", *i)
+                write!(fmt, "#{:x}", *i)
             },
             Operand::Imm64(i) => {
-                write!(fmt, "{:#x}", *i)
+                write!(fmt, "#{:x}", *i)
             },
             Operand::ImmShift(i, shift) => {
                 match shift {
                     0 => {
-                        write!(fmt, "{:#x}", i)
+                        write!(fmt, "#{:x}", i)
                     },
                     _ => {
-                        write!(fmt, "{:#x}, lsl {}", i, shift)
+                        write!(fmt, "#{:x}, lsl {}", i, shift)
                     }
                 }
             },
