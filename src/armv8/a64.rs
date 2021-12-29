@@ -1225,6 +1225,9 @@ pub enum Opcode {
     CASH(u8),
     CASB(u8),
     CASP(u8),
+
+    TBL,
+    TBX,
 }
 
 impl Display for Opcode {
@@ -1983,6 +1986,8 @@ impl Display for Opcode {
             Opcode::STLLRB => "stllrb",
             Opcode::STLLRH => "stllrh",
             Opcode::STLLR => "stllr",
+            Opcode::TBL => "tbl",
+            Opcode::TBX => "tbx",
 
             Opcode::Bcc(cond) => {
                 return write!(fmt, "b.{}", Operand::ConditionCode(cond));
@@ -4253,7 +4258,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 } else if op3 & 0b000100011 == 0b000000010 && op0 & 0b1011 == 0b0000 {
                                     // `Advanced SIMD permute`
                                     let Rd = (word >> 0) & 0b11111;
-                                    let Rn = (word >> 6) & 0b11111;
+                                    let Rn = (word >> 5) & 0b11111;
                                     let opcode = (word >> 12) & 0b111;
                                     let Rm = (word >> 16) & 0b11111;
                                     let size = (word >> 22) & 0b11;
@@ -4293,6 +4298,37 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Operand::SIMDRegisterElements(vec_size, Rd as u16, size),
                                         Operand::SIMDRegisterElements(vec_size, Rn as u16, size),
                                         Operand::SIMDRegisterElements(vec_size, Rm as u16, size),
+                                        Operand::Nothing,
+                                    ];
+                                } else if op3 & 0b000100011 == 0b000000000 && op0 & 0b1011 == 0b0000 {
+                                    // `Advanced SIMD table lookup`
+                                    let Rd = (word >> 0) & 0b11111;
+                                    let Rn = (word >> 5) & 0b11111;
+                                    let op = (word >> 12) & 0b1;
+                                    let len = ((word >> 13) & 0b11) as u8;
+                                    let Rm = (word >> 16) & 0b11111;
+                                    let op2 = (word >> 22) & 0b11;
+                                    let Q = (word >> 30) & 1;
+
+                                    if op2 != 0b00 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+
+                                    let vec_size = if Q == 0 {
+                                        SIMDSizeCode::D
+                                    } else {
+                                        SIMDSizeCode::Q
+                                    };
+
+                                    inst.opcode = if op == 0 {
+                                        Opcode::TBL
+                                    } else {
+                                        Opcode::TBX
+                                    };
+                                    inst.operands = [
+                                        Operand::SIMDRegisterElements(vec_size, Rd as u16, SIMDSizeCode::B),
+                                        Operand::SIMDRegisterGroup(SIMDSizeCode::Q, Rn as u16, SIMDSizeCode::B, len + 1),
+                                        Operand::SIMDRegisterElements(vec_size, Rm as u16, SIMDSizeCode::B),
                                         Operand::Nothing,
                                     ];
                                 } else {
