@@ -753,9 +753,12 @@ pub enum Opcode {
     ADRP,
     EXTR,
     LDAR,
+    LDLAR,
     LDARB,
+    LDLARB,
     LDAXRB,
     LDARH,
+    LDLARH,
     LDAXP,
     LDAXR,
     LDAXRH,
@@ -784,8 +787,11 @@ pub enum Opcode {
     LDXRB,
     LDXRH,
     STLR,
+    STLLR,
     STLRB,
+    STLLRB,
     STLRH,
+    STLLRH,
     STLXP,
     STLXR,
     STLXRB,
@@ -1971,6 +1977,12 @@ impl Display for Opcode {
             Opcode::RORV => "rorv",
             Opcode::INS => "ins",
             Opcode::DUP => "dup",
+            Opcode::LDLARB => "ldlarb",
+            Opcode::LDLARH => "ldlarh",
+            Opcode::LDLAR => "ldlar",
+            Opcode::STLLRB => "stllrb",
+            Opcode::STLLRH => "stllrh",
+            Opcode::STLLR => "stllr",
 
             Opcode::Bcc(cond) => {
                 return write!(fmt, "b.{}", Operand::ConditionCode(cond));
@@ -6981,10 +6993,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                 (Opcode::CAS(ar), SizeCode::X)
                             };
 
-                            if Rt & 1 != 0 || Rn & 1 != 0 {
-                                return Err(DecodeError::InvalidOperand);
-                            }
-
                             inst.opcode = opcode;
                             inst.operands = [
                                 Operand::Register(size_code, Rs),
@@ -7003,13 +7011,21 @@ impl Decoder<ARMv8> for InstDecoder {
                         // STLR -> Wt (Rt) Xn|SP (Rn)
                         // LDAR -> Wt (Rt) Xn|SP (Rn)
                         inst.opcode = match (size, Lo1, o0) {
+                            (0b00, 0b00, 0b0) => Opcode::STLLRB,
                             (0b00, 0b00, 0b1) => Opcode::STLRB,
+                            (0b00, 0b10, 0b0) => Opcode::LDLARB,
                             (0b00, 0b10, 0b1) => Opcode::LDARB,
+                            (0b01, 0b00, 0b0) => Opcode::STLLRH,
                             (0b01, 0b00, 0b1) => Opcode::STLRH,
+                            (0b01, 0b10, 0b0) => Opcode::LDLARH,
                             (0b01, 0b10, 0b1) => Opcode::LDARH,
+                            (0b10, 0b00, 0b0) => Opcode::STLLR, // 32-bit
                             (0b10, 0b00, 0b1) => Opcode::STLR, // 32-bit
+                            (0b10, 0b10, 0b0) => Opcode::LDLAR, // 32-bit
                             (0b10, 0b10, 0b1) => Opcode::LDAR, // 32-bit
+                            (0b11, 0b00, 0b0) => Opcode::STLLR, // 64-bit
                             (0b11, 0b00, 0b1) => Opcode::STLR, // 64-bit
+                            (0b11, 0b10, 0b0) => Opcode::LDLAR, // 64-bit
                             (0b11, 0b10, 0b1) => Opcode::LDAR, // 64-bit
                             _ => {
                                 inst.opcode = Opcode::Invalid;

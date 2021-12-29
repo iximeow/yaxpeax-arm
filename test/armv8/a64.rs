@@ -4377,6 +4377,21 @@ fn test_mismatches() {
 fn test_cas() {
     const TESTS: &[([u8; 4], &'static str)] = &[
         ([0x20, 0x7c, 0x20, 0x08], "casp w0, w1, w0, w1, [x1]"),
+        ([0x01, 0x7c, 0xa0, 0x08], "casb w0, w1, [x0]"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_stll() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x7c, 0x9f, 0x08], "stllrb w0, [x0]"),
     ];
     let errs = run_tests(TESTS);
 
