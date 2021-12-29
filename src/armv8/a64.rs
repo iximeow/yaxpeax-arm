@@ -3305,9 +3305,7 @@ impl Decoder<ARMv8> for InstDecoder {
                 let op2 = (word >> 19) & 0b1111;
                 let op1 = (word >> 23) & 0b11;
                 let op0 = (word >> 28) & 0b1111;
-//                if (op0 & 0b0101) == 0b0101 {
-                    // op0 = x1x1, 11x1 is unallocated and 01x1 is many categories
-                /* } else */ if (op0 & 0b1001) == 0b0000 {
+                if (op0 & 0b1001) == 0b0000 {
                     let op3_low = (op3 & 1) == 1;
 
                     if op1 >= 0b10 {
@@ -8028,7 +8026,6 @@ impl Decoder<ARMv8> for InstDecoder {
                         // load/store register pair (post-indexed)
                         // V == 1
                         // let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        // eprintln!("C3.3.15 V==1, opc_L: {}", opc_L);
                         let Rt = (word & 0x1f) as u16;
                         let Rn = ((word >> 5) & 0x1f) as u16;
                         let Rt2 = ((word >> 10) & 0x1f) as u16;
@@ -8135,7 +8132,6 @@ impl Decoder<ARMv8> for InstDecoder {
                         // load/store register pair (offset)
                         // V == 1
                         // let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        // eprintln!("C3.3.14 V==1, opc_L: {}", opc_L);
                         let Rt = (word & 0x1f) as u16;
                         let Rn = ((word >> 5) & 0x1f) as u16;
                         let Rt2 = ((word >> 10) & 0x1f) as u16;
@@ -8242,7 +8238,6 @@ impl Decoder<ARMv8> for InstDecoder {
                         // load/store register pair (pre-indexed)
                         // V == 1
                         // let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
-                        // eprintln!("C3.3.16 V==1, opc_L: {}", opc_L);
                         let Rt = (word & 0x1f) as u16;
                         let Rn = ((word >> 5) & 0x1f) as u16;
                         let Rt2 = ((word >> 10) & 0x1f) as u16;
