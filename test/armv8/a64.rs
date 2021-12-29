@@ -46,6 +46,11 @@ fn test_neon() {
 }
 
 #[test]
+fn test_sve() {
+    test_err([0x00, 0x00, 0x00, 0x04], DecodeError::IncompleteDecoder);
+}
+
+#[test]
 fn test_unpredictable() {
     // could be stx/ldx but Lo1 is `x1` and invalid.
     test_err([0x00, 0x00, 0x20, 0x08], DecodeError::InvalidOpcode);
