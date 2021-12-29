@@ -7517,69 +7517,31 @@ impl Decoder<ARMv8> for InstDecoder {
                         let immr = (word >> 16) & 0x3f;
                         let N = (word >> 22) & 0x1;
 
-                        let sf_opc = word >> 29;
+                        let opc = word >> 29 & 0b11;
+                        let sf = word >> 31 & 1;
 
-                        let size = match sf_opc {
-                            0b000 => {
-                                if N == 0 {
-                                    inst.opcode = Opcode::SBFM;
-                                } else {
-                                    inst.opcode = Opcode::Invalid;
-                                }
-                                SizeCode::W
-                            }
-                            0b001 => {
-                                if N == 0 {
-                                    inst.opcode = Opcode::BFM;
-                                } else {
-                                    inst.opcode = Opcode::Invalid;
-                                }
-                                SizeCode::W
-                            }
-                            0b010 => {
-                                if N == 0 {
-                                    inst.opcode = Opcode::UBFM;
-                                } else {
-                                    inst.opcode = Opcode::Invalid;
-                                }
-                                SizeCode::W
-                            }
-                            0b011 => {
-                                inst.opcode = Opcode::Invalid;
-                                SizeCode::W
-                            }
-                            0b100 => {
-                                if N == 1 {
-                                    inst.opcode = Opcode::SBFM;
-                                } else {
-                                    inst.opcode = Opcode::Invalid;
-                                }
-                                SizeCode::X
-                            }
-                            0b101 => {
-                                if N == 1 {
-                                    inst.opcode = Opcode::BFM;
-                                } else {
-                                    inst.opcode = Opcode::Invalid;
-                                }
-                                SizeCode::X
-                            }
-                            0b110 => {
-                                if N == 1 {
-                                    inst.opcode = Opcode::UBFM;
-                                } else {
-                                    inst.opcode = Opcode::Invalid;
-                                }
-                                SizeCode::X
-                            }
-                            0b111 => {
-                                inst.opcode = Opcode::Invalid;
-                                SizeCode::X
-                            }
-                            _ => {
-                                unreachable!("size and opc are three bits");
-                            }
+                        let opc = &[
+                            Ok(Opcode::SBFM),
+                            Ok(Opcode::BFM),
+                            Ok(Opcode::UBFM),
+                            Err(DecodeError::InvalidOpcode)
+                        ][opc as usize]?;
+
+                        inst.opcode = *opc;
+
+                        let size = if sf == 0 {
+                            SizeCode::W
+                        } else {
+                            SizeCode::X
                         };
+
+                        if sf != N {
+                            return Err(DecodeError::InvalidOpcode);
+                        }
+
+                        if sf == 0 && (immr >= 32 || imms >= 32) {
+                            return Err(DecodeError::InvalidOpcode);
+                        }
 
                         inst.operands = [
                             Operand::Register(size, Rd as u16),
