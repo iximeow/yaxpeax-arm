@@ -1240,6 +1240,15 @@ pub enum Opcode {
     TBX,
 
     FCADD,
+
+    LDGM,
+    LDG,
+    STGM,
+    STZGM,
+    STG,
+    STZG,
+    ST2G,
+    STZ2G,
 }
 
 impl Display for Opcode {
@@ -2001,6 +2010,14 @@ impl Display for Opcode {
             Opcode::TBL => "tbl",
             Opcode::TBX => "tbx",
             Opcode::FCADD => "fcadd",
+            Opcode::LDGM => "ldgm",
+            Opcode::LDG => "ldm",
+            Opcode::STGM => "stgm",
+            Opcode::STZGM => "stzgm",
+            Opcode::STG => "stg",
+            Opcode::STZG => "stzg",
+            Opcode::ST2G => "st2g",
+            Opcode::STZ2G => "stz2g",
 
             Opcode::Bcc(cond) => {
                 return write!(fmt, "b.{}", Operand::ConditionCode(cond));
@@ -7404,6 +7421,75 @@ impl Decoder<ARMv8> for InstDecoder {
                             Operand::Nothing,
                             Operand::Nothing,
                         ];
+                    },
+                    0b01010 |
+                    0b01011 => {
+                        // `Load/store memory tags`, `Load/store exclusive`
+                        let op0 = (word >> 28) & 0b11111;
+                        let op3 = (word >> 16) & 0b111111;
+                        let op4 = (word >> 10) & 0b11;
+
+                        if op3 & 0b100000 == 0 {
+                            if op4 != 0b00 {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+                            // else, `LDAPR/STLR (unscaled immediate)`
+                        } else {
+                            if op0 != 0b1101 {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+                            // else, `Load/store memory tags`
+                            let opc = (word >> 22) & 0b11;
+                            let imm9 = (word >> 12) & 0b111_111_111;
+                            let op2 = (word >> 10) & 0b11;
+                            let Rn = ((word >> 5) & 0b11111) as u16;
+                            let Rt = ((word >> 0) & 0b11111) as u16;
+
+                            let simm = ((imm9 as i16) << 7) >> 7;
+
+                            let opcode = &[
+                                Opcode::STZGM, Opcode::STG, Opcode::STG, Opcode::STG,
+                                Opcode::LDG, Opcode::STZG, Opcode::STZG, Opcode::STZG,
+                                Opcode::STGM, Opcode::ST2G, Opcode::ST2G, Opcode::ST2G,
+                                Opcode::LDGM, Opcode::STZ2G, Opcode::STZ2G, Opcode::STZ2G,
+                            ][((opc << 2) | (op2)) as usize];
+
+                            inst.opcode = *opcode;
+
+                            if op2 == 0 && imm9 != 0 {
+                                if opc == 0b01 {
+                                    // ldg
+                                    inst.operands = [
+                                        Operand::Register(SizeCode::X, Rt),
+                                        Operand::RegOffset(Rn, simm),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                    return Ok(());
+                                } else {
+                                    return Err(DecodeError::InvalidOperand);
+                                }
+                            }
+
+                            inst.operands = [
+                                if op2 == 0b00 {
+                                    Operand::Register(SizeCode::X, Rt)
+                                } else {
+                                    Operand::RegisterOrSP(SizeCode::X, Rt)
+                                },
+                                if op2 == 0b00 {
+                                    Operand::RegOffset(Rn, 0)
+                                } else if op2 == 0b01 {
+                                    Operand::RegPostIndex(Rn, simm as i32)
+                                } else if op2 == 0b10 {
+                                    Operand::RegOffset(Rn, simm)
+                                } else {
+                                    Operand::RegPreIndex(Rn, simm as i32, true)
+                                },
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+                        }
                     },
                     0b01100 |
                     0b01101 => {
