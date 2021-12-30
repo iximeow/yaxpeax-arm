@@ -1249,6 +1249,16 @@ pub enum Opcode {
     STZG,
     ST2G,
     STZ2G,
+
+    LDAPUR,
+    LDAPURB,
+    LDAPURH,
+    LDAPURSB,
+    LDAPURSH,
+    LDAPURSW,
+    STLUR,
+    STLURB,
+    STLURH,
 }
 
 impl Display for Opcode {
@@ -2018,6 +2028,15 @@ impl Display for Opcode {
             Opcode::STZG => "stzg",
             Opcode::ST2G => "st2g",
             Opcode::STZ2G => "stz2g",
+            Opcode::LDAPUR => "ldapur",
+            Opcode::LDAPURB => "ldapurb",
+            Opcode::LDAPURH => "ldapurh",
+            Opcode::LDAPURSB => "ldapursb",
+            Opcode::LDAPURSH => "ldapursh",
+            Opcode::LDAPURSW => "ldapursw",
+            Opcode::STLUR => "stlur",
+            Opcode::STLURB => "stlurb",
+            Opcode::STLURH => "stlurh",
 
             Opcode::Bcc(cond) => {
                 return write!(fmt, "b.{}", Operand::ConditionCode(cond));
@@ -7434,6 +7453,39 @@ impl Decoder<ARMv8> for InstDecoder {
                                 return Err(DecodeError::InvalidOpcode);
                             }
                             // else, `LDAPR/STLR (unscaled immediate)`
+                            let size = (word >> 30) & 0b11;
+                            let opc = (word >> 22) & 0b11;
+                            let imm9 = (word >> 12) & 0b111_111_111;
+                            let Rn = ((word >> 5) & 0b11111) as u16;
+                            let Rt = ((word >> 0) & 0b11111) as u16;
+
+                            let simm = ((imm9 as i16) << 7) >> 7;
+                            let index = (size << 2) | opc;
+
+                            if index == 0b1011 || index >= 0b1110 {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+
+                            let opcode = &[
+                                Opcode::STLURB, Opcode::LDAPURB, Opcode::LDAPURSB, Opcode::LDAPURSB,
+                                Opcode::STLURH, Opcode::LDAPURH, Opcode::LDAPURSH, Opcode::LDAPURSH,
+                                Opcode::STLUR, Opcode::LDAPUR, Opcode::LDAPURSW, Opcode::Invalid,
+                                Opcode::STLUR, Opcode::LDAPUR, Opcode::Invalid, Opcode::Invalid,
+                            ][index as usize];
+
+                            let size = if size == 0b11 || opc == 0b10 {
+                                SizeCode::X
+                            } else {
+                                SizeCode::W
+                            };
+
+                            inst.opcode = *opcode;
+                            inst.operands = [
+                                Operand::Register(size, Rt),
+                                Operand::RegOffset(Rn, simm),
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
                         } else {
                             if op0 != 0b1101 {
                                 return Err(DecodeError::InvalidOpcode);
