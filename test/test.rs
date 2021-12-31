@@ -20,6 +20,7 @@ fn test_armv7_does_not_panic() {
         let res = armv7.decode(&mut U8Reader::new(&bytes));
         if let Ok(instr) = res {
             let s = instr.to_string();
+            drop(s);
         }
     }
 }
@@ -33,6 +34,7 @@ fn test_armv7_thumb_does_not_panic() {
         let res = armv7_t.decode(&mut U8Reader::new(&bytes));
         if let Ok(instr) = res {
             let s = instr.to_string();
+            drop(s);
         }
     }
 }

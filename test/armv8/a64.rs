@@ -4737,6 +4737,35 @@ fn test_vec_shift() {
 }
 
 #[test]
+fn test_pac() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x04, 0xc1, 0xda], "pacib x0, x0"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_cfi() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x1f, 0x08, 0x1f, 0xd6], "braaz x0"),
+        ([0x00, 0x08, 0x1f, 0xd7], "braa x0, x0"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
 fn test_sha() {
     const TESTS: &[([u8; 4], &'static str)] = &[
         ([0x00, 0x00, 0x00, 0x5e], "sha1c q0, s0, v0.4s"),
@@ -4803,6 +4832,13 @@ fn test_misc() {
         ([0x00, 0x00, 0x40, 0x9b], "smulh x0, x0, x0"),
         ([0x00, 0x08, 0x40, 0xce], "sm3ss1 v0.4s, v0.4s, v0.4s, v2.4s"),
         ([0x00, 0x1c, 0x40, 0xd3], "ubfx x0, x0, #0x0, #0x8"),
+        ([0x00, 0x08, 0x00, 0xf8], "sttr x0, [x0]"),
+        ([0x00, 0x14, 0x20, 0xf8], "ldraa x0, [x0, #0x8]"),
+        ([0x00, 0x00, 0x80, 0xf8], "prfum pldl1keep, [x0]"),
+        ([0x06, 0x48, 0xa0, 0xf8], "prfm  0x6, [x0, w0, uxtw]"),
+        ([0xe0, 0x03, 0x00, 0x0b], "add w0, wzr, w0"),
+        ([0x00, 0xc0, 0x40, 0x0f], "sqdmulh v0.4h, v0.4h, v0.h[0]"),
+        ([0x00, 0xd0, 0x40, 0x0f], "sqrdmulh v0.4h, v0.4h, v0.h[0]"),
     ];
     let errs = run_tests(TESTS);
 

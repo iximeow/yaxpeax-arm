@@ -280,6 +280,7 @@ impl Display for Instruction {
                 if let Operand::Imm16(15) = self.operands[0] {
                     return write!(fmt, "isb");
                 }
+                write!(fmt, "isb")?;
             }
             Opcode::SBC => {
                 if let Operand::Register(_, 31) = self.operands[1] {
@@ -370,8 +371,9 @@ impl Display for Instruction {
                     } else if let Operand::RegisterOrSP(_, 31) = self.operands[1] {
                         return write!(fmt, "mov {}, {}", self.operands[0], self.operands[1]);
                     }
-                } else if let Operand::Register(_, 31) = self.operands[1] {
-                    return write!(fmt, "mov {}, {}", self.operands[0], self.operands[2]);
+// oh. add-with-zr does not alias mov
+//                } else if let Operand::Register(_, 31) = self.operands[1] {
+//                    return write!(fmt, "mov {}, {}", self.operands[0], self.operands[2]);
                 } else if let Operand::RegShift(ShiftStyle::LSL, 0, size, reg) = self.operands[2] {
                     return write!(fmt, "add {}, {}, {}", self.operands[0], self.operands[1], Operand::Register(size, reg));
                 }
@@ -402,6 +404,7 @@ impl Display for Instruction {
                 write!(fmt, "sbcs")?;
             },
             Opcode::UBFM => {
+                // TODO: handle ubfx alias
                 if let Operand::Immediate(0) = self.operands[2] {
                     let newdest = if let Operand::Register(_size, destnum) = self.operands[0] {
                         Operand::Register(SizeCode::W, destnum)
@@ -583,7 +586,24 @@ impl Display for Instruction {
                     3 => { write!(fmt, "wfi")?; },
                     4 => { write!(fmt, "sev")?; },
                     5 => { write!(fmt, "sevl")?; },
-                    _ => { write!(fmt, "hint({:#x})", v)?; }
+                    7 => { write!(fmt, "xpaclri")?; },
+                    8 => { write!(fmt, "pacia1716")?; },
+                    10 => { write!(fmt, "pacib1716")?; },
+                    12 => { write!(fmt, "autia1716")?; },
+                    14 => { write!(fmt, "autib1716")?; },
+                    16 => { write!(fmt, "esb")?; },
+                    17 => { write!(fmt, "psb csync")?; },
+                    18 => { write!(fmt, "tsb csync")?; },
+                    20 => { write!(fmt, "csdb")?; },
+                    24 => { write!(fmt, "paciaz")?; },
+                    25 => { write!(fmt, "paciasp")?; },
+                    26 => { write!(fmt, "pacibz")?; },
+                    27 => { write!(fmt, "pacibsp")?; },
+                    28 => { write!(fmt, "autiaz")?; },
+                    29 => { write!(fmt, "autiasp")?; },
+                    30 => { write!(fmt, "autibz")?; },
+                    31 => { write!(fmt, "autibsp")?; },
+                    _ => { write!(fmt, "hint #{:#x}", v)?; }
                 }
             }
             Opcode::CSNEG => {
@@ -1199,7 +1219,7 @@ pub enum Opcode {
     RET,
     ERET,
     DRPS,
-    MSR,
+    MSR, // TODO: handle aliases (like cfinv)
     MRS,
     SYS(SysOps),
     SYSL(SysOps),
@@ -1214,8 +1234,6 @@ pub enum Opcode {
     CSNEG,
     CSINC,
     CSINV,
-    PACIA,
-    PACIZA,
     CCMN,
     CCMP,
     RBIT,
@@ -1533,6 +1551,7 @@ pub enum Opcode {
     URSQRTE,
 
     PRFM,
+    PRFUM,
 
     AESE,
     AESD,
@@ -1643,6 +1662,39 @@ pub enum Opcode {
     SHA256SU1,
 
     SHRN2,
+
+    BLRAA,
+    BLRAAZ,
+    BLRAB,
+    BLRABZ,
+    BRAA,
+    BRAAZ,
+    BRAB,
+    BRABZ,
+    RETAA,
+    RETAB,
+    ERETAA,
+    ERETAB,
+
+    PACIA,
+    PACIB,
+    PACDA,
+    PACDB,
+    AUTIA,
+    AUTIB,
+    AUTDA,
+    AUTDB,
+    PACIZA,
+    PACIZB,
+    PACDZA,
+    PACDZB,
+    AUTIZA,
+    AUTIZB,
+    AUTDZA,
+    AUTDZB,
+    XPACI,
+    XPACD,
+
 }
 
 impl Display for Opcode {
@@ -1740,8 +1792,6 @@ impl Display for Opcode {
             Opcode::SSSB => "sssb",
             Opcode::CLREX => "clrex",
             Opcode::CSEL => "csel",
-            Opcode::PACIA => "pacia",
-            Opcode::PACIZA => "paciza",
             Opcode::CCMN => "ccmn",
             Opcode::CCMP => "ccmp",
             Opcode::RBIT => "rbit",
@@ -2036,6 +2086,7 @@ impl Display for Opcode {
             Opcode::FJCVTZS => "fjcvtzs",
             Opcode::URSQRTE => "ursqrte",
             Opcode::PRFM => "prfm",
+            Opcode::PRFUM => "prfum",
             Opcode::AESE => "aese",
             Opcode::AESD => "aesd",
             Opcode::AESMC => "aesmc",
@@ -2435,6 +2486,38 @@ impl Display for Opcode {
             Opcode::SHA256H2 => "sha256h2",
             Opcode::SHA256SU1 => "sha256su1",
 
+            Opcode::BLRAA => "blraa",
+            Opcode::BLRAAZ => "blraaz",
+            Opcode::BLRAB => "blrab",
+            Opcode::BLRABZ => "blrabz",
+            Opcode::BRAA => "braa",
+            Opcode::BRAAZ => "braaz",
+            Opcode::BRAB => "brab",
+            Opcode::BRABZ => "brabz",
+            Opcode::ERETAA => "eretaa",
+            Opcode::ERETAB => "eretab",
+            Opcode::RETAA => "retaa",
+            Opcode::RETAB => "retab",
+
+            Opcode::PACIA => "pacia",
+            Opcode::PACIB => "pacib",
+            Opcode::PACDA => "pacda",
+            Opcode::PACDB => "pacdb",
+            Opcode::AUTIA => "autia",
+            Opcode::AUTIB => "autib",
+            Opcode::AUTDA => "autda",
+            Opcode::AUTDB => "autdb",
+            Opcode::PACIZA => "paciza",
+            Opcode::PACIZB => "pacizb",
+            Opcode::PACDZA => "pacdza",
+            Opcode::PACDZB => "pacdzb",
+            Opcode::AUTIZA => "autiza",
+            Opcode::AUTIZB => "autizb",
+            Opcode::AUTDZA => "autdza",
+            Opcode::AUTDZB => "autdzb",
+            Opcode::XPACI => "xpaci",
+            Opcode::XPACD => "xpacd",
+
             Opcode::Bcc(cond) => {
                 return write!(fmt, "b.{}", Operand::ConditionCode(cond));
             },
@@ -2681,6 +2764,9 @@ impl Display for Operand {
             Operand::SIMDRegisterElementsLane(_vector_width, reg, lane_width, lane) => {
                 write!(fmt, "v{}.{}[{}]", reg, lane_width.name(), lane)
             }
+            Operand::SIMDRegisterElementsMultipleLane(_vector_width, reg, lane_width, lane, num_lanes) => {
+                write!(fmt, "v{}.{}{}[{}]", reg, num_lanes, lane_width.name(), lane)
+            }
             Operand::SIMDRegisterGroup(vector_width, reg, lane_width, group_size) => {
                 let num_items = vector_width.width() / lane_width.width();
                 let format_reg = |f: &mut fmt::Formatter, reg, elems, lane_size: SIMDSizeCode| {
@@ -2835,7 +2921,13 @@ impl Display for Operand {
                 }
             }
             Operand::RegRegOffset(reg, index_reg, index_size, extend, amount) => {
-                write!(fmt, "[{}, {}, {} #{:#x}]", Operand::RegisterOrSP(SizeCode::X, *reg), Operand::Register(*index_size, *index_reg), extend, amount)
+                if ((extend == &ShiftStyle::UXTW && index_size == &SizeCode::W) ||
+                   (extend == &ShiftStyle::UXTX && index_size == &SizeCode::X)) &&
+                    *amount == 0 {
+                    write!(fmt, "[{}, {}, {}]", Operand::RegisterOrSP(SizeCode::X, *reg), Operand::Register(*index_size, *index_reg), extend)
+                } else {
+                    write!(fmt, "[{}, {}, {} #{:#x}]", Operand::RegisterOrSP(SizeCode::X, *reg), Operand::Register(*index_size, *index_reg), extend, amount)
+                }
             }
             Operand::RegPreIndex(reg, offset, wback_bit) => {
                 let wback = if *wback_bit {
@@ -2877,6 +2969,12 @@ impl Decoder<ARMv8> for InstDecoder {
         words.next_n(&mut word_bytes)?;
         let word = u32::from_le_bytes(word_bytes);
 
+        inst.operands = [
+            Operand::Nothing,
+            Operand::Nothing,
+            Operand::Nothing,
+            Operand::Nothing,
+        ];
 
         #[derive(Copy, Clone, Debug)]
         enum Section {
@@ -3464,7 +3562,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
                                     inst.opcode = Opcode::SQDMULH;
                                     inst.operands = [
-                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd as u16, Ta),
+                                        Operand::SIMDRegisterElements(Tb_vecsize, Rd as u16, Ta),
                                         Operand::SIMDRegisterElements(Tb_vecsize, Rn as u16, Tb_elemsize),
                                         Operand::SIMDRegisterElementsLane(SIMDSizeCode::Q, Rm as u16, Ts, index as u8),
                                         Operand::Nothing,
@@ -3493,7 +3591,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
                                     inst.opcode = Opcode::SQRDMULH;
                                     inst.operands = [
-                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd as u16, Ta),
+                                        Operand::SIMDRegisterElements(Tb_vecsize, Rd as u16, Ta),
                                         Operand::SIMDRegisterElements(Tb_vecsize, Rn as u16, Tb_elemsize),
                                         Operand::SIMDRegisterElementsLane(SIMDSizeCode::Q, Rm as u16, Ts, index as u8),
                                         Operand::Nothing,
@@ -4326,13 +4424,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Ok((D, S, D, H)), Ok((Q, S, Q, H)),
                                     Ok((D, D, D, S)), Ok((Q, D, Q, S)),
                                     Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
-                                ];
-
-                                const TABLE_D: &'static OperandSizeTable = &[
-                                    Ok((D, B, D, B)), Ok((Q, H, Q, B)),
-                                    Ok((D, H, D, H)), Ok((Q, S, Q, H)),
-                                    Ok((D, S, D, S)), Ok((Q, D, Q, S)),
-                                    Err(DecodeError::InvalidOperand), Ok((Q, D, Q, D)),
                                 ];
 
                                 const TABLE_E: &'static OperandSizeTable = &[
@@ -7207,12 +7298,12 @@ impl Decoder<ARMv8> for InstDecoder {
                                     if combined_idx > 0b01_0000_0 {
                                         Operand::Register(SizeCode::W, Rd)
                                     } else {
-                                        Operand::Register(SizeCode::X, Rd)
+                                        Operand::Register(size, Rd)
                                     },
                                     if combined_idx > 0b01_0000_0 {
                                         Operand::Register(SizeCode::W, Rn)
                                     } else {
-                                        Operand::Register(SizeCode::X, Rn)
+                                        Operand::Register(size, Rn)
                                     },
                                     Operand::Register(size, Rm),
                                     Operand::Nothing,
@@ -7268,35 +7359,40 @@ impl Decoder<ARMv8> for InstDecoder {
                                         if S != 0 || sf != 1 {
                                             return Err(DecodeError::InvalidOpcode);
                                         }
-                                        match opcode {
-                                            0b000000 => {
-                                                inst.opcode = Opcode::PACIA;
-                                                inst.operands = [
-                                                    Operand::Register(SizeCode::X, Rd),
-                                                    Operand::RegisterOrSP(SizeCode::X, Rn),
-                                                    Operand::Nothing,
-                                                    Operand::Nothing,
-                                                ];
-                                            }
-                                            0b001000 => {
-                                                if Rn != 31 {
-                                                    // technically this is undefined - do some
-                                                    // cores do something with this?
-                                                    inst.opcode = Opcode::Invalid;
-                                                    return Err(DecodeError::InvalidOperand);
-                                                }
-                                                inst.opcode = Opcode::PACIZA;
-                                                inst.operands = [
-                                                    Operand::Register(SizeCode::X, Rd),
-                                                    Operand::Nothing,
-                                                    Operand::Nothing,
-                                                    Operand::Nothing,
-                                                ];
-                                            }
-                                            _ => {
-                                                inst.opcode = Opcode::Invalid;
-                                            }
+
+                                        if opcode >= 0b001000 && Rn != 0b11111 {
+                                            return Err(DecodeError::InvalidOperand);
                                         }
+
+                                        let opc = &[
+                                            Ok(Opcode::PACIA),  Ok(Opcode::PACIB),
+                                            Ok(Opcode::PACDA),  Ok(Opcode::PACDB),
+                                            Ok(Opcode::AUTIA),  Ok(Opcode::AUTIB),
+                                            Ok(Opcode::AUTDA),  Ok(Opcode::AUTDB),
+                                            Ok(Opcode::PACIZA), Ok(Opcode::PACIZB),
+                                            Ok(Opcode::PACDZA), Ok(Opcode::PACDZB),
+                                            Ok(Opcode::AUTIZA), Ok(Opcode::AUTIZB),
+                                            Ok(Opcode::AUTDZA), Ok(Opcode::AUTDZB),
+                                            Ok(Opcode::XPACI),  Ok(Opcode::XPACD),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                        ][opcode as usize]?;
+                                        inst.opcode = *opc;
+                                        inst.operands = [
+                                            Operand::Register(SizeCode::X, Rd),
+                                            if opcode < 0b001000 {
+                                                Operand::RegisterOrSP(SizeCode::X, Rn)
+                                            } else {
+                                                Operand::Nothing
+                                            },
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
                                     }
                                     _ => {
                                         // Data-processing (1 source), op2 > 0b00001 is (currently
@@ -8763,6 +8859,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     let w = (word >> 11) & 1;
                                     let imm9 = ((word >> 12) & 0b1_1111_1111) as i16;
                                     let imm9 = (imm9 << 7) >> 7;
+                                    let imm9 = imm9 << 3; // `simm` is stored as a multiple of 8
                                     let m = (word >> 23) & 1;
                                     let size = (word >> 30) & 0b11;
                                     if size != 0b11 {
@@ -8873,7 +8970,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::STUR, SizeCode::X)),
                                         Ok((Opcode::LDUR, SizeCode::X)),
-                                        Ok((Opcode::PRFM, SizeCode::X)),
+                                        Ok((Opcode::PRFUM, SizeCode::X)),
                                         Err(DecodeError::InvalidOpcode),
                                     ];
 
@@ -8906,7 +9003,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Ok((Opcode::LDTR, SizeCode::W)),
                                         Ok((Opcode::LDTRSW, SizeCode::X)),
                                         Err(DecodeError::InvalidOpcode),
-                                        Ok((Opcode::STUR, SizeCode::X)),
+                                        Ok((Opcode::STTR, SizeCode::X)),
                                         Ok((Opcode::LDTR, SizeCode::X)),
                                         Err(DecodeError::InvalidOpcode),
                                         Err(DecodeError::InvalidOpcode),
@@ -10134,8 +10231,8 @@ impl Decoder<ARMv8> for InstDecoder {
                         let opc = (word >> 21) & 0x7;
                         match opc {
                             0b000 => {
+                                let Rn = (word >> 5) & 0x1f;
                                 if (word & 0x1ffc1f) == 0x1f0000 {
-                                    let Rn = (word >> 5) & 0x1f;
                                     inst.opcode = Opcode::BR;
                                     inst.operands = [
                                         Operand::Register(SizeCode::X, Rn as u16),
@@ -10143,13 +10240,30 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Operand::Nothing,
                                         Operand::Nothing
                                     ];
+                                } else if (word & 0x1fffff) == 0x1f081f {
+                                    inst.opcode = Opcode::BRAAZ;
+                                    inst.operands = [
+                                        Operand::Register(SizeCode::X, Rn as u16),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else if (word & 0x1fffff) == 0x1f0c1f {
+                                    inst.opcode = Opcode::BRABZ;
+                                    inst.operands = [
+                                        Operand::Register(SizeCode::X, Rn as u16),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
                                 } else {
                                     inst.opcode = Opcode::Invalid;
+                                    return Err(DecodeError::InvalidOpcode);
                                 }
                             },
                             0b001 => {
+                                let Rn = (word >> 5) & 0x1f;
                                 if (word & 0x1ffc1f) == 0x1f0000 {
-                                    let Rn = (word >> 5) & 0x1f;
                                     inst.opcode = Opcode::BLR;
                                     inst.operands = [
                                         Operand::Register(SizeCode::X, Rn as u16),
@@ -10157,13 +10271,30 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Operand::Nothing,
                                         Operand::Nothing
                                     ];
+                                } else if (word & 0x1fffff) == 0x1f081f {
+                                    inst.opcode = Opcode::BLRAAZ;
+                                    inst.operands = [
+                                        Operand::Register(SizeCode::X, Rn as u16),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else if (word & 0x1fffff) == 0x1f0c1f {
+                                    inst.opcode = Opcode::BLRABZ;
+                                    inst.operands = [
+                                        Operand::Register(SizeCode::X, Rn as u16),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
                                 } else {
                                     inst.opcode = Opcode::Invalid;
+                                    return Err(DecodeError::InvalidOpcode);
                                 }
                             },
                             0b010 => {
+                                let Rn = (word >> 5) & 0x1f;
                                 if (word & 0x1ffc1f) == 0x1f0000 {
-                                    let Rn = (word >> 5) & 0x1f;
                                     inst.opcode = Opcode::RET;
                                     inst.operands = [
                                         Operand::Register(SizeCode::X, Rn as u16),
@@ -10171,15 +10302,37 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Operand::Nothing,
                                         Operand::Nothing
                                     ];
+                                } else if (word & 0x1fffff) == 0x1f0bff {
+                                    inst.opcode = Opcode::RETAA;
+                                    inst.operands = [
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else if (word & 0x1fffff) == 0x1f0fff {
+                                    inst.opcode = Opcode::RETAB;
+                                    inst.operands = [
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
                                 } else {
                                     inst.opcode = Opcode::Invalid;
+                                    return Err(DecodeError::InvalidOpcode);
                                 }
                             },
                             0b100 => {
                                 if (word & 0x1fffff) == 0x1f03e0 {
                                     inst.opcode = Opcode::ERET;
+                                } else if (word & 0x1fffff) == 0x1f0bff {
+                                    inst.opcode = Opcode::ERETAA;
+                                } else if (word & 0x1fffff) == 0x1f0fff {
+                                    inst.opcode = Opcode::ERETAB;
                                 } else {
                                     inst.opcode = Opcode::Invalid;
+                                    return Err(DecodeError::InvalidOpcode);
                                 }
                             },
                             0b101 => {
@@ -10187,17 +10340,76 @@ impl Decoder<ARMv8> for InstDecoder {
                                     inst.opcode = Opcode::DRPS;
                                 } else {
                                     inst.opcode = Opcode::Invalid;
+                                    return Err(DecodeError::InvalidOpcode);
                                 }
                             },
                             _ => {
                                 inst.opcode = Opcode::Invalid;
+                                return Err(DecodeError::InvalidOpcode);
                             }
                         }
                     }
                     0b11011 => { // unconditional branch (reg)
                         // the last 1 is bit 24, which C3.2.7 indicates are
                         // all invalid encodings (opc is b0101 or lower)
-                        inst.opcode = Opcode::Invalid;
+                        let opc = (word >> 21) & 0x7;
+
+                        if opc == 0b000 {
+                            // implied leading bit means opc = 0b1000
+                            if word & 0xff_ff_fc_00 == 0xd7_1f_08_00 {
+                                // op3 = 000011
+                                // register modifier variant
+                                inst.opcode = Opcode::BRAA;
+
+                                inst.operands = [
+                                    Operand::Register(SizeCode::X, ((word >> 5) & 0b11111) as u16),
+                                    Operand::RegisterOrSP(SizeCode::X, (word & 0b11111) as u16),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else if word & 0xff_ff_fc_00 == 0xd7_1f_0c_00 {
+                                // op3 = 000011
+                                inst.opcode = Opcode::BRAB;
+
+                                inst.operands = [
+                                    Operand::Register(SizeCode::X, ((word >> 5) & 0b11111) as u16),
+                                    Operand::RegisterOrSP(SizeCode::X, (word & 0b11111) as u16),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+                        } else if opc == 0b001 {
+                            // implied leading bit means opc = 0b1001
+                            if word & 0xff_ff_fc_00 == 0xd7_1f_0c_00 {
+                                // op3 = 000011
+                                // register modifier variant
+                                inst.opcode = Opcode::BLRAA;
+
+                                inst.operands = [
+                                    Operand::Register(SizeCode::X, ((word >> 5) & 0b11111) as u16),
+                                    Operand::RegisterOrSP(SizeCode::X, (word & 0b11111) as u16),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else if word & 0xff_ff_fc_00 == 0xd7_1f_08_00 {
+                                // op3 = 000011
+                                inst.opcode = Opcode::BLRAB;
+
+                                inst.operands = [
+                                    Operand::Register(SizeCode::X, ((word >> 5) & 0b11111) as u16),
+                                    Operand::RegisterOrSP(SizeCode::X, (word & 0b11111) as u16),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+                        } else {
+                            inst.opcode = Opcode::Invalid;
+                            return Err(DecodeError::InvalidOpcode);
+                        }
                     }
                     _ => {
                         // TODO: invalid
