@@ -4726,6 +4726,7 @@ fn test_fcmla() {
 fn test_vec_shift() {
     const TESTS: &[([u8; 4], &'static str)] = &[
         ([0x00, 0xa4, 0x08, 0x0f], "sshll v0.8h, v0.8b, #0x0"),
+        ([0x00, 0xa4, 0x08, 0x2f], "ushll v0.8h, v0.8b, #0x0"),
     ];
     let errs = run_tests(TESTS);
 

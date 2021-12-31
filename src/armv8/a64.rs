@@ -1574,7 +1574,7 @@ pub enum Opcode {
     SM3PARTW2,
     SM4EKEY,
     BCAX,
-    SM3SSI,
+    SM3SS1,
     SHA512SU0,
     SM4E,
     EOR3,
@@ -1652,6 +1652,7 @@ pub enum Opcode {
     RSHRN2,
     SQRSHRUN2,
     USHLL2,
+    SSHLL2,
 
     SHA1C,
     SHA1P,
@@ -1904,7 +1905,7 @@ impl Display for Opcode {
             Opcode::SQSHRN => "sqshrn",
             Opcode::SQRSHRN => "sqrshrn",
             Opcode::SSHLL => "sshll",
-            Opcode::USHLL => "sshll",
+            Opcode::USHLL => "ushll",
             Opcode::USHR => "ushr",
             Opcode::USRA => "usra",
             Opcode::URSHR => "urshr",
@@ -1923,6 +1924,7 @@ impl Display for Opcode {
             Opcode::RSHRN2 => "rshrn2",
             Opcode::SQRSHRUN2 => "sqrshrun2",
             Opcode::USHLL2 => "ushll2",
+            Opcode::SSHLL2 => "sshll2",
             Opcode::SHADD => "shadd",
             Opcode::SQADD => "sqadd",
             Opcode::SRHADD => "srhadd",
@@ -2106,7 +2108,7 @@ impl Display for Opcode {
             Opcode::SM3PARTW2 => "sm3partw2",
             Opcode::SM4EKEY => "sm4ekey",
             Opcode::BCAX => "bcax",
-            Opcode::SM3SSI => "sm3ssi",
+            Opcode::SM3SS1 => "sm3ss1",
             Opcode::SHA512SU0 => "sha512su0",
             Opcode::SM4E => "sm4e",
             Opcode::EOR3 => "eor3",
@@ -3132,7 +3134,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     }
                                 };
 
-                                let (Vb, Tb) = if opcode == Opcode::SQSHRUN || opcode == Opcode::SQRSHRUN || opcode == Opcode::UQSHRN || opcode == Opcode::UQRSHRN || opcode == Opcode::SHRN || opcode == Opcode::RSHRN || opcode == Opcode::SQSHRN || opcode == Opcode::SQRSHRN {
+                                let (Vb, Tb) = if [Opcode::SQSHRUN, Opcode::SQRSHRUN, Opcode::UQSHRN, Opcode::UQRSHRN, Opcode::SHRN, Opcode::RSHRN, Opcode::SQSHRN, Opcode::SQRSHRN].contains(&opcode) {
                                     if immh > 0b0111 {
                                         return Err(DecodeError::InvalidOperand);
                                     } else if immh > 0b0011 {
@@ -3146,7 +3148,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     (datasize, T)
                                 };
 
-                                let (datasize, T, shift) = if opcode == Opcode::SSHLL {
+                                let (datasize, T, shift) = if opcode == Opcode::SSHLL || opcode == Opcode::USHLL {
                                     let new_t = match T {
                                         SIMDSizeCode::B => SIMDSizeCode::H,
                                         SIMDSizeCode::H => SIMDSizeCode::S,
@@ -3170,6 +3172,8 @@ impl Decoder<ARMv8> for InstDecoder {
                                         inst.opcode = Opcode::UQRSHRN2;
                                     } else if inst.opcode == Opcode::USHLL {
                                         inst.opcode = Opcode::USHLL2;
+                                    } else if inst.opcode == Opcode::SSHLL {
+                                        inst.opcode = Opcode::SSHLL2;
                                     } else if inst.opcode == Opcode::SHRN {
                                         inst.opcode = Opcode::SHRN2;
                                     } else if inst.opcode == Opcode::SQSHRN {
@@ -4444,7 +4448,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
                                 ];
 
-                                // TODO: double check?
                                 const TABLE_F: &'static OperandSizeTable = &[
                                     Ok((D, H, Q, S)), Ok((Q, H, Q, S)),
                                     Ok((D, S, Q, D)), Ok((Q, S, Q, D)),
@@ -4452,7 +4455,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
                                 ];
 
-                                // TODO: double check?
                                 const TABLE_G: &'static OperandSizeTable = &[
                                     Ok((Q, S, D, H)), Ok((Q, S, Q, H)),
                                     Ok((Q, D, D, S)), Ok((Q, D, Q, S)),
@@ -4460,7 +4462,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
                                 ];
 
-                                // TODO: double check?
                                 const TABLE_H: &'static OperandSizeTable = &[
                                     Ok((D, S, D, S)), Ok((Q, S, Q, S)),
                                     Err(DecodeError::InvalidOperand), Ok((Q, D, Q, D)),
@@ -5901,7 +5902,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                 ];
 
                                 if opcode < 0b11000 {
-                                    // TODO: validate operands
                                     const OPCODES_U0_LOW: &[Result<(Opcode, &'static OperandSizeTable), DecodeError>] = &[
                                         Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::SQADD, TABLE_A)),
@@ -6822,7 +6822,7 @@ impl Decoder<ARMv8> for InstDecoder {
                     let Rn = ((word >> 5) & 0b11111) as u16;
 
                     if op1 == 0b00 {
-                        if op2 & 0b1100 == 0b1000 {
+                        if op2 & 0b1100 == 0b1000 && op3 & 0b000110000 == 0b000100000 {
                             // `Cryptographic three-register, imm2`
                             let Rm = ((word >> 16) & 0b11111) as u16;
                             let opcode = (word >> 10) & 0b11;
@@ -6939,7 +6939,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Operand::SIMDRegisterElements(SIMDSizeCode::Q, Ra, SIMDSizeCode::B),
                                 ];
                             } else if Op0 == 0b10 {
-                                inst.opcode = Opcode::SM3SSI;
+                                inst.opcode = Opcode::SM3SS1;
                                 inst.operands = [
                                     Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd, SIMDSizeCode::S),
                                     Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn, SIMDSizeCode::S),
@@ -10423,7 +10423,6 @@ impl Decoder<ARMv8> for InstDecoder {
                         }
                     }
                     _ => {
-                        // TODO: invalid
                         return Err(DecodeError::InvalidOpcode);
                     }
                 }
