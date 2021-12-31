@@ -3146,6 +3146,17 @@ impl Decoder<ARMv8> for InstDecoder {
                                     (datasize, T)
                                 };
 
+                                let (datasize, T, shift) = if opcode == Opcode::SSHLL {
+                                    let new_t = match T {
+                                        SIMDSizeCode::B => SIMDSizeCode::H,
+                                        SIMDSizeCode::H => SIMDSizeCode::S,
+                                        _ /* SIMDSizeCode::S */ => SIMDSizeCode::D,
+                                    };
+                                    (SIMDSizeCode::Q, new_t, shift)
+                                } else {
+                                    (datasize, T, shift)
+                                };
+
                                 if Q == 1 {
                                     if inst.opcode == Opcode::RSHRN {
                                         inst.opcode = Opcode::RSHRN2;
@@ -4583,7 +4594,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         // u == 1, op == 0b00000
                                     ];
 
-                                    let (opc, (datasize_a, elemsize_a, datasize_b, elemsize_b)) = if opcode == 0b00101 && U == 1{
+                                    let (opc, (datasize_a, elemsize_a, datasize_b, elemsize_b)) = if opcode == 0b00101 && U == 1 {
                                         let vecsize = if q == 0 {
                                             SIMDSizeCode::D
                                         } else {
