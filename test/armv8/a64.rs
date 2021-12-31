@@ -4299,6 +4299,7 @@ fn test_indexed() {
         ([0x8c, 0x12, 0x8e, 0x0f], "fmla v12.2s, v20.2s, v14.s[0]"),
         ([0xc6, 0x12, 0x8e, 0x0f], "fmla v6.2s, v22.2s, v14.s[0]"),
         ([0x3c, 0x58, 0xa9, 0x0f], "fmls v28.2s, v1.2s, v9.s[3]"),
+        ([0x00, 0x00, 0x50, 0x2f], "mla v0.4h, v0.4h, v0.h[1]"),
     ];
     let errs = run_tests(TESTS);
 
@@ -4535,6 +4536,273 @@ fn test_simd_three_same_extra() {
 fn test_rev64() {
     const TESTS: &[([u8; 4], &'static str)] = &[
         ([0x00, 0x08, 0xa0, 0x0e], "rev64 v0.2s, v0.2s"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_adds_aliases() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x1f, 0x00, 0x20, 0x2b], "cmn w0, w0, uxtb"),
+        ([0x1f, 0x00, 0x40, 0x2b], "cmn w0, w0, uxtb"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_mov_aliases() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        // does not alias when lsl #12
+        ([0x00, 0x00, 0x40, 0x11], "add w0, w0, #0, lsl #12"),
+        // aliases for unhifted imm
+        ([0x00, 0x00, 0x00, 0x11], "mov w0, w0"),
+        // shift makes this not alias mov
+        ([0xe0, 0x07, 0x00, 0x2a], "orr w0, wzr, w0, lsl #1"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_sbfm_aliases() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x7c, 0x00, 0x13], "asr w0, w0, #0"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_extr_aliases() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x40, 0x80, 0x13], "ror w0, w0, #0x10"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_armv8_3() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x00, 0x7e, 0x1e], "fjcvtzs w0, d0"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_armv8_4() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x00, 0x00, 0x19], "stlurb w0, [x0]"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_crc() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x44, 0xc0, 0x1a], "crc32h w0, w0, w0"),
+        ([0x00, 0x50, 0xc0, 0x1a], "crc32cb w0, w0, w0"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_stnp() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x80, 0x00, 0x28], "stnp w0, w0, [x0, #0x4]"),
+        ([0x00, 0x80, 0x00, 0x2c], "stnp s0, s0, [x0, #0x4]"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_preindex() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x00, 0x80, 0x2d], "stp s0, s0, [x0, #0]!"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_postindex() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x20, 0x80, 0x81, 0x28], "stp w0, w0, [x1], #0xc"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_not_vec() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x58, 0x20, 0x2e], "mvn v0.8b, v0.8b"), // `not` instruction, aliased to mvn always
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_fcmla() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0xe4, 0x40, 0x2e], "fcadd v0.4h, v0.4h, v0.4h, #0x5a"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_vec_shift() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0xe8, 0x21, 0x2e], "shll v0.8h, v0.8h, #0x8"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_sha() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x00, 0x00, 0x5e], "sha1c q0, s0, v0.4s"),
+    ];
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_misc() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x98, 0x00, 0x2f], "fmulx v0.4h, v0.4h, v0.h[4]"),
+        ([0x00, 0xc4, 0x00, 0x2f], "mvni v0.2s, #0x0, msl #0x8"),
+        ([0x00, 0xd4, 0x00, 0x2f], "mvni v0.2s, #0x0, msl #0x16"),
+        ([0x00, 0xe0, 0x80, 0x2f], "udot v0.2s, v0.8b, v0.4b[0]"),
+        ([0x00, 0x03, 0x00, 0x32], "orr w0, wzr, #0x1"),
+        ([0x00, 0x00, 0x00, 0x33], "bfxil w0, w0, #0, #1"),
+        ([0xe0, 0x03, 0x00, 0x33], "bfc w0, #0, #1"),
+        ([0x00, 0x00, 0x01, 0x33], "bfi w0, w0, #0x1f, #0x1"),
+        ([0x00, 0x08, 0x00, 0x38], "sttrb w0, [x0]"),
+        ([0x1f, 0x00, 0x20, 0x38], "staddb w0, [x0]"),
+        ([0x00, 0x58, 0x20, 0x38], "strb w0, [x0, w0, uxtw #0x0]"),
+        ([0x00, 0xc0, 0xbf, 0x38], "ldaprb w0, [x0]"),
+        ([0x0d, 0x08, 0x00, 0x3a], "setf8 w0"),
+        ([0x00, 0x58, 0xbf, 0x3c], "str q0, [x0, wzr, uxtw #0x4]"),
+        ([0x00, 0x04, 0x01, 0x4e], "mov v0.16b, v0.b[0]"), // "The alias is always the preferred disassembly."
+        ([0x00, 0x38, 0x20, 0x4e], "suqadd v0.16b, v0.16b"),
+        ([0x00, 0x88, 0x20, 0x4e], "cmgt v0.16b, v0.16b, #0x0"),
+        ([0x00, 0xb8, 0x20, 0x4e], "abs v0.16b, v0.16b"),
+        ([0x00, 0xe0, 0x20, 0x4e], "pmull2 v0.8h, v0.16b, v0.16b"),
+        ([0x00, 0x28, 0x21, 0x4e], "xtn2 v0.16b, v0.8h"),
+        ([0x00, 0x48, 0x28, 0x4e], "aese v0.16b, v0.16b"),
+        ([0x00, 0x84, 0x08, 0x4f], "shrn2 v0.16b, v0.8h, #0x8"),
+        ([0x00, 0x8c, 0x08, 0x4f], "rshrn2 v0.16b, v0.8h, #0x8"),
+        ([0x00, 0x94, 0x08, 0x4f], "sqshrn2 v0.16b, v0.8h, #0x8"),
+        ([0x00, 0x28, 0x40, 0x4f], "smlal2 v0.4s, v0.8h, v0.h[4]"),
+        ([0x00, 0xc0, 0x40, 0x4f], "sqdmulh v0.8h, v0.8h, v0.h[0]"),
+        ([0x00, 0xc0, 0x40, 0x4f], "sqrdmulh v0.8h, v0.8h, v0.h[0]"),
+        ([0x00, 0xe0, 0x80, 0x4f], "sdot v0.4s, v0.16b, v0.4b[0]"),
+        ([0x00, 0x24, 0x40, 0x5e], "fcmeq h0, h0, h0"),
+        ([0x00, 0x88, 0xe0, 0x5e], "cmgt d0, d0, #0x0"),
+        ([0x00, 0xa8, 0xf9, 0x5e], "fcvtps h0, h0"),
+        ([0x00, 0x10, 0x10, 0x5f], "fmla h0,h h0, v0.h[1]"),
+        ([0x00, 0xd0, 0x40, 0x5f], "sqrdmulh h0, h0, v0.h[0]"),
+        ([0x00, 0x10, 0xd0, 0x5f], "fmla d0, d0, v16.d[0]"),
+        ([0x1f, 0x00, 0x20, 0x6b], "cmp w0, w0, uxtb"),
+        ([0x00, 0x78, 0x20, 0x6e], "sqneg v0.16b, v0.16b"),
+        ([0x00, 0xb8, 0x20, 0x6e], "neg v0.16b, v0.16b"),
+        ([0x00, 0x28, 0x21, 0x6e], "sqxtun2 v0.16b, v0.8h"),
+        ([0x1f, 0x00, 0x00, 0x72], "tst w0, #0x1"),
+        ([0x00, 0x84, 0x40, 0x7e], "sqrdmlah h0, h0, h0"),
+        ([0x00, 0xd0, 0x40, 0x7f], "sqrdmlah h0, h0, v0.h[0]"),
+        ([0x00, 0xd0, 0x40, 0x7f], "sqrdmlsh h0, h0, v0.h[0]"),
+        ([0x1f, 0x00, 0x20, 0x8b], "add sp, x0, w0, uxtb"),
+        ([0x00, 0x00, 0x00, 0x00], "add x0, x0, #0x0"),
+        ([0x1f, 0x00, 0x00, 0x91], "mov sp, x0"),
+        ([0x1f, 0x00, 0x00, 0x92], "and sp, x0, #0x100000001"),
+        ([0x00, 0x4c, 0xc0, 0x9a], "crc32x w0, w0, x0"),
+        ([0x00, 0x00, 0x40, 0x9b], "smulh x0, x0, x0"),
+        ([0x00, 0x08, 0x40, 0xce], "sm3ss1 v0.4s, v0.4s, v0.4s, v2.4s"),
+        ([0x00, 0x1c, 0x40, 0xd3], "ubfx x0, x0, #0x0, #0x8"),
     ];
     let errs = run_tests(TESTS);
 

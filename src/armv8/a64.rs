@@ -281,6 +281,13 @@ impl Display for Instruction {
                     return write!(fmt, "isb");
                 }
             }
+            Opcode::SBC => {
+                if let Operand::Register(_, 31) = self.operands[1] {
+                    return write!(fmt, "ngc {}, {}", self.operands[0], self.operands[2]);
+                } else {
+                    write!(fmt, "sbc")?;
+                }
+            }
             Opcode::MOVN => {
                 let imm = if let Operand::ImmShift(imm, shift) = self.operands[1] {
                     !((imm as u64) << shift)
@@ -319,8 +326,10 @@ impl Display for Instruction {
                 if let Operand::Register(_, 31) = self.operands[1] {
                     if let Operand::Immediate(0) = self.operands[2] {
                         return write!(fmt, "mov {}, {}", self.operands[0], self.operands[1]);
-                    } else if let Operand::RegShift(ShiftStyle::LSL, 0, size, r) = self.operands[2] {
-                        return write!(fmt, "mov {}, {}", self.operands[0], Operand::Register(size, r));
+                    } else if let Operand::RegShift(style, amt, size, r) = self.operands[2] {
+                        if style == ShiftStyle::LSL && amt == 0 {
+                            return write!(fmt, "mov {}, {}", self.operands[0], Operand::Register(size, r));
+                        }
                     } else {
                         return write!(fmt, "mov {}, {}", self.operands[0], self.operands[2]);
                     }
@@ -341,6 +350,11 @@ impl Display for Instruction {
                 }
                 write!(fmt, "ands")?;
             },
+            Opcode::NOT => {
+                // `This instruction is used by the alias MVN. The alias is always the preferred
+                // disassembly.`
+                write!(fmt, "mvn")?;
+            },
             Opcode::ADDS => {
                 if let Operand::Register(_, 31) = self.operands[0] {
                     return write!(fmt, "cmn {}, {}", self.operands[1], self.operands[2]);
@@ -351,13 +365,13 @@ impl Display for Instruction {
             },
             Opcode::ADD => {
                 if let Operand::Immediate(0) = self.operands[2] {
-                    if let Operand::Register(_, 31) = self.operands[0] {
-                        return write!(fmt, "mov {}, {}", self.operands[0], self.operands[1]);
-                    } else if let Operand::RegisterOrSP(_, 31) = self.operands[0] {
+                    if let Operand::RegisterOrSP(_, 31) = self.operands[0] {
                         return write!(fmt, "mov {}, {}", self.operands[0], self.operands[1]);
                     } else if let Operand::RegisterOrSP(_, 31) = self.operands[1] {
                         return write!(fmt, "mov {}, {}", self.operands[0], self.operands[1]);
                     }
+                } else if let Operand::Register(_, 31) = self.operands[1] {
+                    return write!(fmt, "mov {}, {}", self.operands[0], self.operands[2]);
                 } else if let Operand::RegShift(ShiftStyle::LSL, 0, size, reg) = self.operands[2] {
                     return write!(fmt, "add {}, {}, {}", self.operands[0], self.operands[1], Operand::Register(size, reg));
                 }
@@ -380,6 +394,12 @@ impl Display for Instruction {
                     return write!(fmt, "sub {}, {}, {}", self.operands[0], self.operands[1], Operand::Register(size, reg));
                 }
                 write!(fmt, "sub")?;
+            },
+            Opcode::SBCS => {
+                if let Operand::Register(_, 31) = self.operands[1] {
+                    return write!(fmt, "ngcs {}, {}", self.operands[0], self.operands[2])
+                }
+                write!(fmt, "sbcs")?;
             },
             Opcode::UBFM => {
                 if let Operand::Immediate(0) = self.operands[2] {
@@ -422,10 +442,10 @@ impl Display for Instruction {
                                 unreachable!("operand 3 is a register");
                             };
                             if imms + 1 == immr {
-                                return write!(fmt, "lsl {}, {}, {:#x}", self.operands[0], self.operands[1], size - imms - 1);
+                                return write!(fmt, "lsl {}, {}, #{:#x}", self.operands[0], self.operands[1], size - imms - 1);
                             }
                             if imms < immr {
-                                return write!(fmt, "ubfiz {}, {}, {:#x}, {:#x}",
+                                return write!(fmt, "ubfiz {}, {}, #{:#x}, #{:#x}",
                                     self.operands[0],
                                     self.operands[1],
                                     size - immr,
@@ -444,6 +464,30 @@ impl Display for Instruction {
                 };
                 return write!(fmt, "ubfx {}, {}, {}, {}", self.operands[0], self.operands[1], self.operands[2], width);
             },
+            Opcode::BFM => {
+                if let (Operand::Immediate(immr), Operand::Immediate(imms)) = (self.operands[2], self.operands[3]) {
+                    if imms < immr {
+                        if let Operand::Register(sz, rn) = self.operands[1] {
+                            let width = imms + 1;
+                            let lsb = if sz == SizeCode::W {
+                                ((-(immr as i8)) as u8) & 0x1f
+                            } else {
+                                ((-(immr as i8)) as u8) & 0x3f
+                            };
+                            if rn == 31 {
+                                return write!(fmt, "bfc {}, #{:#x}, #{:#x}", self.operands[0], lsb, width);
+                            } else {
+                                return write!(fmt, "bfi {}, {}, #{:#x}, #{:#x}", self.operands[0], self.operands[1], lsb, width);
+                            }
+                        }
+                    } else {
+                        // bfxil
+                        let lsb = immr;
+                        let width = imms + 1 - lsb;
+                        return write!(fmt, "bfxil {}, {}, #{:#x}, #{:#x}", self.operands[0], self.operands[1], lsb, width);
+                    }
+                }
+            }
             Opcode::SBFM => {
                 if let Operand::Immediate(63) = self.operands[3] {
                     if let Operand::Register(SizeCode::X, _) = self.operands[0] {
@@ -480,7 +524,7 @@ impl Display for Instruction {
                         } else {
                             unreachable!("operand 0 is always a register");
                         };
-                        return write!(fmt, "sbfiz {}, {}, {:#x}, {:#x}",
+                        return write!(fmt, "sbfiz {}, {}, #{:#x}, #{:#x}",
                             self.operands[0],
                             self.operands[1],
                             size - imms,
@@ -544,7 +588,7 @@ impl Display for Instruction {
             }
             Opcode::CSNEG => {
                 if let (Operand::Register(_size, rn), Operand::Register(_, rm), Operand::ConditionCode(cond)) = (self.operands[1], self.operands[2], self.operands[3]) {
-                    if rn == rm {
+                    if cond < 0b1110 && rn == rm {
                         return write!(fmt, "cneg {}, {}, {}", self.operands[0], self.operands[2], Operand::ConditionCode(cond ^ 0x01));
                     }
                 } else {
@@ -572,7 +616,7 @@ impl Display for Instruction {
                     (Operand::Register(_, n), Operand::Register(_, m), Operand::ConditionCode(cond)) => {
                         if n == m && n != 31 && cond < 0b1110 {
                             return write!(fmt, "cinv {}, {}, {}", self.operands[0], self.operands[1], Operand::ConditionCode(cond ^ 0x01))
-                        } else if n == m && n == 31 {
+                        } else if n == m && n == 31 && cond < 0b1110 {
                             return write!(fmt, "csetm {}, {}", self.operands[0], Operand::ConditionCode(cond ^ 0x01));
                         }
                     }
@@ -649,7 +693,7 @@ impl Display for Instruction {
                     // `dup (element)`
                     // manual says `mov` is the preferred disassembly here? but capstone uses
                     // `dup`.
-                    write!(fmt, "dup")?;
+                    write!(fmt, "mov")?;
                 }
             }
             Opcode::UMOV => {
@@ -661,6 +705,318 @@ impl Display for Instruction {
                         write!(fmt, "umov")?;
                     }
                 }
+            }
+            Opcode::LDADD(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stadd"
+                        } else {
+                            "staddl"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDCLR(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stclr"
+                        } else {
+                            "stclrl"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDSET(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stset"
+                        } else {
+                            "stsetl"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDSMAX(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stsmax"
+                        } else {
+                            "stsmaxl"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDSMIN(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stsmin"
+                        } else {
+                            "stsminl"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDUMAX(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stumax"
+                        } else {
+                            "stumaxl"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDUMIN(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stumin"
+                        } else {
+                            "stuminl"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDEOR(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "steor"
+                        } else {
+                            "steorl"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDADDH(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "staddh"
+                        } else {
+                            "staddlh"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDCLRH(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stclrh"
+                        } else {
+                            "stclrlh"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDSETH(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stseth"
+                        } else {
+                            "stsetlh"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDSMAXH(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stsmaxh"
+                        } else {
+                            "stsmaxlh"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDSMINH(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stsminh"
+                        } else {
+                            "stsminlh"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDUMAXH(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stumaxh"
+                        } else {
+                            "stumaxlh"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDUMINH(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stuminh"
+                        } else {
+                            "stuminlh"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDEORH(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "steorh"
+                        } else {
+                            "steorlh"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDADDB(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "staddb"
+                        } else {
+                            "staddlb"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDCLRB(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stclrb"
+                        } else {
+                            "stclrlb"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDSETB(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stsetb"
+                        } else {
+                            "stsetlb"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDSMAXB(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stsmaxb"
+                        } else {
+                            "stsmaxlb"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDSMINB(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stsminb"
+                        } else {
+                            "stsminlb"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDUMAXB(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stumaxb"
+                        } else {
+                            "stumaxlb"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDUMINB(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "stuminb"
+                        } else {
+                            "stuminlb"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
+            }
+            Opcode::LDEORB(ar) => {
+                if let Operand::Register(_, rt) = self.operands[1] {
+                    if rt == 31 && ar & 0b10 == 0b00 {
+                        let inst = if ar & 0b01 == 0b00 {
+                            "steorb"
+                        } else {
+                            "steorlb"
+                        };
+                        return write!(fmt, "{} {}, {}", inst, self.operands[0], self.operands[2]);
+                    }
+                }
+                write!(fmt, "{}", self.opcode)?;
             }
             other => { write!(fmt, "{}", other)?; }
         };
@@ -958,9 +1314,7 @@ pub enum Opcode {
     UMLAL2,
     MLA,
     SDOT,
-    SQRDMULH2,
     SQDMULH,
-    SQDMULH2,
     SQDMULL,
     SQDMULL2,
     SMULL,
@@ -1094,8 +1448,11 @@ pub enum Opcode {
     CMLT,
     ABS,
     XTN,
+    XTN2,
     SQXTN,
+    SQXTN2,
     FCVTN,
+    FCVTN2,
     FCMGT,
     FCVTL,
     FCVTL2,
@@ -1113,9 +1470,13 @@ pub enum Opcode {
     CMLE,
     NEG,
     SQXTUN,
+    SQXTUN2,
     SHLL,
+    SHLL2,
     UQXTN,
+    UQXTN2,
     FCVTXN,
+    FCVTXN2,
     FCVTNU,
     FCVTMU,
     FCVTAU,
@@ -1136,7 +1497,6 @@ pub enum Opcode {
     SQSHRN2,
     SQRSHRN2,
     SQSHRUN2,
-    SQRSHRUN2,
     UQSHRN2,
     UQRSHRN2,
 
@@ -1204,7 +1564,9 @@ pub enum Opcode {
     LDRAA,
     LDRAB,
 
-    LDAPRH(u8),
+    LDAPR,
+    LDAPRH,
+    LDAPRB,
     SWP(u8),
     SWPB(u8),
     SWPH(u8),
@@ -1261,6 +1623,26 @@ pub enum Opcode {
     STLUR,
     STLURB,
     STLURH,
+
+    SETF8,
+    SETF16,
+    RMIF,
+
+    NOT,
+
+    RSHRN2,
+    SQRSHRUN2,
+    USHLL2,
+
+    SHA1C,
+    SHA1P,
+    SHA1M,
+    SHA1SU0,
+    SHA256H,
+    SHA256H2,
+    SHA256SU1,
+
+    SHRN2,
 }
 
 impl Display for Opcode {
@@ -1444,9 +1826,7 @@ impl Display for Opcode {
             Opcode::UMLAL2 => "umlal2",
             Opcode::MLA => "mla",
             Opcode::SDOT => "sdot",
-            Opcode::SQRDMULH2 => "sqrdmulh2",
             Opcode::SQDMULH => "sqdmulh",
-            Opcode::SQDMULH2 => "sqdmulh2",
             Opcode::SQDMULL => "sqdmull",
             Opcode::SQDMULL2 => "sqdmull2",
             Opcode::SMULL => "smull",
@@ -1469,6 +1849,7 @@ impl Display for Opcode {
             Opcode::SHL => "shl",
             Opcode::SQSHL => "sqshl",
             Opcode::SHRN => "shrn",
+            Opcode::SHRN2 => "shrn2",
             Opcode::RSHRN => "rshrn",
             Opcode::SQSHRN => "sqshrn",
             Opcode::SQRSHRN => "sqrshrn",
@@ -1488,6 +1869,10 @@ impl Display for Opcode {
             Opcode::UQRSHRN => "uqrshrn",
             Opcode::MOVI => "movi",
             Opcode::MVNI => "mvni",
+            Opcode::NOT => "not",
+            Opcode::RSHRN2 => "rshrn2",
+            Opcode::SQRSHRUN2 => "sqrshrun2",
+            Opcode::USHLL2 => "ushll2",
             Opcode::SHADD => "shadd",
             Opcode::SQADD => "sqadd",
             Opcode::SRHADD => "srhadd",
@@ -1579,8 +1964,11 @@ impl Display for Opcode {
             Opcode::CMLT => "cmlt",
             Opcode::ABS => "abs",
             Opcode::XTN => "xtn",
+            Opcode::XTN2 => "xtn2",
             Opcode::SQXTN => "sqxtn",
+            Opcode::SQXTN2 => "sqxtn2",
             Opcode::FCVTN => "fcvtn",
+            Opcode::FCVTN2 => "fcvtn2",
             Opcode::FCMGT => "fcmgt",
             Opcode::FCVTL => "fcvtl",
             Opcode::FCVTL2 => "fcvtl2",
@@ -1597,9 +1985,13 @@ impl Display for Opcode {
             Opcode::CMLE => "cmle",
             Opcode::NEG => "neg",
             Opcode::SQXTUN => "sqxtun",
+            Opcode::SQXTUN2 => "sqxtun2",
             Opcode::SHLL => "shll",
+            Opcode::SHLL2 => "shll2",
             Opcode::UQXTN => "uqxtn",
+            Opcode::UQXTN2 => "uqxtn2",
             Opcode::FCVTXN => "fcvtxn",
+            Opcode::FCVTXN2 => "fcvtxn2",
             Opcode::FCVTNU => "fcvtnu",
             Opcode::FCVTMU => "fcvtmu",
             Opcode::FCVTAU => "fcvtau",
@@ -1615,7 +2007,6 @@ impl Display for Opcode {
             Opcode::SQSHRN2 => "sqshrn2",
             Opcode::SQRSHRN2 => "sqrshrn2",
             Opcode::SQSHRUN2 => "sqshrun2",
-            Opcode::SQRSHRUN2 => "sqrshrun2",
             Opcode::UQSHRN2 => "uqshrn2",
             Opcode::UQRSHRN2 => "uqrshrn2",
             Opcode::FMLS => "fmls",
@@ -1671,26 +2062,18 @@ impl Display for Opcode {
             Opcode::XAR => "xar",
             Opcode::LDRAA => "ldraa",
             Opcode::LDRAB => "ldrab",
-            Opcode::LDAPRH(ar) => {
-                if ar == 0 {
-                    "ldaprh"
-                } else if ar == 0b01 {
-                    "ldaprlh"
-                } else if ar == 0b10 {
-                    "ldaprah"
-                } else {
-                    "ldapralh"
-                }
-            }
+            Opcode::LDAPR => "ldapr",
+            Opcode::LDAPRH => "ldaprh",
+            Opcode::LDAPRB => "ldaprb",
             Opcode::SWP(ar) => {
                 if ar == 0 {
                     "swp"
                 } else if ar == 0b01 {
-                    "swlp"
+                    "swpl"
                 } else if ar == 0b10 {
-                    "swap"
+                    "swpa"
                 } else {
-                    "swalp"
+                    "swpal"
                 }
             }
             Opcode::SWPB(ar) => {
@@ -2040,6 +2423,18 @@ impl Display for Opcode {
             Opcode::STLURB => "stlurb",
             Opcode::STLURH => "stlurh",
 
+            Opcode::SETF8 => "setf8",
+            Opcode::SETF16 => "setf16",
+            Opcode::RMIF => "rmif",
+
+            Opcode::SHA1C => "sha1c",
+            Opcode::SHA1P => "sha1p",
+            Opcode::SHA1M => "sha1m",
+            Opcode::SHA1SU0 => "sha1su0",
+            Opcode::SHA256H => "sha256h",
+            Opcode::SHA256H2 => "sha256h2",
+            Opcode::SHA256SU1 => "sha256su1",
+
             Opcode::Bcc(cond) => {
                 return write!(fmt, "b.{}", Operand::ConditionCode(cond));
             },
@@ -2182,6 +2577,7 @@ pub enum Operand {
     SIMDRegister(SIMDSizeCode, u16),
     SIMDRegisterElements(SIMDSizeCode, u16, SIMDSizeCode),
     SIMDRegisterElementsLane(SIMDSizeCode, u16, SIMDSizeCode, u8),
+    SIMDRegisterElementsMultipleLane(SIMDSizeCode, u16, SIMDSizeCode, u8, u8),
     SIMDRegisterGroup(SIMDSizeCode, u16, SIMDSizeCode, u8),
     SIMDRegisterGroupLane(u16, SIMDSizeCode, u8, u8),
     RegisterOrSP(SizeCode, u16),
@@ -2355,7 +2751,7 @@ impl Display for Operand {
                     0b1001 => { write!(fmt, "ls") }
                     0b1011 => { write!(fmt, "lt") }
                     0b1101 => { write!(fmt, "le") }
-                    0b1111 => { write!(fmt, "al") }
+                    0b1111 => { write!(fmt, "nv") } // `The Condition code NV exists only to provide a valid disassembly of the 0b1111 encoding, otherwise its behavior is identical to AL`.
                     _ => { unreachable!(); }
                 }
             }
@@ -2430,46 +2826,38 @@ impl Display for Operand {
             Operand::RegOffset(reg, offset) => {
                 if *offset != 0 {
                     if *offset < 0 {
-                        write!(fmt, "[{}, -{:#x}]", Operand::RegisterOrSP(SizeCode::X, *reg), -*offset)
+                        write!(fmt, "[{}, #-{:#x}]", Operand::RegisterOrSP(SizeCode::X, *reg), -*offset)
                     } else {
-                        write!(fmt, "[{}, {:#x}]", Operand::RegisterOrSP(SizeCode::X, *reg), offset)
+                        write!(fmt, "[{}, #{:#x}]", Operand::RegisterOrSP(SizeCode::X, *reg), offset)
                     }
                 } else {
                     write!(fmt, "[{}]", Operand::RegisterOrSP(SizeCode::X, *reg))
                 }
             }
             Operand::RegRegOffset(reg, index_reg, index_size, extend, amount) => {
-                if *extend == ShiftStyle::LSL && *amount == 0 {
-                    write!(fmt, "[{}, {}]", Operand::RegisterOrSP(SizeCode::X, *reg), Operand::RegisterOrSP(*index_size, *index_reg))
-                } else {
-                    write!(fmt, "[{}, {}, {} {}]", Operand::RegisterOrSP(SizeCode::X, *reg), Operand::RegisterOrSP(*index_size, *index_reg), extend, amount)
-                }
+                write!(fmt, "[{}, {}, {} #{:#x}]", Operand::RegisterOrSP(SizeCode::X, *reg), Operand::Register(*index_size, *index_reg), extend, amount)
             }
-            Operand::RegPreIndex(reg, offset, wback) => {
-                let wback = if *wback {
+            Operand::RegPreIndex(reg, offset, wback_bit) => {
+                let wback = if *wback_bit {
                     "!"
                 } else {
                     ""
                 };
-                if *offset != 0 {
+                if *offset != 0 || *wback_bit {
                     if *offset < 0 {
-                        write!(fmt, "[{}, -{:#x}]{}", Operand::RegisterOrSP(SizeCode::X, *reg), -*offset, wback)
+                        write!(fmt, "[{}, #-{:#x}]{}", Operand::RegisterOrSP(SizeCode::X, *reg), -*offset, wback)
                     } else {
-                        write!(fmt, "[{}, {:#x}]{}", Operand::RegisterOrSP(SizeCode::X, *reg), offset, wback)
-                    }
-                } else {
-                    write!(fmt, "[{}]{}", Operand::RegisterOrSP(SizeCode::X, *reg), wback)
-                }
-            }
-            Operand::RegPostIndex(reg, offset) => {
-                if *offset != 0 {
-                    if *offset < 0 {
-                        write!(fmt, "[{}], #-{}", Operand::RegisterOrSP(SizeCode::X, *reg), -*offset)
-                    } else {
-                        write!(fmt, "[{}], #{}", Operand::RegisterOrSP(SizeCode::X, *reg), offset)
+                        write!(fmt, "[{}, #{:#x}]{}", Operand::RegisterOrSP(SizeCode::X, *reg), offset, wback)
                     }
                 } else {
                     write!(fmt, "[{}]", Operand::RegisterOrSP(SizeCode::X, *reg))
+                }
+            }
+            Operand::RegPostIndex(reg, offset) => {
+                if *offset < 0 {
+                    write!(fmt, "[{}], #-{:#x}", Operand::RegisterOrSP(SizeCode::X, *reg), -*offset)
+                } else {
+                    write!(fmt, "[{}], #{:#x}", Operand::RegisterOrSP(SizeCode::X, *reg), offset)
                 }
             }
             Operand::RegPostIndexReg(reg, offset_reg) => {
@@ -2578,62 +2966,113 @@ impl Decoder<ARMv8> for InstDecoder {
                                     return Err(DecodeError::InvalidOperand);
                                 }
 
-                                let (T, shift) = if immh > 0b0111 {
-                                    (SIMDSizeCode::D, ((immh << 3) | immb) & 0b0111_111)
-                                } else if immh > 0b0011 {
-                                    (SIMDSizeCode::S, ((immh << 3) | immb) & 0b0011_111)
-                                } else if immh > 0b0001 {
-                                    (SIMDSizeCode::H, ((immh << 3) | immb) & 0b0101_111)
-                                } else {
-                                    (SIMDSizeCode::B, ((immh << 3) | immb) & 0b0000_111)
-                                };
                                 let datasize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
 
-                                const OPCODES: &[Result<Opcode, DecodeError>] = &[
-                                    Ok(Opcode::SSHR),                Err(DecodeError::InvalidOpcode),
-                                    Ok(Opcode::SSRA),                Err(DecodeError::InvalidOpcode),
-                                    Ok(Opcode::SRSHR),               Err(DecodeError::InvalidOpcode),
-                                    Ok(Opcode::SRSRA),               Err(DecodeError::InvalidOpcode),
+                                // is shift encoded as `N - imm` or `imm - N`?
+                                const OPCODES: &[Result<(Opcode, bool), DecodeError>] = &[
+                                    Ok((Opcode::SSHR, true)),         Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::SSRA, true)),         Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::SRSHR, true)),        Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::SRSRA, true)),        Err(DecodeError::InvalidOpcode),
                                     // 0b01000
-                                    Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
-                                    Ok(Opcode::SHL),                 Err(DecodeError::InvalidOpcode),
-                                    Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
-                                    Ok(Opcode::SQSHL),               Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),  Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::SHL, false)),         Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),  Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::SQSHL, false)),       Err(DecodeError::InvalidOpcode),
                                     // 0b10000
-                                    Ok(Opcode::SHRN),                Ok(Opcode::RSHRN),
-                                    Ok(Opcode::SQSHRN),              Ok(Opcode::SQRSHRN),
-                                    Ok(Opcode::SSHLL),               Err(DecodeError::InvalidOpcode),
-                                    Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::SHRN, true)),         Ok((Opcode::RSHRN, true)),
+                                    Ok((Opcode::SQSHRN, true)),       Ok((Opcode::SQRSHRN, true)),
+                                    Ok((Opcode::SSHLL, false)),       Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),  Err(DecodeError::InvalidOpcode),
                                     // 0b11000
-                                    Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
-                                    Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
-                                    Ok(Opcode::SCVTF),               Err(DecodeError::InvalidOpcode),
-                                    Err(DecodeError::InvalidOpcode), Ok(Opcode::FCVTZS),
+                                    Err(DecodeError::InvalidOpcode),  Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),  Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::SCVTF, true)),        Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),  Ok((Opcode::FCVTZS, true)),
                                     // U == 1
-                                    Ok(Opcode::USHR),                Err(DecodeError::InvalidOpcode),
-                                    Ok(Opcode::USRA),                Err(DecodeError::InvalidOpcode),
-                                    Ok(Opcode::URSHR),               Err(DecodeError::InvalidOpcode),
-                                    Ok(Opcode::URSRA),               Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::USHR, true)),         Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::USRA, true)),         Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::URSHR, true)),        Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::URSRA, true)),        Err(DecodeError::InvalidOpcode),
                                     // 0b01000
-                                    Ok(Opcode::SRI),                 Err(DecodeError::InvalidOpcode),
-                                    Ok(Opcode::SLI),                 Err(DecodeError::InvalidOpcode),
-                                    Ok(Opcode::SQSHLU),              Err(DecodeError::InvalidOpcode),
-                                    Ok(Opcode::UQSHL),               Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::SRI, true)),          Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::SLI, false)),         Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::SQSHLU, false)),      Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::UQSHL, false)),       Err(DecodeError::InvalidOpcode),
                                     // 0b10000
-                                    Ok(Opcode::SQSHRUN),             Ok(Opcode::SQRSHRUN),
-                                    Ok(Opcode::UQSHRN),              Ok(Opcode::UQRSHRN),
-                                    Ok(Opcode::USHLL),               Err(DecodeError::InvalidOpcode),
-                                    Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::SQSHRUN, true)),      Ok((Opcode::SQRSHRUN, true)),
+                                    Ok((Opcode::UQSHRN, true)),       Ok((Opcode::UQRSHRN, true)),
+                                    Ok((Opcode::USHLL, false)),       Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),  Err(DecodeError::InvalidOpcode),
                                     // 0b11000
-                                    Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
-                                    Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
-                                    Ok(Opcode::UCVTF),               Err(DecodeError::InvalidOpcode),
-                                    Err(DecodeError::InvalidOpcode), Ok(Opcode::FCVTZU),
+                                    Err(DecodeError::InvalidOpcode),  Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),  Err(DecodeError::InvalidOpcode),
+                                    Ok((Opcode::UCVTF, true)),        Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),  Ok((Opcode::FCVTZU, true)),
                                 ];
-                                inst.opcode = OPCODES[((U << 5) | opcode) as usize]?;
+                                let (opcode, before) = OPCODES[((U << 5) | opcode) as usize]?;
+                                inst.opcode = opcode;
+                                let (T, shift) = if before {
+                                    if immh > 0b0111 {
+                                        (SIMDSizeCode::D, 128 - ((immh << 3) | immb))
+                                    } else if immh > 0b0011 {
+                                        (SIMDSizeCode::S, 64 - ((immh << 3) | immb))
+                                    } else if immh > 0b0001 {
+                                        (SIMDSizeCode::H, 32 - ((immh << 3) | immb))
+                                    } else {
+                                        (SIMDSizeCode::B, 16 - ((immh << 3) | immb))
+                                    }
+                                } else {
+                                    if immh > 0b0111 {
+                                        (SIMDSizeCode::D, ((immh << 3) | immb) - 64)
+                                    } else if immh > 0b0011 {
+                                        (SIMDSizeCode::S, ((immh << 3) | immb) - 32)
+                                    } else if immh > 0b0001 {
+                                        (SIMDSizeCode::H, ((immh << 3) | immb) - 16)
+                                    } else {
+                                        (SIMDSizeCode::B, ((immh << 3) | immb) - 8)
+                                    }
+                                };
+
+                                let (Vb, Tb) = if opcode == Opcode::SQSHRUN || opcode == Opcode::SQRSHRUN || opcode == Opcode::UQSHRN || opcode == Opcode::UQRSHRN || opcode == Opcode::SHRN || opcode == Opcode::RSHRN || opcode == Opcode::SQSHRN || opcode == Opcode::SQRSHRN {
+                                    if immh > 0b0111 {
+                                        return Err(DecodeError::InvalidOperand);
+                                    } else if immh > 0b0011 {
+                                        (SIMDSizeCode::Q, SIMDSizeCode::D)
+                                    } else if immh > 0b0001 {
+                                        (SIMDSizeCode::Q, SIMDSizeCode::S)
+                                    } else {
+                                        (SIMDSizeCode::Q, SIMDSizeCode::H)
+                                    }
+                                } else {
+                                    (datasize, T)
+                                };
+
+                                if Q == 1 {
+                                    if inst.opcode == Opcode::RSHRN {
+                                        inst.opcode = Opcode::RSHRN2;
+                                    } else if inst.opcode == Opcode::SQSHRUN {
+                                        inst.opcode = Opcode::SQSHRUN2;
+                                    } else if inst.opcode == Opcode::SQRSHRUN {
+                                        inst.opcode = Opcode::SQRSHRUN2;
+                                    } else if inst.opcode == Opcode::UQSHRN {
+                                        inst.opcode = Opcode::UQSHRN2;
+                                    } else if inst.opcode == Opcode::UQRSHRN {
+                                        inst.opcode = Opcode::UQRSHRN2;
+                                    } else if inst.opcode == Opcode::USHLL {
+                                        inst.opcode = Opcode::USHLL2;
+                                    } else if inst.opcode == Opcode::SHRN {
+                                        inst.opcode = Opcode::SHRN2;
+                                    } else if inst.opcode == Opcode::SQSHRN {
+                                        inst.opcode = Opcode::SQSHRN2;
+                                    } else if inst.opcode == Opcode::SQRSHRN {
+                                        inst.opcode = Opcode::SQRSHRN2;
+                                    }
+                                };
+
                                 inst.operands = [
                                     Operand::SIMDRegisterElements(datasize, Rd as u16, T),
-                                    Operand::SIMDRegisterElements(datasize, Rn as u16, T),
+                                    Operand::SIMDRegisterElements(Vb, Rn as u16, Tb),
                                     Operand::Immediate(shift),
                                     Operand::Nothing,
                                 ];
@@ -2666,7 +3105,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Ok((Opcode::MVNI, SIMDSizeCode::S)), Ok((Opcode::BIC, SIMDSizeCode::S)),
                                     Ok((Opcode::MVNI, SIMDSizeCode::H)), Ok((Opcode::BIC, SIMDSizeCode::H)),
                                     Ok((Opcode::MVNI, SIMDSizeCode::H)), Ok((Opcode::BIC, SIMDSizeCode::H)),
-                                    Ok((Opcode::MVNI, SIMDSizeCode::S)), Ok((Opcode::BIC, SIMDSizeCode::S)),
+                                    Ok((Opcode::MVNI, SIMDSizeCode::S)), Ok((Opcode::MVNI, SIMDSizeCode::S)),
                                     Ok((Opcode::MOVI, SIMDSizeCode::D)), Ok((Opcode::FMOV, SIMDSizeCode::B)),
                                 ];
 
@@ -2734,7 +3173,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                             }
                                             _ => 0,
                                         };
-                                        if cmode & 0b1110 == 0b1100 && op == 0 {
+                                        if cmode & 0b1110 == 0b1100 {
                                             let amount = (cmode & 1) << 3;
                                             Operand::ImmShiftMSL(imm8 as u16, amount as u8 + 8)
                                         } else {
@@ -2780,12 +3219,12 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOperand);
                                     }
 
-                                    let (index, Rm) = if size == 0b10 {
+                                    let (index, Rm) = if size == 0b01 {
                                         let index = (H << 2) | (L << 1) | M;
-                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     } else {
                                         let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     };
 
@@ -2813,12 +3252,12 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOperand);
                                     }
 
-                                    let (index, Rm) = if size == 0b10 {
+                                    let (index, Rm) = if size == 0b01 {
                                         let index = (H << 2) | (L << 1) | M;
-                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     } else {
                                         let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     };
 
@@ -2846,12 +3285,12 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOperand);
                                     }
 
-                                    let (index, Rm) = if size == 0b10 {
+                                    let (index, Rm) = if size == 0b01 {
                                         let index = (H << 2) | (L << 1) | M;
-                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     } else {
                                         let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     };
 
@@ -2879,12 +3318,12 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOperand);
                                     }
 
-                                    let (index, Rm) = if size == 0b10 {
+                                    let (index, Rm) = if size == 0b01 {
                                         let index = (H << 2) | (L << 1) | M;
-                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     } else {
                                         let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     };
 
@@ -2912,12 +3351,12 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOperand);
                                     }
 
-                                    let (index, Rm) = if size == 0b10 {
+                                    let (index, Rm) = if size == 0b01 {
                                         let index = (H << 2) | (L << 1) | M;
-                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     } else {
                                         let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     };
 
@@ -2941,12 +3380,12 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOperand);
                                     }
 
-                                    let (index, Rm) = if size == 0b10 {
+                                    let (index, Rm) = if size == 0b01 {
                                         let index = (H << 2) | (L << 1) | M;
-                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     } else {
                                         let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     };
 
@@ -2974,12 +3413,12 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOperand);
                                     }
 
-                                    let (index, Rm) = if size == 0b10 {
+                                    let (index, Rm) = if size == 0b01 {
                                         let index = (H << 2) | (L << 1) | M;
-                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     } else {
                                         let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     };
 
@@ -3007,27 +3446,23 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOperand);
                                     }
 
-                                    let (index, Rm) = if size == 0b10 {
+                                    let (index, Rm) = if size == 0b01 {
                                         let index = (H << 2) | (L << 1) | M;
-                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     } else {
                                         let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     };
 
                                     let Tb_vecsize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
                                     let (Ta, Tb_elemsize, Ts) = if size == 0b01 {
-                                        (SIMDSizeCode::S, SIMDSizeCode::H, SIMDSizeCode::H)
+                                        (SIMDSizeCode::H, SIMDSizeCode::H, SIMDSizeCode::H)
                                     } else {
-                                        (SIMDSizeCode::D, SIMDSizeCode::S, SIMDSizeCode::S)
+                                        (SIMDSizeCode::S, SIMDSizeCode::S, SIMDSizeCode::S)
                                     };
 
-                                    inst.opcode = if Q == 1 {
-                                        Opcode::SQDMULH2
-                                    } else {
-                                        Opcode::SQDMULH
-                                    };
+                                    inst.opcode = Opcode::SQDMULH;
                                     inst.operands = [
                                         Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd as u16, Ta),
                                         Operand::SIMDRegisterElements(Tb_vecsize, Rn as u16, Tb_elemsize),
@@ -3040,27 +3475,23 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOperand);
                                     }
 
-                                    let (index, Rm) = if size == 0b10 {
+                                    let (index, Rm) = if size == 0b01 {
                                         let index = (H << 2) | (L << 1) | M;
-                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     } else {
                                         let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     };
 
                                     let Tb_vecsize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
                                     let (Ta, Tb_elemsize, Ts) = if size == 0b01 {
-                                        (SIMDSizeCode::S, SIMDSizeCode::H, SIMDSizeCode::H)
+                                        (SIMDSizeCode::H, SIMDSizeCode::H, SIMDSizeCode::H)
                                     } else {
-                                        (SIMDSizeCode::D, SIMDSizeCode::S, SIMDSizeCode::S)
+                                        (SIMDSizeCode::S, SIMDSizeCode::S, SIMDSizeCode::S)
                                     };
 
-                                    inst.opcode = if Q == 1 {
-                                        Opcode::SQRDMULH2
-                                    } else {
-                                        Opcode::SQRDMULH
-                                    };
+                                    inst.opcode = Opcode::SQRDMULH;
                                     inst.operands = [
                                         Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd as u16, Ta),
                                         Operand::SIMDRegisterElements(Tb_vecsize, Rn as u16, Tb_elemsize),
@@ -3082,7 +3513,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     inst.operands = [
                                         Operand::SIMDRegisterElements(datasize, Rd as u16, SIMDSizeCode::S),
                                         Operand::SIMDRegisterElements(datasize, Rn as u16, SIMDSizeCode::B),
-                                        Operand::SIMDRegisterElementsLane(SIMDSizeCode::Q, Rm as u16, SIMDSizeCode::B, index as u8),
+                                        Operand::SIMDRegisterElementsMultipleLane(SIMDSizeCode::Q, Rm as u16, SIMDSizeCode::B, index as u8, 4),
                                         Operand::Nothing,
                                     ];
                                 },
@@ -3264,12 +3695,12 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOperand);
                                     }
 
-                                    let (index, Rm) = if size == 0b10 {
+                                    let (index, Rm) = if size == 0b01 {
                                         let index = (H << 2) | (L << 1) | M;
-                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     } else {
                                         let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     };
 
@@ -3293,12 +3724,12 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOperand);
                                     }
 
-                                    let (index, Rm) = if size == 0b10 {
+                                    let (index, Rm) = if size == 0b01 {
                                         let index = (H << 2) | (L << 1) | M;
-                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     } else {
                                         let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     };
 
@@ -3326,12 +3757,12 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOperand);
                                     }
 
-                                    let (index, Rm) = if size == 0b10 {
+                                    let (index, Rm) = if size == 0b01 {
                                         let index = (H << 2) | (L << 1) | M;
-                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     } else {
                                         let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     };
 
@@ -3355,12 +3786,12 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOperand);
                                     }
 
-                                    let (index, Rm) = if size == 0b10 {
+                                    let (index, Rm) = if size == 0b01 {
                                         let index = (H << 2) | (L << 1) | M;
-                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     } else {
                                         let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     };
 
@@ -3388,12 +3819,12 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOperand);
                                     }
 
-                                    let (index, Rm) = if size == 0b10 {
+                                    let (index, Rm) = if size == 0b01 {
                                         let index = (H << 2) | (L << 1) | M;
-                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     } else {
                                         let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     };
 
@@ -3424,25 +3855,25 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOperand);
                                     }
 
-                                    let (index, Rm) = if size == 0b10 {
+                                    let (index, Rm) = if size == 0b01 {
                                         let index = (H << 2) | (L << 1) | M;
-                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     } else {
                                         let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     };
 
                                     let Tb_vecsize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
                                     let (Ta, Tb_elemsize, Ts) = if size == 0b01 {
-                                        (SIMDSizeCode::S, SIMDSizeCode::H, SIMDSizeCode::H)
+                                        (SIMDSizeCode::H, SIMDSizeCode::H, SIMDSizeCode::H)
                                     } else {
-                                        (SIMDSizeCode::D, SIMDSizeCode::S, SIMDSizeCode::S)
+                                        (SIMDSizeCode::S, SIMDSizeCode::S, SIMDSizeCode::S)
                                     };
 
                                     inst.opcode = Opcode::SQRDMLAH;
                                     inst.operands = [
-                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd as u16, Ta),
+                                        Operand::SIMDRegisterElements(Tb_vecsize, Rd as u16, Ta),
                                         Operand::SIMDRegisterElements(Tb_vecsize, Rn as u16, Tb_elemsize),
                                         Operand::SIMDRegisterElementsLane(SIMDSizeCode::Q, Rm as u16, Ts, index as u8),
                                         Operand::Nothing,
@@ -3462,7 +3893,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     inst.operands = [
                                         Operand::SIMDRegisterElements(datasize, Rd as u16, SIMDSizeCode::S),
                                         Operand::SIMDRegisterElements(datasize, Rn as u16, SIMDSizeCode::B),
-                                        Operand::SIMDRegisterElementsLane(SIMDSizeCode::Q, Rm as u16, SIMDSizeCode::B, index as u8),
+                                        Operand::SIMDRegisterElementsMultipleLane(SIMDSizeCode::Q, Rm as u16, SIMDSizeCode::B, index as u8, 4),
                                         Operand::Nothing,
                                     ];
                                 }
@@ -3471,25 +3902,25 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOperand);
                                     }
 
-                                    let (index, Rm) = if size == 0b10 {
+                                    let (index, Rm) = if size == 0b01 {
                                         let index = (H << 2) | (L << 1) | M;
-                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     } else {
                                         let index = (H << 1) | L;
+                                        let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     };
 
                                     let Tb_vecsize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
                                     let (Ta, Tb_elemsize, Ts) = if size == 0b01 {
-                                        (SIMDSizeCode::S, SIMDSizeCode::H, SIMDSizeCode::H)
+                                        (SIMDSizeCode::H, SIMDSizeCode::H, SIMDSizeCode::H)
                                     } else {
-                                        (SIMDSizeCode::D, SIMDSizeCode::S, SIMDSizeCode::S)
+                                        (SIMDSizeCode::S, SIMDSizeCode::S, SIMDSizeCode::S)
                                     };
 
                                     inst.opcode = Opcode::SQRDMLSH;
                                     inst.operands = [
-                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd as u16, Ta),
+                                        Operand::SIMDRegisterElements(Tb_vecsize, Rd as u16, Ta),
                                         Operand::SIMDRegisterElements(Tb_vecsize, Rn as u16, Tb_elemsize),
                                         Operand::SIMDRegisterElementsLane(SIMDSizeCode::Q, Rm as u16, Ts, index as u8),
                                         Operand::Nothing,
@@ -3532,18 +3963,24 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOpcode);
                                     }
 
-                                    let (index, Rm) = if size == 0b10 {
+                                    let (index, Rm) = if size == 0b00 {
                                         let index = (H << 2) | (L << 1) | M;
+                                        (index, Rm)
+                                    } else if size == 0b10 {
+                                        let index = (H << 1) | L;
                                         let Rm = (M << 4) | Rm;
                                         (index, Rm)
                                     } else {
-                                        let index = (H << 1) | L;
-                                        (index, Rm)
+                                        if L == 1 {
+                                            return Err(DecodeError::InvalidOperand);
+                                        }
+                                        let Rm = (M << 4) | Rm;
+                                        (H, Rm)
                                     };
 
                                     let datasize = if Q == 1 { SIMDSizeCode::Q } else { SIMDSizeCode::D };
                                     let (Ta, Tb_elemsize, Ts) = if size == 0b00 {
-                                        (SIMDSizeCode::H, SIMDSizeCode::H, SIMDSizeCode::S)
+                                        (SIMDSizeCode::H, SIMDSizeCode::H, SIMDSizeCode::H)
                                     } else if size == 0b10 {
                                         (SIMDSizeCode::S, SIMDSizeCode::S, SIMDSizeCode::S)
                                     } else /* if size == 0b11 */ {
@@ -3573,10 +4010,10 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOperand);
                                     }
 
-                                    let index = if size == 0b10 {
-                                        H
-                                    } else {
+                                    let index = if size == 0b01 {
                                         (H << 1) | L
+                                    } else {
+                                        H
                                     };
                                     let Rm = (M << 4) | Rm;
 
@@ -3842,11 +4279,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     if size != 0b00 && size != 0b11 {
                                         return Err(DecodeError::InvalidOperand);
                                     }
-                                    let ta_size = if size == 0b00 {
-                                        SIMDSizeCode::D
-                                    } else {
-                                        SIMDSizeCode::Q
-                                    };
+                                    let ta_size = SIMDSizeCode::Q;
                                     inst.operands = [
                                         Operand::SIMDRegisterElements(ta_size, Rd as u16, Ta),
                                         Operand::SIMDRegisterElements(datasize, Rn as u16, Tb),
@@ -3903,9 +4336,9 @@ impl Decoder<ARMv8> for InstDecoder {
                                 ];
 
                                 const TABLE_E: &'static OperandSizeTable = &[
-                                    Ok((D, B, Q, H)), Ok((Q, H, Q, H)),
-                                    Ok((D, H, Q, S)), Ok((Q, S, Q, S)),
-                                    Ok((D, S, Q, D)), Ok((Q, D, Q, D)),
+                                    Ok((D, B, Q, H)), Ok((Q, B, Q, H)),
+                                    Ok((D, H, Q, S)), Ok((Q, H, Q, S)),
+                                    Ok((D, S, Q, D)), Ok((Q, S, Q, D)),
                                     Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
                                 ];
 
@@ -3940,21 +4373,28 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Err(DecodeError::InvalidOperand), Ok((Q, D, Q, D)),
                                 ];
 
+                                const TABLE_J: &'static OperandSizeTable = &[
+                                    Ok((Q, H, D, B)), Ok((Q, H, Q, B)),
+                                    Ok((Q, S, D, H)), Ok((Q, S, Q, H)),
+                                    Ok((Q, D, D, S)), Ok((Q, D, Q, S)),
+                                    Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
+                                ];
+
                                 if op2 & 0b0111 == 0b0100 {
                                     // `Advanced SIMD two-register miscellaneous`
                                     const OPCODES_U0_LOW: &[Result<(Opcode, &'static OperandSizeTable), DecodeError>; 20] = &[
                                         Ok((Opcode::REV64, TABLE_A)),
                                         Ok((Opcode::REV16, TABLE_B)),
                                         Ok((Opcode::SADDLP, TABLE_C)),
-                                        Ok((Opcode::SUQADD, TABLE_D)),
+                                        Ok((Opcode::SUQADD, TABLE_A)),
                                         Ok((Opcode::CLS, TABLE_A)),
                                         Ok((Opcode::CNT, TABLE_B)),
                                         Ok((Opcode::SADALP, TABLE_C)),
-                                        Ok((Opcode::SQABS, TABLE_D)),
-                                        Ok((Opcode::CMGT, TABLE_D)),
-                                        Ok((Opcode::CMEQ, TABLE_D)),
-                                        Ok((Opcode::CMLT, TABLE_D)),
-                                        Ok((Opcode::ABS, TABLE_D)),
+                                        Ok((Opcode::SQABS, TABLE_A)),
+                                        Ok((Opcode::CMGT, TABLE_A)),
+                                        Ok((Opcode::CMEQ, TABLE_A)),
+                                        Ok((Opcode::CMLT, TABLE_A)),
+                                        Ok((Opcode::ABS, TABLE_A)),
                                         // 0b01100, all four size=1x
                                         Ok((Opcode::FCMGT, TABLE_I)),
                                         Ok((Opcode::FCMEQ, TABLE_I)),
@@ -4002,15 +4442,15 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Ok((Opcode::REV32, TABLE_A)),
                                         Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::UADDLP, TABLE_C)),
-                                        Ok((Opcode::USQADD, TABLE_D)),
+                                        Ok((Opcode::USQADD, TABLE_A)),
                                         Ok((Opcode::CLZ, TABLE_A)),
                                         Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::UADALP, TABLE_C)),
-                                        Ok((Opcode::SQNEG, TABLE_D)),
-                                        Ok((Opcode::CMGE, TABLE_D)),
-                                        Ok((Opcode::CMLE, TABLE_D)),
+                                        Ok((Opcode::SQNEG, TABLE_A)),
+                                        Ok((Opcode::CMGE, TABLE_A)),
+                                        Ok((Opcode::CMLE, TABLE_A)),
                                         Err(DecodeError::InvalidOpcode),
-                                        Ok((Opcode::NEG, TABLE_D)),
+                                        Ok((Opcode::NEG, TABLE_A)),
                                         // 0b01100, all four size=1x
                                         Ok((Opcode::FCMGE, TABLE_I)),
                                         Ok((Opcode::FCMLE, TABLE_I)),
@@ -4020,7 +4460,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Err(DecodeError::InvalidOpcode),
                                         Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::SQXTUN, TABLE_E)),
-                                        Ok((Opcode::SHLL, TABLE_E)), // TODO: verify
+                                        Ok((Opcode::SHLL, TABLE_J)),
                                         // 0b10100
                                     ];
                                     // index by low 3 of opcode | upper bit of size
@@ -4052,7 +4492,20 @@ impl Decoder<ARMv8> for InstDecoder {
                                         // u == 1, op == 0b00000
                                     ];
 
-                                    let (opc, (datasize_a, elemsize_a, datasize_b, elemsize_b)) = if opcode < 0b10100 {
+                                    let (opc, (datasize_a, elemsize_a, datasize_b, elemsize_b)) = if opcode == 0b00101 && U == 1{
+                                        let vecsize = if q == 0 {
+                                            SIMDSizeCode::D
+                                        } else {
+                                            SIMDSizeCode::Q
+                                        };
+                                        if size == 0b00 {
+                                            (Opcode::NOT, (vecsize, SIMDSizeCode::B, vecsize, SIMDSizeCode::B))
+                                        } else if size == 0b01 {
+                                            (Opcode::RBIT, (vecsize, SIMDSizeCode::B, vecsize, SIMDSizeCode::B))
+                                        } else {
+                                            return Err(DecodeError::InvalidOpcode);
+                                        }
+                                    } else if opcode < 0b10100 {
                                         let (opc, table) = if U == 0 {
                                             OPCODES_U0_LOW[opcode as usize]?
                                         } else {
@@ -4068,10 +4521,24 @@ impl Decoder<ARMv8> for InstDecoder {
                                         (opc, table[((size << 1) | q) as usize]?)
                                     };
 
-                                    if opc == Opcode::FCVTL && q != 0 {
-                                        inst.opcode = Opcode::FCVTL2;
-                                    } else {
-                                        inst.opcode = opc;
+                                    inst.opcode = opc;
+
+                                    if q != 0 {
+                                        if opc == Opcode::FCVTL {
+                                            inst.opcode = Opcode::FCVTL2;
+                                        } else if opc == Opcode::XTN {
+                                            inst.opcode = Opcode::XTN2;
+                                        } else if opc == Opcode::SQXTN {
+                                            inst.opcode = Opcode::SQXTN2;
+                                        } else if opc == Opcode::SQXTUN {
+                                            inst.opcode = Opcode::SQXTUN2;
+                                        } else if opc == Opcode::UQXTN {
+                                            inst.opcode = Opcode::UQXTN2;
+                                        } else if opc == Opcode::FCVTN {
+                                            inst.opcode = Opcode::FCVTN2;
+                                        } else if opc == Opcode::FCVTXN {
+                                            inst.opcode = Opcode::FCVTXN2;
+                                        }
                                     }
                                     inst.operands = [
                                         Operand::SIMDRegisterElements(datasize_a, Rd as u16, elemsize_a),
@@ -4083,6 +4550,15 @@ impl Decoder<ARMv8> for InstDecoder {
                                         inst.operands[2] = Operand::Imm64(0);
                                     } else if [Opcode::FCMGE, Opcode::FCMLE, Opcode::FCMGT, Opcode::FCMEQ, Opcode::FCMLT].contains(&inst.opcode) {
                                         inst.operands[2] = Operand::ImmediateDouble(0.0);
+                                    } else if inst.opcode == Opcode::SHLL {
+                                        if q == 1 {
+                                            inst.opcode = Opcode::SHLL2;
+                                        }
+                                        let sz = (word >> 22) & 0b11;
+                                        if sz == 0b11 {
+                                            return Err(DecodeError::InvalidOperand);
+                                        }
+                                        inst.operands[2] = Operand::Imm64((8 << sz) as u64);
                                     }
                                 } else if op2 & 0b0111 == 0b0110 {
                                     // `Advanced SIMD across lanes`
@@ -4206,6 +4682,33 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Operand::Nothing,
                                         Operand::Nothing,
                                     ];
+                                } else if op2 & 0b0111 == 0b0101 && op0 == 0b0100 {
+                                    // `Cryptographic AES`
+                                    let Rd = word & 0b11111;
+                                    let Rn = (word >> 5) & 0b11111;
+                                    let opcode = (word >> 12) & 0b11111;
+                                    let size = (word >> 22) & 0b11;
+
+                                    if size != 0b00 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+
+                                    let opcode = match opcode {
+                                        0b00100 => Opcode::AESE,
+                                        0b00101 => Opcode::AESD,
+                                        0b00110 => Opcode::AESMC,
+                                        0b00111 => Opcode::AESIMC,
+                                        _ => {
+                                            return Err(DecodeError::InvalidOpcode);
+                                        }
+                                    };
+                                    inst.opcode = opcode;
+                                    inst.operands = [
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd as u16, SIMDSizeCode::B),
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn as u16, SIMDSizeCode::B),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
                                 }
                             } else {
                                 // op3 == 1xxxxx10 or x1xxxx10: both unallocated.
@@ -4294,7 +4797,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                             Operand::SIMDRegisterElements(vec_size, Rd as u16, elem_size),
                                             Operand::SIMDRegisterElements(vec_size, Rn as u16, elem_size),
                                             Operand::SIMDRegisterElements(vec_size, Rm as u16, elem_size),
-                                            Operand::Imm16(rot as u16),
+                                            Operand::Imm16(90 * (rot as u16)),
                                         ];
                                     } else if opcode & 0b1101 == 0b1100 {
                                         // fcadd
@@ -4320,7 +4823,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                             Operand::SIMDRegisterElements(vec_size, Rd as u16, elem_size),
                                             Operand::SIMDRegisterElements(vec_size, Rn as u16, elem_size),
                                             Operand::SIMDRegisterElements(vec_size, Rm as u16, elem_size),
-                                            Operand::Imm16(rot as u16),
+                                            Operand::Imm16(90 + 180 * (rot as u16)),
                                         ];
                                     } else {
                                         return Err(DecodeError::InvalidOpcode);
@@ -4796,7 +5299,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 return Err(DecodeError::InvalidOpcode);
                             }
 
-                            if mode != 0b00 && opcode >= 0b100 {
+                            if mode != 0b00 && opcode >= 0b100 && opcode != 0b110 {
                                 return Err(DecodeError::InvalidOpcode);
                             }
 
@@ -5116,7 +5619,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     inst.operands = [
                                         Operand::SIMDRegister(precision, Rn as u16),
                                         if opcode2 & 0b01000 != 0 { // and, sugguested, Rm == 0
-                                            Operand::Immediate(0)
+                                            Operand::ImmediateDouble(0.0)
                                         } else {
                                             Operand::SIMDRegister(precision, Rm as u16)
                                         },
@@ -5674,6 +6177,8 @@ impl Decoder<ARMv8> for InstDecoder {
                                         ];
                                         if [Opcode::FCMGE, Opcode::FCMLE, Opcode::FCMGT, Opcode::FCMEQ, Opcode::FCMLT].contains(&inst.opcode) {
                                             inst.operands[2] = Operand::ImmediateDouble(0.0);
+                                        } else if [Opcode::CMGE, Opcode::CMLE, Opcode::CMGT, Opcode::CMEQ, Opcode::CMLT].contains(&inst.opcode) {
+                                            inst.operands[2] = Operand::Immediate(0);
                                         }
                                     } else if op2 & 0b0111 == 0b110 {
                                         // `Advanced SIMD scalar pairwise`
@@ -5734,18 +6239,18 @@ impl Decoder<ARMv8> for InstDecoder {
                                             0b11011_0_0 => Ok(Opcode::FCVTMS),
                                             0b11100_0_0 => Ok(Opcode::FCVTAS),
                                             0b11101_0_0 => Ok(Opcode::SCVTF),
-                                            0b01100_1_0 => Ok(Opcode::FCMGT),
-                                            0b01101_1_0 => Ok(Opcode::FCMEQ),
-                                            0b01110_1_0 => Ok(Opcode::FCMLT),
-                                            0b11010_1_0 => Ok(Opcode::FCVTPS),
-                                            0b11011_1_0 => Ok(Opcode::FCVTZS),
-                                            0b11101_1_0 => Ok(Opcode::FRECPE),
-                                            0b11111_1_0 => Ok(Opcode::FRECPX),
+                                            0b01100_0_1 => Ok(Opcode::FCMGT),
+                                            0b01101_0_1 => Ok(Opcode::FCMEQ),
+                                            0b01110_0_1 => Ok(Opcode::FCMLT),
+                                            0b11010_0_1 => Ok(Opcode::FCVTPS),
+                                            0b11011_0_1 => Ok(Opcode::FCVTZS),
+                                            0b11101_0_1 => Ok(Opcode::FRECPE),
+                                            0b11111_0_1 => Ok(Opcode::FRECPX),
 
-                                            0b11010_0_1 => Ok(Opcode::FCVTNU),
-                                            0b11011_0_1 => Ok(Opcode::FCVTMU),
-                                            0b11100_0_1 => Ok(Opcode::FCVTAU),
-                                            0b11101_0_1 => Ok(Opcode::UCVTF),
+                                            0b11010_1_0 => Ok(Opcode::FCVTNU),
+                                            0b11011_1_0 => Ok(Opcode::FCVTMU),
+                                            0b11100_1_0 => Ok(Opcode::FCVTAU),
+                                            0b11101_1_0 => Ok(Opcode::UCVTF),
                                             0b01100_1_1 => Ok(Opcode::FCMGE),
                                             0b01101_1_1 => Ok(Opcode::FCMLE),
                                             0b11010_1_1 => Ok(Opcode::FCVTPU),
@@ -5799,33 +6304,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                                 Operand::Nothing,
                                             ];
                                         }
-                                    } else if op2 & 0b0111 == 0b0101 && op0 == 0b0100 {
-                                        // `Cryptographic AES`
-                                        let Rd = word & 0b11111;
-                                        let Rn = (word >> 5) & 0b11111;
-                                        let opcode = (word >> 12) & 0b11111;
-                                        let size = (word >> 22) & 0b11;
-
-                                        if size != 0b00 {
-                                            return Err(DecodeError::InvalidOpcode);
-                                        }
-
-                                        let opcode = match opcode {
-                                            0b00100 => Opcode::AESE,
-                                            0b00101 => Opcode::AESD,
-                                            0b00110 => Opcode::AESMC,
-                                            0b00111 => Opcode::AESIMC,
-                                            _ => {
-                                                return Err(DecodeError::InvalidOpcode);
-                                            }
-                                        };
-                                        inst.opcode = opcode;
-                                        inst.operands = [
-                                            Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd as u16, SIMDSizeCode::B),
-                                            Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn as u16, SIMDSizeCode::B),
-                                            Operand::Nothing,
-                                            Operand::Nothing,
-                                        ];
                                     } else {
                                         // unallocated
                                         return Err(DecodeError::InvalidOpcode);
@@ -5834,11 +6312,51 @@ impl Decoder<ARMv8> for InstDecoder {
                             }
                         } else {
                             // op2 == x0xx
-                            if op3 & 0b000100001 == 0 {
-                                // op3 == xxx0xxxx0, `Unallocated`
-                                return Err(DecodeError::InvalidOpcode);
-                            }
-                            if op2 & 0b1000 == 0b1000 {
+                            if op0 == 0b0101 && op2 & 0b0100 == 0b0000 && op3 & 0b000_100_011 == 0b000_000_000 {
+                                // `Cryptographic three-register SHA`
+                                let Rd = word & 0b11111;
+                                let Rn = (word >> 5) & 0b11111;
+                                let opcode_bits = (word >> 12) & 0b111;
+                                let Rm = (word >> 16) & 0b11111;
+                                let size = (word >> 22) & 0b11;
+
+                                if size != 0b00 {
+                                    return Err(DecodeError::InvalidOpcode);
+                                }
+
+                                let (opcode, scalars) = &[
+                                    Ok((Opcode::SHA1C, true)),
+                                    Ok((Opcode::SHA1P, true)),
+                                    Ok((Opcode::SHA1M, true)),
+                                    Ok((Opcode::SHA1SU0, false)),
+                                    Ok((Opcode::SHA256H, true)),
+                                    Ok((Opcode::SHA256H2, true)),
+                                    Ok((Opcode::SHA256SU1, false)),
+                                    Err(DecodeError::InvalidOpcode),
+                                ][opcode_bits as usize]?;
+
+                                inst.opcode = *opcode;
+                                if *scalars {
+                                    inst.operands = [
+                                        Operand::SIMDRegister(SIMDSizeCode::Q, Rd as u16),
+                                        if opcode_bits < 0b100 {
+                                            // sha1 second reg is `Sn`
+                                            Operand::SIMDRegister(SIMDSizeCode::S, Rn as u16)
+                                        } else {
+                                            Operand::SIMDRegister(SIMDSizeCode::Q, Rn as u16)
+                                        },
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rm as u16, SIMDSizeCode::S),
+                                        Operand::Nothing,
+                                    ];
+                                } else {
+                                    inst.operands = [
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rd as u16, SIMDSizeCode::S),
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rn as u16, SIMDSizeCode::S),
+                                        Operand::SIMDRegisterElements(SIMDSizeCode::Q, Rm as u16, SIMDSizeCode::S),
+                                        Operand::Nothing,
+                                    ];
+                                }
+                            } else if op0 & 0b1101 == 0b0101 && op2 & 0b1000 == 0b1000 && op3 & 0b000_110_001 == 0b000_000_001 {
                                 // op2 == 10xx
                                 // `Advanced SIMD scalar three same FP16`
                                 let Rd = word & 0b11111;
@@ -5856,32 +6374,29 @@ impl Decoder<ARMv8> for InstDecoder {
                                 let index = (opcode << 2) | (U << 1) | a;
 
                                 inst.opcode = [
+                                    // opcode == 0b011
                                     Ok(Opcode::FMULX),
-                                    Ok(Opcode::FCMEQ),
-                                    Err(DecodeError::InvalidOpcode),
-                                    Err(DecodeError::InvalidOpcode),
-                                    // opcode == 0b111
-                                    Ok(Opcode::FRECPS),
-                                    Err(DecodeError::InvalidOpcode),
-                                    Err(DecodeError::InvalidOpcode),
-                                    Err(DecodeError::InvalidOpcode),
-                                    // opcode == 0b111
-                                    Ok(Opcode::FRSQRTS),
-                                    Err(DecodeError::InvalidOpcode),
                                     Err(DecodeError::InvalidOpcode),
                                     Err(DecodeError::InvalidOpcode),
                                     Err(DecodeError::InvalidOpcode),
                                     // opcode == 0b100
+                                    Ok(Opcode::FCMEQ),
+                                    Err(DecodeError::InvalidOpcode),
                                     Ok(Opcode::FCMGE),
+                                    Err(DecodeError::InvalidOpcode),
+                                    // opcode == 0b101
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
                                     Ok(Opcode::FACGE),
-                                    Err(DecodeError::InvalidOpcode),
-                                    Err(DecodeError::InvalidOpcode),
-                                    Err(DecodeError::InvalidOpcode),
-                                    Err(DecodeError::InvalidOpcode),
-                                    Ok(Opcode::FABD),
-                                    Err(DecodeError::InvalidOpcode),
-                                    Ok(Opcode::FCMGT),
                                     Ok(Opcode::FACGT),
+                                    // opcode == 0b110
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    // opcode == 0b111
+                                    Ok(Opcode::FRECPS),
+                                    Ok(Opcode::FRSQRTS),
                                     Err(DecodeError::InvalidOpcode),
                                     Err(DecodeError::InvalidOpcode),
                                 ][index as usize]?;
@@ -5892,7 +6407,8 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Operand::SIMDRegister(SIMDSizeCode::H, Rm as u16),
                                     Operand::Nothing,
                                 ];
-                            } else {
+                            } else if word & 0b1101_000_11_1100_000100001_0000000000 == 0b0101_000_00_0000_000000001_0000000000 {
+                                // check op0, op1, op2, and op3 all at once because i am lazy
                                 // op2 == 00xx
                                 // `Advanced SIMD scalar copy`
                                 let imm4 = (word >> 11) & 0b1111;
@@ -5932,6 +6448,39 @@ impl Decoder<ARMv8> for InstDecoder {
                                 } else {
                                     return Err(DecodeError::InvalidOpcode);
                                 }
+                            } else if word & 0b1101_1111_0010_0000_1000_0100_0000_0000 == 0b0101_1110_0000_0000_1000_0100_0000_0000 {
+                                // `Advanced SIMD scalar three same extra`
+                                let Rd = (word >> 0) & 0b11111;
+                                let Rn = (word >> 5) & 0b11111;
+                                let Rm = (word >> 16) & 0b11111;
+                                let opcode = (word >> 11) & 0b1111;
+                                let size = (word >> 22) & 0b11;
+                                let u = (word >> 29) & 1;
+
+                                if u == 0 || opcode > 0b0001 {
+                                    return Err(DecodeError::InvalidOpcode);
+                                }
+                                let size = if size == 0b01 {
+                                    SIMDSizeCode::H
+                                } else if size == 0b10 {
+                                    SIMDSizeCode::S
+                                } else {
+                                    return Err(DecodeError::InvalidOperand);
+                                };
+
+                                inst.opcode = if opcode == 0b0000 {
+                                    Opcode::SQRDMLAH
+                                } else {
+                                    Opcode::SQRDMLSH
+                                };
+                                inst.operands = [
+                                    Operand::SIMDRegister(size, Rd as u16),
+                                    Operand::SIMDRegister(size, Rn as u16),
+                                    Operand::SIMDRegister(size, Rm as u16),
+                                    Operand::Nothing,
+                                ];
+                            } else {
+                                return Err(DecodeError::InvalidOpcode);
                             }
                         }
                     } else {
@@ -5967,12 +6516,12 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Opcode::SQRDMLAH
                                     } else {
                                         Opcode::SQRDMULH
-                                    }, OperandKind::DifferentSizes)
+                                    }, OperandKind::SameSizes)
                                 }
                                 0b1111_0 => (Opcode::SQRDMLSH, OperandKind::DifferentSizes),
                                 0b1001_1 => (Opcode::FMULX, OperandKind::SameSizes),
-                                0b1101_1 => (Opcode::SQRDMLAH, OperandKind::DifferentSizes),
-                                0b1111_1 => (Opcode::SQRDMLSH, OperandKind::DifferentSizes),
+                                0b1101_1 => (Opcode::SQRDMLAH, OperandKind::SameSizes),
+                                0b1111_1 => (Opcode::SQRDMLSH, OperandKind::SameSizes),
                                 _ => {
                                     return Err(DecodeError::InvalidOpcode);
                                 }
@@ -5991,22 +6540,21 @@ impl Decoder<ARMv8> for InstDecoder {
                                         _ => SIMDSizeCode::D,
                                     };
 
-                                    let index = match size {
+                                    let (Rm, index) = match size {
                                         SIMDSizeCode::H => {
-                                            (H << 2) | (L << 1) | M
+                                            (Rm, (H << 2) | (L << 1) | M)
                                         },
                                         SIMDSizeCode::S => {
-                                            (H << 1) | L
+                                            (Rm | (M << 4), (H << 1) | L)
                                         }
                                         _ => { /* SIMDSizeCode::D */
                                             if L != 0 {
                                                 return Err(DecodeError::InvalidOperand);
                                             }
-                                            H
+                                            (Rm | (M << 4), H)
                                         }
                                     };
 
-                                    let Rm = (M << 4) | Rm;
 
                                     inst.operands = [
                                         Operand::SIMDRegister(size, Rd as u16),
@@ -6366,9 +6914,46 @@ impl Decoder<ARMv8> for InstDecoder {
                             let opc2 = ((word >> 10) & 0x3f) as u16;
                             let Rm = ((word >> 16) & 0x1f) as u16;
 
-                            if opc2 == 0b000000 {
-                                inst.opcode = Opcode::Invalid;
-                                return Err(DecodeError::InvalidOperand);
+                            if opc2 != 0b000000 {
+                                if opc2 & 0b011111 == 0b000001 {
+                                    // `Rotate right into flags`
+                                    if word & 0xe0_00_00_10 != 0xa0_00_00_00 {
+                                        return Err(DecodeError::InvalidOperand);
+                                    }
+                                    let mask = (word >> 0) & 0xf;
+                                    let imm6 = (word >> 15) & 0x3f;
+
+                                    inst.opcode = Opcode::RMIF;
+                                    inst.operands = [
+                                        Operand::Register(SizeCode::X, Rn),
+                                        Operand::Imm16(imm6 as u16),
+                                        Operand::Imm16(mask as u16),
+                                        Operand::Nothing,
+                                    ];
+                                    return Ok(());
+                                } else if opc2 & 0b001111 == 0b000010 {
+                                    // `Evaluate into flags`
+                                    let sz = (word >> 14) & 1;
+                                    if word & 0b1111_1111_1111_1111_1011_1100_0001_1111 !=
+                                              0b0011_1010_0000_0000_0000_1000_0000_1101 {
+                                        return Err(DecodeError::InvalidOperand);
+                                    }
+                                    inst.opcode = if sz == 0 {
+                                        Opcode::SETF8
+                                    } else {
+                                        Opcode::SETF16
+                                    };
+                                    inst.operands = [
+                                        Operand::Register(SizeCode::W, Rn),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                    return Ok(());
+                                } else {
+                                    inst.opcode = Opcode::Invalid;
+                                    return Err(DecodeError::InvalidOperand);
+                                }
                             }
 
                             let size_code = match word >> 29 {
@@ -6591,25 +7176,25 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Err(DecodeError::InvalidOpcode),
                                     Err(DecodeError::InvalidOpcode),
                                     // opcode = 0b01_0000
-                                    Ok((Opcode::CRC32B, SizeCode::X)),
+                                    Ok((Opcode::CRC32B, SizeCode::W)),
                                     Err(DecodeError::InvalidOpcode),
                                     // opcode = 0b01_0001
-                                    Ok((Opcode::CRC32H, SizeCode::X)),
+                                    Ok((Opcode::CRC32H, SizeCode::W)),
                                     Err(DecodeError::InvalidOpcode),
                                     // opcode = 0b01_0010
-                                    Ok((Opcode::CRC32W, SizeCode::X)),
+                                    Ok((Opcode::CRC32W, SizeCode::W)),
                                     Err(DecodeError::InvalidOpcode),
                                     // opcode = 0b01_0011
                                     Err(DecodeError::InvalidOpcode),
                                     Ok((Opcode::CRC32X, SizeCode::X)),
                                     // opcode = 0b01_0100
-                                    Ok((Opcode::CRC32CB, SizeCode::X)),
+                                    Ok((Opcode::CRC32CB, SizeCode::W)),
                                     Err(DecodeError::InvalidOpcode),
                                     // opcode = 0b01_0101
-                                    Ok((Opcode::CRC32CH, SizeCode::X)),
+                                    Ok((Opcode::CRC32CH, SizeCode::W)),
                                     Err(DecodeError::InvalidOpcode),
                                     // opcode = 0b01_0110
-                                    Ok((Opcode::CRC32CW, SizeCode::X)),
+                                    Ok((Opcode::CRC32CW, SizeCode::W)),
                                     Err(DecodeError::InvalidOpcode),
                                     // opcode = 0b01_0111
                                     Err(DecodeError::InvalidOpcode),
@@ -6618,8 +7203,17 @@ impl Decoder<ARMv8> for InstDecoder {
                                 let (opcode, size) = OPCODES.get(combined_idx as usize).cloned().unwrap_or(Err(DecodeError::InvalidOpcode))?;
                                 inst.opcode = opcode;
                                 inst.operands = [
-                                    Operand::Register(size, Rd),
-                                    Operand::Register(size, Rn),
+                                    // `crc32` instructions always have w-reg dest/source1 operands
+                                    if combined_idx > 0b01_0000_0 {
+                                        Operand::Register(SizeCode::W, Rd)
+                                    } else {
+                                        Operand::Register(SizeCode::X, Rd)
+                                    },
+                                    if combined_idx > 0b01_0000_0 {
+                                        Operand::Register(SizeCode::W, Rn)
+                                    } else {
+                                        Operand::Register(SizeCode::X, Rn)
+                                    },
                                     Operand::Register(size, Rm),
                                     Operand::Nothing,
                                 ];
@@ -6735,7 +7329,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 Err(DecodeError::InvalidOpcode),
                                 Ok((Opcode::SMSUBL, SizeCode::W, SizeCode::X)),
                                 Err(DecodeError::InvalidOpcode),
-                                Ok((Opcode::SMULH, SizeCode::W, SizeCode::X)),
+                                Ok((Opcode::SMULH, SizeCode::X, SizeCode::X)),
                                 Err(DecodeError::InvalidOpcode),
                                 Err(DecodeError::InvalidOpcode),
                                 Err(DecodeError::InvalidOpcode),
@@ -6765,7 +7359,12 @@ impl Decoder<ARMv8> for InstDecoder {
                                 Operand::Register(dest_size, Rd),
                                 Operand::Register(source_size, Rn),
                                 Operand::Register(source_size, Rm),
-                                Operand::Register(dest_size, Ra), // in practice these match up with the corresponding operand.
+                                if opcode == Opcode::SMULH {
+                                    Operand::Nothing
+                                } else {
+                                    // in practice these match up with the corresponding operand.
+                                    Operand::Register(dest_size, Ra)
+                                },
                             ];
                             if opcode == Opcode::UMULH {
                                 inst.operands[3] = Operand::Nothing;
@@ -6838,8 +7437,19 @@ impl Decoder<ARMv8> for InstDecoder {
                             let option = (word >> 13) & 0x07;
                             let Rm = ((word >> 16) & 0x1f) as u16;
 
-                            inst.operands[0] = Operand::RegisterOrSP(size, Rd);
-                            inst.operands[1] = Operand::RegisterOrSP(size, Rn);
+                            // for `extended register` instructions, sometimes the dest is Rd,
+                            // sometimes it's <Rd|xSP>. this depends on if the instruction sets
+                            // status flags.
+                            inst.operands = [
+                                if (word >> 29 & 1) == 0 {
+                                    Operand::RegisterOrSP(size, Rd)
+                                } else {
+                                    Operand::Register(size, Rd)
+                                },
+                                Operand::RegisterOrSP(size, Rn),
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
 
                             let shift_size = match option {
                                 0b011 |
@@ -7049,7 +7659,11 @@ impl Decoder<ARMv8> for InstDecoder {
                         };
 
                         inst.operands = [
-                            Operand::RegisterOrSP(size, Rd),
+                            if (word >> 29 & 0b11) == 0b11 {
+                                Operand::Register(size, Rd)
+                            } else {
+                                Operand::RegisterOrSP(size, Rd)
+                            },
                             Operand::Register(size, Rn),
                             match size {
                                 SizeCode::W => Operand::Immediate(docs::DecodeBitMasks_32(N as u8, imms as u8, immr as u8)?.0),
@@ -7648,6 +8262,12 @@ impl Decoder<ARMv8> for InstDecoder {
                         let (opcode, size) = ENCODINGS[opc_L as usize]?;
                         inst.opcode = opcode;
 
+                        let scale = if size == SizeCode::W {
+                            2
+                        } else {
+                            3
+                        };
+
                         let Rt = (word & 0x1f) as u16;
                         let Rn = ((word >> 5) & 0x1f) as u16;
                         let Rt2 = ((word >> 10) & 0x1f) as u16;
@@ -7657,7 +8277,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         inst.operands = [
                             Operand::Register(size, Rt),
                             Operand::Register(size, Rt2),
-                            Operand::RegPreIndex(Rn, imm7 as i32, true),
+                            Operand::RegPreIndex(Rn, (imm7 as i32) << scale, false),
                             Operand::Nothing,
                         ];
                     },
@@ -7679,6 +8299,14 @@ impl Decoder<ARMv8> for InstDecoder {
                         let (opcode, size) = ENCODINGS[opc_L as usize]?;
                         inst.opcode = opcode;
 
+                        let scale = if size == SIMDSizeCode::S {
+                            2
+                        } else if size == SIMDSizeCode::D {
+                            3
+                        } else {
+                            4
+                        };
+
                         let Rt = (word & 0x1f) as u16;
                         let Rn = ((word >> 5) & 0x1f) as u16;
                         let Rt2 = ((word >> 10) & 0x1f) as u16;
@@ -7688,7 +8316,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         inst.operands = [
                             Operand::SIMDRegister(size, Rt),
                             Operand::SIMDRegister(size, Rt2),
-                            Operand::RegPreIndex(Rn, imm7 as i32, true),
+                            Operand::RegPreIndex(Rn, (imm7 as i32) << scale, false),
                             Operand::Nothing,
                         ];
                     },
@@ -8104,13 +8732,16 @@ impl Decoder<ARMv8> for InstDecoder {
                                                 Operand::Nothing,
                                             ];
                                         } else if opcode == 0b100 {
-                                            inst.opcode = if sz == 0b01 {
-                                                Opcode::LDAPRH(ar)
-                                            } else if sz == 0b00 {
+                                            if ar != 0b10 {
                                                 return Err(DecodeError::InvalidOpcode);
+                                            }
+                                            inst.opcode = if sz == 0b01 {
+                                                Opcode::LDAPRH
+                                            } else if sz == 0b00 {
+                                                Opcode::LDAPRB
                                             } else {
                                                 // sz = 1x
-                                                Opcode::LDAPRH(ar)
+                                                Opcode::LDAPR
                                             };
 
                                             // TOOD: should_is_must, Rs = 11111
@@ -8159,10 +8790,10 @@ impl Decoder<ARMv8> for InstDecoder {
                                     // Load/store register (register offset)
                                     // C3.3.10
                                     const OPCODES: &[Result<(Opcode, SizeCode, u8), DecodeError>] = &[
-                                        Ok((Opcode::STRB, SizeCode::W, 1)),
-                                        Ok((Opcode::LDRB, SizeCode::W, 1)),
-                                        Ok((Opcode::LDRSB, SizeCode::X, 1)),
-                                        Ok((Opcode::LDRSB, SizeCode::W, 1)),
+                                        Ok((Opcode::STRB, SizeCode::W, 0)),
+                                        Ok((Opcode::LDRB, SizeCode::W, 0)),
+                                        Ok((Opcode::LDRSB, SizeCode::X, 0)),
+                                        Ok((Opcode::LDRSB, SizeCode::W, 0)),
                                         Ok((Opcode::STRH, SizeCode::W, 1)),
                                         Ok((Opcode::LDRH, SizeCode::W, 1)),
                                         Ok((Opcode::LDRSH, SizeCode::X, 1)),
@@ -8286,7 +8917,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
                                     inst.operands = [
                                         Operand::Register(size, Rt),
-                                        Operand::RegPreIndex(Rn, imm9 as i32, true),
+                                        Operand::RegPreIndex(Rn, imm9 as i32, false),
                                         Operand::Nothing,
                                         Operand::Nothing,
                                     ];
@@ -8491,7 +9122,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
                                     let (opcode, size) = OPCODES.get(size_opc as usize).cloned().unwrap_or(Err(DecodeError::InvalidOpcode))?;
                                     let shift_amount = match size {
-                                        SIMDSizeCode::B => 1,
+                                        SIMDSizeCode::B => 0,
                                         SIMDSizeCode::H => 1,
                                         SIMDSizeCode::S => 2,
                                         SIMDSizeCode::D => 3,
@@ -8786,7 +9417,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         ];
                         inst.operands = [
                             Operand::SIMDRegisterGroup(datasize, Rt as u16, SIZES[size as usize], num_regs),
-                            Operand::RegPostIndex(Rn as u16, 0),
+                            Operand::RegOffset(Rn as u16, 0),
                             Operand::Nothing,
                             Operand::Nothing,
                         ];
@@ -8917,7 +9548,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             ];
                             inst.operands = [
                                 Operand::SIMDRegisterGroup(datasize, Rt as u16, SIZES[size as usize], opc_idx as u8 + 1),
-                                Operand::RegPostIndex(Rn as u16, 0),
+                                Operand::RegOffset(Rn as u16, 0),
                                 Operand::Nothing,
                                 Operand::Nothing,
                             ];
@@ -8981,7 +9612,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         };
                         inst.operands = [
                             Operand::SIMDRegisterGroupLane(Rt as u16, item_size, group_size, index as u8),
-                            Operand::RegPostIndex(Rn as u16, 0),
+                            Operand::RegOffset(Rn as u16, 0),
                             Operand::Nothing,
                             Operand::Nothing,
                         ];
