@@ -578,32 +578,35 @@ impl Display for Instruction {
                     ops.op2(),
                 );
             }
-            Opcode::HINT(v) => {
-                match v {
-                    0 => { write!(fmt, "nop")?; },
-                    1 => { write!(fmt, "yield")?; },
-                    2 => { write!(fmt, "wfe")?; },
-                    3 => { write!(fmt, "wfi")?; },
-                    4 => { write!(fmt, "sev")?; },
-                    5 => { write!(fmt, "sevl")?; },
-                    7 => { write!(fmt, "xpaclri")?; },
-                    8 => { write!(fmt, "pacia1716")?; },
-                    10 => { write!(fmt, "pacib1716")?; },
-                    12 => { write!(fmt, "autia1716")?; },
-                    14 => { write!(fmt, "autib1716")?; },
-                    16 => { write!(fmt, "esb")?; },
-                    17 => { write!(fmt, "psb csync")?; },
-                    18 => { write!(fmt, "tsb csync")?; },
-                    20 => { write!(fmt, "csdb")?; },
-                    24 => { write!(fmt, "paciaz")?; },
-                    25 => { write!(fmt, "paciasp")?; },
-                    26 => { write!(fmt, "pacibz")?; },
-                    27 => { write!(fmt, "pacibsp")?; },
-                    28 => { write!(fmt, "autiaz")?; },
-                    29 => { write!(fmt, "autiasp")?; },
-                    30 => { write!(fmt, "autibz")?; },
-                    31 => { write!(fmt, "autibsp")?; },
-                    _ => { write!(fmt, "hint #{:#x}", v)?; }
+            Opcode::HINT => {
+                if let (Operand::ControlReg(CRn), Operand::Immediate(op2)) = (self.operands[0], self.operands[1]) {
+                    let hint_num = (CRn << 3) | op2 as u16;
+                    return match hint_num {
+                        0 => { write!(fmt, "nop") },
+                        1 => { write!(fmt, "yield") },
+                        2 => { write!(fmt, "wfe") },
+                        3 => { write!(fmt, "wfi") },
+                        4 => { write!(fmt, "sev") },
+                        5 => { write!(fmt, "sevl") },
+                        7 => { write!(fmt, "xpaclri") },
+                        8 => { write!(fmt, "pacia1716") },
+                        10 => { write!(fmt, "pacib1716") },
+                        12 => { write!(fmt, "autia1716") },
+                        14 => { write!(fmt, "autib1716") },
+                        16 => { write!(fmt, "esb") },
+                        17 => { write!(fmt, "psb csync") },
+                        18 => { write!(fmt, "tsb csync") },
+                        20 => { write!(fmt, "csdb") },
+                        24 => { write!(fmt, "paciaz") },
+                        25 => { write!(fmt, "paciasp") },
+                        26 => { write!(fmt, "pacibz") },
+                        27 => { write!(fmt, "pacibsp") },
+                        28 => { write!(fmt, "autiaz") },
+                        29 => { write!(fmt, "autiasp") },
+                        30 => { write!(fmt, "autibz") },
+                        31 => { write!(fmt, "autibsp") },
+                        _ => { write!(fmt, "hint #{:#x}", hint_num) }
+                    }
                 }
             }
             Opcode::CSNEG => {
@@ -1228,7 +1231,7 @@ pub enum Opcode {
     DMB(u8),
     SB,
     SSSB,
-    HINT(u8),
+    HINT,
     CLREX,
     CSEL,
     CSNEG,
@@ -2568,17 +2571,7 @@ impl Display for Opcode {
                     _ => write!(fmt, "dsb {:x}", option)
                 };
             }
-            Opcode::HINT(v) => {
-                return match v {
-                    0 => { write!(fmt, "nop") },
-                    1 => { write!(fmt, "yield") },
-                    2 => { write!(fmt, "wfe") },
-                    3 => { write!(fmt, "wfi") },
-                    4 => { write!(fmt, "sev") },
-                    5 => { write!(fmt, "sevl") },
-                    _ => { write!(fmt, "hint({:#x})", v) }
-                }
-            }
+            Opcode::HINT => "hint",
             Opcode::CASB(ar) => {
                 if ar == 0 {
                     "casb"
@@ -10123,16 +10116,18 @@ impl Decoder<ARMv8> for InstDecoder {
                                     // MSR, HINT, CLREX, DSB, DMB, ISB
                                     if Rt == 0b11111 {
                                         let CRn = (word >> 12) & 0xf;
-                                        let op1 = (word >> 16) & 0x7;
                                         let op2 = (word >> 5) & 0x1f;
 
                                         match CRn {
                                             0b0010 => {
-                                                if op1 == 0b011 {
-                                                    inst.opcode = Opcode::HINT(op2 as u8);
-                                                } else {
-                                                    inst.opcode = Opcode::Invalid;
-                                                }
+                                                let CRm = (word >> 12) & 0xf;
+                                                inst.opcode = Opcode::HINT;
+                                                inst.operands = [
+                                                    Operand::ControlReg(CRm as u16),
+                                                    Operand::Immediate(op2),
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                ];
                                             },
                                             0b0011 => {
                                                 let CRm = (word >> 8) & 0xf;
@@ -10204,6 +10199,9 @@ impl Decoder<ARMv8> for InstDecoder {
                                             0b0100 => {
                                                 inst.opcode = Opcode::MSR;
 
+                                                let op1 = (word >> 16) & 0b1111;
+
+                                                /*
                                                 if op1 == 0b001 || op1 == 0b010 || op1 >= 0b100 {
                                                     return Err(DecodeError::InvalidOperand);
                                                 } else if op1 == 0b000 && op2 >= 0b110 {
@@ -10215,6 +10213,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                                 } else if op1 == 0b011 && op2 == 0b101 {
                                                     return Err(DecodeError::InvalidOperand);
                                                 }
+                                                */
 
                                                 inst.operands = [
                                                     Operand::PstateField(((op1 << 3) | op2 << 3) as u8),
