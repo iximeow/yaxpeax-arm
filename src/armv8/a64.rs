@@ -4119,7 +4119,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         return Err(DecodeError::InvalidOpcode);
                                     }
 
-                                    if size == 0b01 && Q == 1 {
+                                    if size == 0b10 && Q == 0 {
                                         return Err(DecodeError::InvalidOperand);
                                     }
 
@@ -4483,21 +4483,28 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Err(DecodeError::InvalidOperand), Err(DecodeError::InvalidOperand),
                                 ];
 
+                                const TABLE_K: &'static OperandSizeTable = &[
+                                    Ok((D, B, D, B)), Ok((Q, B, Q, B)),
+                                    Ok((D, H, D, H)), Ok((Q, H, Q, H)),
+                                    Ok((D, S, D, S)), Ok((Q, S, Q, S)),
+                                    Err(DecodeError::InvalidOperand), Ok((Q, D, Q, D)),
+                                ];
+
                                 if op2 & 0b0111 == 0b0100 {
                                     // `Advanced SIMD two-register miscellaneous`
                                     const OPCODES_U0_LOW: &[Result<(Opcode, &'static OperandSizeTable), DecodeError>; 20] = &[
                                         Ok((Opcode::REV64, TABLE_A)),
                                         Ok((Opcode::REV16, TABLE_B)),
                                         Ok((Opcode::SADDLP, TABLE_C)),
-                                        Ok((Opcode::SUQADD, TABLE_A)),
+                                        Ok((Opcode::SUQADD, TABLE_K)),
                                         Ok((Opcode::CLS, TABLE_A)),
                                         Ok((Opcode::CNT, TABLE_B)),
                                         Ok((Opcode::SADALP, TABLE_C)),
-                                        Ok((Opcode::SQABS, TABLE_A)),
-                                        Ok((Opcode::CMGT, TABLE_A)),
-                                        Ok((Opcode::CMEQ, TABLE_A)),
-                                        Ok((Opcode::CMLT, TABLE_A)),
-                                        Ok((Opcode::ABS, TABLE_A)),
+                                        Ok((Opcode::SQABS, TABLE_K)),
+                                        Ok((Opcode::CMGT, TABLE_K)),
+                                        Ok((Opcode::CMEQ, TABLE_K)),
+                                        Ok((Opcode::CMLT, TABLE_K)),
+                                        Ok((Opcode::ABS, TABLE_K)),
                                         // 0b01100, all four size=1x
                                         Ok((Opcode::FCMGT, TABLE_I)),
                                         Ok((Opcode::FCMEQ, TABLE_I)),
@@ -4545,15 +4552,15 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Ok((Opcode::REV32, TABLE_A)),
                                         Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::UADDLP, TABLE_C)),
-                                        Ok((Opcode::USQADD, TABLE_A)),
+                                        Ok((Opcode::USQADD, TABLE_K)),
                                         Ok((Opcode::CLZ, TABLE_A)),
                                         Err(DecodeError::InvalidOpcode),
                                         Ok((Opcode::UADALP, TABLE_C)),
-                                        Ok((Opcode::SQNEG, TABLE_A)),
-                                        Ok((Opcode::CMGE, TABLE_A)),
-                                        Ok((Opcode::CMLE, TABLE_A)),
+                                        Ok((Opcode::SQNEG, TABLE_K)),
+                                        Ok((Opcode::CMGE, TABLE_K)),
+                                        Ok((Opcode::CMLE, TABLE_K)),
                                         Err(DecodeError::InvalidOpcode),
-                                        Ok((Opcode::NEG, TABLE_A)),
+                                        Ok((Opcode::NEG, TABLE_K)),
                                         // 0b01100, all four size=1x
                                         Ok((Opcode::FCMGE, TABLE_I)),
                                         Ok((Opcode::FCMLE, TABLE_I)),
@@ -5985,8 +5992,8 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Err(DecodeError::InvalidOpcode),
                                         Err(DecodeError::InvalidOpcode),
                                         Err(DecodeError::InvalidOpcode),
-                                        Err(DecodeError::InvalidOpcode),
-                                        Err(DecodeError::InvalidOpcode),
+                                        Ok((Opcode::FRECPS, TABLE_C)),
+                                        Ok((Opcode::FRSQRTS, TABLE_C)),
                                     ];
                                     const OPCODES_U1_HIGH: &[Result<(Opcode, &'static OperandSizeTable), DecodeError>; 16] = &[
                                         Err(DecodeError::InvalidOpcode),
@@ -6305,7 +6312,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                                 (SIMDSizeCode::Q, SIMDSizeCode::D)
                                             };
 
-                                            let opcode = match opcode | ((size & 0b10) << 5) {
+                                            let opcode = match opcode | ((size & 0b10) << 4) {
                                                 0b001100 => Opcode::FMAXNMP,
                                                 0b001101 => Opcode::FADDP,
                                                 0b001111 => Opcode::FMAXP,
@@ -6468,14 +6475,19 @@ impl Decoder<ARMv8> for InstDecoder {
                                 let a = (word >> 23) & 1;
                                 let U = (word >> 29) & 1;
 
-                                if opcode < 0b011 {
+                                if opcode < 0b010 {
                                     return Err(DecodeError::InvalidOpcode);
                                 }
 
-                                let opcode = opcode - 0b011;
+                                let opcode = opcode - 0b010;
                                 let index = (opcode << 2) | (U << 1) | a;
 
                                 inst.opcode = [
+                                    // opcode == 0b010
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Err(DecodeError::InvalidOpcode),
+                                    Ok(Opcode::FABD),
                                     // opcode == 0b011
                                     Ok(Opcode::FMULX),
                                     Err(DecodeError::InvalidOpcode),
@@ -6485,7 +6497,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Ok(Opcode::FCMEQ),
                                     Err(DecodeError::InvalidOpcode),
                                     Ok(Opcode::FCMGE),
-                                    Err(DecodeError::InvalidOpcode),
+                                    Ok(Opcode::FCMGT),
                                     // opcode == 0b101
                                     Err(DecodeError::InvalidOpcode),
                                     Err(DecodeError::InvalidOpcode),
@@ -6635,11 +6647,19 @@ impl Decoder<ARMv8> for InstDecoder {
                             // size=0b01.
                             match operands_kind {
                                 OperandKind::SameSizes => {
-                                    let size = match size {
-                                        0b00 => SIMDSizeCode::H,
-                                        0b01 => { return Err(DecodeError::InvalidOperand); }
-                                        0b10 => SIMDSizeCode::S,
-                                        _ => SIMDSizeCode::D,
+                                    let size = if opcode == Opcode::SQDMULH || opcode == Opcode::SQRDMULH || opcode == Opcode::SQRDMLAH || opcode == Opcode::SQRDMLSH {
+                                        match size {
+                                            0b01 => SIMDSizeCode::H,
+                                            0b10 => SIMDSizeCode::S,
+                                            _ => SIMDSizeCode::D,
+                                        }
+                                    } else {
+                                        match size {
+                                            0b00 => SIMDSizeCode::H,
+                                            0b01 => { return Err(DecodeError::InvalidOperand); }
+                                            0b10 => SIMDSizeCode::S,
+                                            _ => SIMDSizeCode::D,
+                                        }
                                     };
 
                                     let (Rm, index) = match size {
@@ -6697,124 +6717,100 @@ impl Decoder<ARMv8> for InstDecoder {
                             let immb = (word >> 16) & 0b111;
                             let immh = (word >> 19) & 0b1111;
                             let U = (word >> 29) & 1;
-                            let Q = (word >> 30) & 1 == 1;
 
                             if immh == 0 {
                                 return Err(DecodeError::InvalidOperand);
                             }
 
+                            #[allow(non_camel_case_types)]
+                            #[derive(Debug)]
                             enum OperandsKind {
-                                SameSizes,
-                                DifferentSizes,
+                                D_After,
+                                D_Before,
+                                BHSD_After,
+                                HSD_Before,
+                                BHS_HSD_Before,
                             }
 
                             let (opcode, operands_kind) = match (opcode << 1) + U {
-                                0b00000_0 => (Opcode::SSHR, OperandsKind::SameSizes),
-                                0b00010_0 => (Opcode::SSRA, OperandsKind::SameSizes),
-                                0b00100_0 => (Opcode::SRSHR, OperandsKind::SameSizes),
-                                0b00110_0 => (Opcode::SRSRA, OperandsKind::SameSizes),
-                                0b01010_0 => (Opcode::SHL, OperandsKind::SameSizes),
-                                0b01110_0 => (Opcode::SQSHL, OperandsKind::SameSizes),
-                                0b10010_0 => (Opcode::SQSHRN, OperandsKind::DifferentSizes),
-                                0b10011_0 => (Opcode::SQRSHRN, OperandsKind::DifferentSizes),
-                                0b11100_0 => (Opcode::SCVTF, OperandsKind::SameSizes),
-                                0b11111_0 => (Opcode::FCVTZS, OperandsKind::SameSizes),
-                                0b00000_1 => (Opcode::USHR, OperandsKind::SameSizes),
-                                0b00010_1 => (Opcode::USRA, OperandsKind::SameSizes),
-                                0b00100_1 => (Opcode::URSHR, OperandsKind::SameSizes),
-                                0b00110_1 => (Opcode::URSRA, OperandsKind::SameSizes),
-                                0b01000_1 => (Opcode::SRI, OperandsKind::SameSizes),
-                                0b01010_1 => (Opcode::SLI, OperandsKind::SameSizes),
-                                0b01100_1 => (Opcode::SQSHLU, OperandsKind::SameSizes),
-                                0b01110_1 => (Opcode::UQSHL, OperandsKind::SameSizes),
-                                0b10000_1 => (Opcode::SQSHRUN, OperandsKind::DifferentSizes),
-                                0b10001_1 => (Opcode::SQRSHRUN, OperandsKind::DifferentSizes),
-                                0b10010_1 => (Opcode::UQSHRN, OperandsKind::DifferentSizes),
-                                0b10011_1 => (Opcode::UQRSHRN, OperandsKind::DifferentSizes),
-                                0b11100_1 => (Opcode::UCVTF, OperandsKind::SameSizes),
-                                0b11111_1 => (Opcode::FCVTZU, OperandsKind::SameSizes),
+                                0b00000_0 => (Opcode::SSHR, OperandsKind::D_Before),
+                                0b00010_0 => (Opcode::SSRA, OperandsKind::D_Before),
+                                0b00100_0 => (Opcode::SRSHR, OperandsKind::D_Before),
+                                0b00110_0 => (Opcode::SRSRA, OperandsKind::D_Before),
+                                0b01010_0 => (Opcode::SHL, OperandsKind::D_After),
+                                0b01110_0 => (Opcode::SQSHL, OperandsKind::BHSD_After),
+                                0b10010_0 => (Opcode::SQSHRN, OperandsKind::BHS_HSD_Before),
+                                0b10011_0 => (Opcode::SQRSHRN, OperandsKind::BHS_HSD_Before),
+                                0b11100_0 => (Opcode::SCVTF, OperandsKind::HSD_Before),
+                                0b11111_0 => (Opcode::FCVTZS, OperandsKind::HSD_Before),
+                                0b00000_1 => (Opcode::USHR, OperandsKind::D_Before),
+                                0b00010_1 => (Opcode::USRA, OperandsKind::D_Before),
+                                0b00100_1 => (Opcode::URSHR, OperandsKind::D_Before),
+                                0b00110_1 => (Opcode::URSRA, OperandsKind::D_Before),
+                                0b01000_1 => (Opcode::SRI, OperandsKind::D_Before),
+                                0b01010_1 => (Opcode::SLI, OperandsKind::D_After),
+                                0b01100_1 => (Opcode::SQSHLU, OperandsKind::BHSD_After),
+                                0b01110_1 => (Opcode::UQSHL, OperandsKind::BHSD_After),
+                                0b10000_1 => (Opcode::SQSHRUN, OperandsKind::BHS_HSD_Before),
+                                0b10001_1 => (Opcode::SQRSHRUN, OperandsKind::BHS_HSD_Before),
+                                0b10010_1 => (Opcode::UQSHRN, OperandsKind::BHS_HSD_Before),
+                                0b10011_1 => (Opcode::UQRSHRN, OperandsKind::BHS_HSD_Before),
+                                0b11100_1 => (Opcode::UCVTF, OperandsKind::HSD_Before),
+                                0b11111_1 => (Opcode::FCVTZU, OperandsKind::HSD_Before),
                                 _ => { return Err(DecodeError::InvalidOpcode); },
-                            };
-
-                            let opcode = if Q {
-                                if opcode == Opcode::SQSHRN {
-                                    Opcode::SQSHRN2
-                                } else if opcode == Opcode::SQRSHRN {
-                                    Opcode::SQRSHRN2
-                                } else if opcode == Opcode::SQSHRUN {
-                                    Opcode::SQSHRUN2
-                                } else if opcode == Opcode::SQRSHRUN {
-                                    Opcode::SQRSHRUN2
-                                } else if opcode == Opcode::UQSHRN {
-                                    Opcode::UQSHRN2
-                                } else if opcode == Opcode::UQRSHRN {
-                                    Opcode::UQRSHRN2
-                                } else {
-                                    opcode
-                                }
-                            } else {
-                                opcode
                             };
 
                             inst.opcode = opcode;
 
-                            match operands_kind {
-                                OperandsKind::SameSizes => {
-                                    let vec_size = if Q {
-                                        SIMDSizeCode::Q
-                                    } else {
-                                        SIMDSizeCode::D
-                                    };
-                                    let (size, imm) = match immh.leading_zeros() {
-                                        3 => {
-                                            (SIMDSizeCode::B, immb)
-                                        }
-                                        2 => {
-                                            (SIMDSizeCode::H, ((immh & 0b0001) << 4)| immb)
-                                        }
-                                        1 => {
-                                            (SIMDSizeCode::S, ((immh & 0b0011) << 4)| immb)
-                                        }
-                                        0 => {
-                                            // the +q version of this check would be `Advanced SIMD
-                                            // modified immediate`, checked well before we got
-                                            // here. so assume q is 0, error.
-                                            return Err(DecodeError::InvalidOperand);
-                                        }
-                                        _ => {
-                                            return Err(DecodeError::InvalidOperand);
-                                        }
-                                    };
-                                    inst.operands = [
-                                        Operand::SIMDRegisterElements(vec_size, Rd as u16, size),
-                                        Operand::SIMDRegisterElements(vec_size, Rn as u16, size),
-                                        Operand::Imm16(imm as u16),
-                                        Operand::Nothing,
-                                    ];
+                            let immh = immh as u8;
+                            let immb = immb as u8;
+
+                            let leading_zeros = immh.leading_zeros() - 4;
+
+                            let shift = immh << 3 | immb;
+
+                            let (a_sz, b_sz, shift) = match operands_kind {
+                                OperandsKind::D_After => {
+                                    if leading_zeros != 0 { return Err(DecodeError::InvalidOperand); }
+                                    (SIMDSizeCode::D, SIMDSizeCode::D, shift - 64)
                                 },
-                                OperandsKind::DifferentSizes => {
-                                    let (dest_size, src_size, imm) = match immh.leading_zeros() {
-                                        3 => {
-                                            (SIMDSizeCode::B, SIMDSizeCode::H, immb)
-                                        }
-                                        2 => {
-                                            (SIMDSizeCode::H, SIMDSizeCode::S, ((immh & 0b0001) << 4)| immb)
-                                        }
-                                        1 => {
-                                            (SIMDSizeCode::S, SIMDSizeCode::D, ((immh & 0b0011) << 4)| immb)
-                                        }
-                                        _ => {
-                                            return Err(DecodeError::InvalidOperand);
-                                        }
-                                    };
-                                    inst.operands = [
-                                        Operand::SIMDRegister(dest_size, Rd as u16),
-                                        Operand::SIMDRegister(src_size, Rn as u16),
-                                        Operand::Imm16(imm as u16),
-                                        Operand::Nothing,
-                                    ];
+                                OperandsKind::D_Before => {
+                                    if leading_zeros != 0 { return Err(DecodeError::InvalidOperand); }
+                                    (SIMDSizeCode::D, SIMDSizeCode::D, 128 - shift)
+                                },
+                                OperandsKind::BHSD_After => {
+                                    match leading_zeros {
+                                        0 => (SIMDSizeCode::D, SIMDSizeCode::D, shift - 64),
+                                        1 => (SIMDSizeCode::S, SIMDSizeCode::S, shift - 32),
+                                        2 => (SIMDSizeCode::H, SIMDSizeCode::H, shift - 16),
+                                        3 => (SIMDSizeCode::B, SIMDSizeCode::B, shift - 8),
+                                        _ => { return Err(DecodeError::InvalidOperand); },
+                                    }
+                                },
+                                OperandsKind::HSD_Before => {
+                                    match leading_zeros {
+                                        0 => (SIMDSizeCode::D, SIMDSizeCode::D, 128 - shift),
+                                        1 => (SIMDSizeCode::S, SIMDSizeCode::S, 64 - shift),
+                                        2 => (SIMDSizeCode::H, SIMDSizeCode::H, 32 - shift),
+                                        _ => { return Err(DecodeError::InvalidOperand); },
+                                    }
                                 }
-                            }
+                                OperandsKind::BHS_HSD_Before => {
+                                    match leading_zeros {
+                                        1 => (SIMDSizeCode::S, SIMDSizeCode::D, 64 - shift),
+                                        2 => (SIMDSizeCode::H, SIMDSizeCode::S, 32 - shift),
+                                        3 => (SIMDSizeCode::B, SIMDSizeCode::H, 16 - shift),
+                                        _ => { return Err(DecodeError::InvalidOperand); },
+                                    }
+                                }
+                            };
+
+                            inst.operands = [
+                                Operand::SIMDRegister(a_sz, Rd as u16),
+                                Operand::SIMDRegister(b_sz, Rn as u16),
+                                Operand::Imm16(shift as u16),
+                                Operand::Nothing,
+                            ];
                         }
                     }
                 } else if op0 == 0b1100 {
@@ -8108,7 +8104,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         let size = (word >> 30) & 0x3;
                         // load/store exclusive
                         // o2 == 1
-                        if Lo1 & 1 == 1 && size < 0b10 {
+                        if Lo1 & 1 == 1 {
                             // o1 == 1
                             if Rt2 != 0b11111 {
                                 return Err(DecodeError::InvalidOperand);
