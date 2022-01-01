@@ -7421,7 +7421,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                             return Err(DecodeError::InvalidOpcode);
                                         }
 
-                                        if opcode >= 0b001000 && Rn != 0b11111 {
+                                        if opcode >= 0b100000 {
                                             return Err(DecodeError::InvalidOperand);
                                         }
 
@@ -7449,6 +7449,9 @@ impl Decoder<ARMv8> for InstDecoder {
                                             if opcode < 0b001000 {
                                                 Operand::RegisterOrSP(SizeCode::X, Rn)
                                             } else {
+                                                if Rn != 0b11111 {
+                                                    return Err(DecodeError::InvalidOpcode);
+                                                }
                                                 Operand::Nothing
                                             },
                                             Operand::Nothing,

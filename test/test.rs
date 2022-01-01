@@ -8,8 +8,7 @@ extern crate yaxpeax_arm;
 mod armv7;
 mod armv8;
 
-use yaxpeax_arch::{Arch, Decoder, Reader, U8Reader};
-use std::fmt;
+use yaxpeax_arch::{Arch, Decoder, U8Reader};
 
 #[test]
 fn test_armv7_does_not_panic() {
@@ -38,7 +37,6 @@ fn test_armv7_thumb_does_not_panic() {
         }
     }
 }
-#[ignore]
 #[test]
 fn test_armv8_does_not_panic() {
     let armv8 = <yaxpeax_arm::armv8::a64::ARMv8 as Arch>::Decoder::default();
@@ -48,6 +46,7 @@ fn test_armv8_does_not_panic() {
         let res = armv8.decode(&mut U8Reader::new(&bytes));
         if let Ok(instr) = res {
             let s = instr.to_string();
+            drop(s);
         }
     }
 }
