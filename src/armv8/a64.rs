@@ -2865,7 +2865,11 @@ impl Display for Operand {
                 write!(fmt, "#{:#x}", *i)
             },
             Operand::ImmediateDouble(d) => {
-                write!(fmt, "#{:0.1}", d)
+                if *d as i64 as f64 == *d {
+                    write!(fmt, "#{:0.1}", d)
+                } else {
+                    write!(fmt, "#{:0.}", d)
+                }
             },
             Operand::Imm16(i) => {
                 write!(fmt, "#{:#x}", *i)
