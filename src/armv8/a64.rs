@@ -297,9 +297,9 @@ impl Display for Instruction {
                 };
                 let imm = if let Operand::Register(size, _) = self.operands[0] {
                     if size == SizeCode::W {
-                        (imm as u32) as i32 as i64
+                        imm as u32 as u64
                     } else {
-                        imm as i64
+                        imm
                     }
                 } else {
                     unreachable!("movn operand 0 is always Register");
@@ -314,9 +314,9 @@ impl Display for Instruction {
                 };
                 let imm = if let Operand::Register(size, _) = self.operands[0] {
                     if size == SizeCode::W {
-                        (imm as u32) as i32 as i64
+                        imm as u32 as u64
                     } else {
-                        imm as i64
+                        imm
                     }
                 } else {
                     unreachable!("movn operand 0 is always Register");
@@ -2862,7 +2862,7 @@ impl Display for Operand {
                 }
             }
             Operand::Immediate(i) => {
-                write!(fmt, "#{:x}", *i)
+                write!(fmt, "#{:#x}", *i)
             },
             Operand::ImmediateDouble(d) => {
                 write!(fmt, "#{:0.1}", d)
@@ -2932,7 +2932,7 @@ impl Display for Operand {
                     *amount == 0 {
                     write!(fmt, "[{}, {}, {}]", Operand::RegisterOrSP(SizeCode::X, *reg), Operand::Register(*index_size, *index_reg), extend)
                 } else {
-                    write!(fmt, "[{}, {}, {} #{:#x}]", Operand::RegisterOrSP(SizeCode::X, *reg), Operand::Register(*index_size, *index_reg), extend, amount)
+                    write!(fmt, "[{}, {}, {} #{}]", Operand::RegisterOrSP(SizeCode::X, *reg), Operand::Register(*index_size, *index_reg), extend, amount)
                 }
             }
             Operand::RegPreIndex(reg, offset, wback_bit) => {
