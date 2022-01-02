@@ -1,3 +1,6 @@
+## 0.2.3
+* add differential tests, initial impl only tests against capstone
+
 ## 0.2.2
 * fix docs typo.
 
