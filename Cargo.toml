@@ -9,6 +9,13 @@ description = "arm decoders for the yaxpeax project"
 keywords = ["disassembler", "decoder", "armv7", "armv8"]
 edition = "2018"
 
+[lib]
+
+[workspace]
+members = [
+    "differential-tests"
+]
+
 [dependencies]
 yaxpeax-arch = { version = "0.2.2", default-features = false, features = [] }
 bitvec = "0.19"

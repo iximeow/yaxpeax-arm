@@ -1,0 +1,12 @@
+[package]
+name = "differential-tests"
+version = "0.1.0"
+authors = ["iximeow <yax@iximeow.net>"]
+edition = "2018"
+description = "differential testing between yaxpeax-arm and other disassemblers"
+
+[dependencies]
+yaxpeax-arm = { path = "../", version = "*" }
+yaxpeax-arch = { version = "0.2.2", default-features = false, features = [] }
+
+capstone = "*"
