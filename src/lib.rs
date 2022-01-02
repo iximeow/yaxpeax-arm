@@ -38,11 +38,11 @@
 //!     }
 //! }
 //!
-//! use yaxpeax_arm::armv8::a64::Arch;
+//! use yaxpeax_arm::armv8::a64::ARMv8;
 //! use yaxpeax_arch::{ReaderBuilder, U8Reader};
 //! let data: &[u8] = &[0x94, 0x02, 0x1e, 0x32];
 //! // would display `orr w20, w20, #0x4`.
-//! decoder::decode_stream::<x86_64, _>(data);
+//! decoder::decode_stream::<ARMv8, _>(data);
 //! ```
 
 #![no_std]
