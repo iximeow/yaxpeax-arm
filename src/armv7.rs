@@ -12,6 +12,10 @@ use yaxpeax_arch::{Arch, AddressDiff, Colorize, Decoder, LengthedInstruction, Re
 mod thumb;
 
 // opcode, s, w, cond
+/// a struct for the combined display of an opcode and possible suffixes.
+///
+/// this includes the opcode, its optional `.s` suffix, optional `.w` suffix, and condition code,
+/// if any.
 pub struct ConditionedOpcode(pub Opcode, pub bool, pub bool, pub ConditionCode);
 
 impl Display for ConditionedOpcode {
@@ -20,6 +24,9 @@ impl Display for ConditionedOpcode {
     }
 }
 
+/// a context impl to display `arm` instructions with no additional context (no symbol name
+/// information, offset names, etc). this impl results in `some_instruction.contextualize(...)`
+/// displaying an instruction the same way its `Display` impl would.
 pub struct NoContext;
 
 fn reg_name_colorize<Y: YaxColors>(reg: Reg, colors: &Y) -> impl fmt::Display {
@@ -850,6 +857,7 @@ impl Display for Opcode {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
+#[allow(missing_docs)]
 pub enum Opcode {
     Invalid,
     /*
@@ -1088,6 +1096,8 @@ static DATA_PROCESSING_OPCODES: [Opcode; 16] = [
     Opcode::MVN
 ];
 
+/// a struct describiing a shifted register operand. this is primarily interesting in that it can
+/// be translated to a `RegShiftStyle` for further interpretation.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 #[repr(transparent)]
 pub struct RegShift {
@@ -1103,26 +1113,37 @@ impl RegShift {
         }
     }
 
+    /// don't use this. it's for armv7 testing only.
+    #[doc(hidden)]
     pub fn from_raw(data: u16) -> Self {
         RegShift { data }
     }
 }
 
+/// an enum describing one of two ways a shifted register operand may be shifted.
 pub enum RegShiftStyle {
+    /// a register shifted by an immediate.
     RegImm(RegImmShift),
+    /// a register shifted by a register.
     RegReg(RegRegShift),
 }
 
+/// a register shifted by a register.
 #[repr(transparent)]
 pub struct RegRegShift {
     data: u16
 }
 
+/// the way a shift operation is carried out.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum ShiftStyle {
+    /// left-shift the value, filling in zeroes.
     LSL = 0,
+    /// right-shift the value, filling in zeroes.
     LSR = 1,
+    /// arithmetic shift right, filling with the top bit of the value (sign-extending).
     ASR = 2,
+    /// rotate-right, filling with bits shifted out of the value.
     ROR = 3,
 }
 
@@ -1150,34 +1171,42 @@ impl ShiftStyle {
 }
 
 impl RegRegShift {
+    /// the general-purpose register, an amount to shift the shiftee.
     pub fn shifter(&self) -> Reg {
         Reg::from_u8((self.data >> 8) as u8 & 0b1111)
     }
+    /// the way in which this register is shifted.
     pub fn stype(&self) -> ShiftStyle {
         ShiftStyle::from((self.data >> 5) as u8 & 0b11)
     }
+    /// the general-purpose register to be shifted.
     pub fn shiftee(&self) -> Reg {
         Reg::from_u8(self.data as u8 & 0b1111)
     }
 }
 
+/// a register shifted by an immediate.
 #[repr(transparent)]
 pub struct RegImmShift {
     data: u16
 }
 
 impl RegImmShift {
+    /// the immediate this register is shifted by.
     pub fn imm(&self) -> u8 {
         (self.data >> 7) as u8 & 0b11111
     }
+    /// the way in which this register is shifted.
     pub fn stype(&self) -> ShiftStyle {
         ShiftStyle::from((self.data >> 5) as u8 & 0b11)
     }
+    /// the general-purpose register to be shifted.
     pub fn shiftee(&self) -> Reg {
         Reg::from_u8(self.data as u8 & 0b1111)
     }
 }
 
+/// a struct describing an `arm` register.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct Reg {
@@ -1252,6 +1281,9 @@ impl Reg {
         }
     }
 
+    /// create a new `Reg` with the specified number.
+    ///
+    /// panics if `bits` is out of range (16 or above).
     pub fn from_u8(bits: u8) -> Reg {
         if bits > 0b1111 {
             panic!("register number out of range");
@@ -1260,11 +1292,13 @@ impl Reg {
         Reg { bits }
     }
 
+    /// get the number of this register. the returned value will be between 0 and 15.
     pub fn number(&self) -> u8 {
         self.bits
     }
 }
 
+/// a control register.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct CReg {
@@ -1278,6 +1312,9 @@ impl Display for CReg {
 }
 
 impl CReg {
+    /// create a new `CReg` with the specified number.
+    ///
+    /// panics if `bits` is out of range (16 or above).
     pub fn from_u8(bits: u8) -> CReg {
         if bits > 0b1111 {
             panic!("register number out of range");
@@ -1286,6 +1323,7 @@ impl CReg {
         CReg { bits }
     }
 
+    /// get the number of this register. the returned value will be between 0 and 15.
     pub fn number(&self) -> u8 {
         self.bits
     }
@@ -1331,6 +1369,7 @@ impl Display for StatusRegMask {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
+#[allow(missing_docs)]
 pub enum StatusRegMask {
     // Note 0b0000 is unused (as is 0b10000)
     CPSR_C = 0b0001,
@@ -1409,36 +1448,82 @@ impl StatusRegMask {
     }
 }
 
+/// an operand in an `arm` instruction.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operand {
+    /// a general-purpose register.
     Reg(Reg),
+    /// a general-purpose register, with writeback. these generally imply an increment by width of
+    /// a memort operand, depending on the instruction.
     RegWBack(Reg, bool),
+    /// a list of registers specified as a bitmask from bits 0 to 15.
     RegList(u16),
+    /// a memory access, dereferencing a general-purpose register.
     RegDeref(Reg),
+    /// a memory access, dereferencing a shifted general-purpose register with register or
+    /// immediate offset.
     RegShift(RegShift),
+    /// a memory access of a register, post-indexed a register shifted by register or immediate.
+    /// the first bool indicates if the shifted-register is added or subtracted ot the base
+    /// register, while the second bool indicates if the resulting address is written back to the
+    /// base register.
     RegDerefPostindexRegShift(Reg, RegShift, bool, bool), // add/sub, wback
+    /// a memory access of a register, pre-indexed with a register shifted by register or
+    /// immediate. the first bool indicates if the shifted-register is added or subtracted ot the
+    /// base register, while the second bool indicates if the resulting address is written back to
+    /// the base register.
     RegDerefPreindexRegShift(Reg, RegShift, bool, bool), // add/sub, wback
+    /// a memory access of a register, post-indexed with an immediate. the first bool indicates if
+    /// the shifted-register is added or subtracted ot the base register, while the second bool
+    /// indicates if the resulting address is written back to the base register.
     RegDerefPostindexOffset(Reg, u16, bool, bool), // add/sub, wback
+    /// a memory access of a register, pre-indexed with an immediate. the first bool indicates if
+    /// the shifted-register is added or subtracted ot the base register, while the second bool
+    /// indicates if the resulting address is written back to the base register.
     RegDerefPreindexOffset(Reg, u16, bool, bool), // add/sub, wback
+    /// a memory access of a register, post-indexed with a register. the first bool indicates if the
+    /// shifted-register is added or subtracted ot the base register, while the second bool
+    /// indicates if the resulting address is written back to the base register.
     RegDerefPostindexReg(Reg, Reg, bool, bool), // add/sub, wback
+    /// a memory access of a register, pre-indexed with a register. the first bool indicates if the
+    /// shifted-register is added or subtracted ot the base register, while the second bool
+    /// indicates if the resulting address is written back to the base register.
     RegDerefPreindexReg(Reg, Reg, bool, bool), // add/sub, wback
+    /// a 12-bit immediate, stored in a `u16`.
     Imm12(u16),
+    /// a 32-bit immediate, stored in a `u32`.
     Imm32(u32),
+    /// a pc-relative branch, with 32-bit signed offset, left-shifted by 2.
     BranchOffset(i32),
+    /// a pc-relative branch, with 32-bit signed offset, left-shifted by 1.
     BranchThumbOffset(i32),
+    /// a coprocessor index.
     Coprocessor(u8),
+    /// a coprocessor option number.
     CoprocOption(u8),
+    /// an `arm` control register.
     CReg(CReg),
+    /// an `arm` banked register, either `usr` (general-purpose) bank or one of the alternate sets
+    /// of `arm` registers.
     BankedReg(Bank, Reg),
+    /// `spsr` in some `arm` register bank.
     BankedSPSR(Bank),
+    /// a mask of bits for the `spsr` register.
     StatusRegMask(StatusRegMask),
+    /// the `apsr` register.
     APSR,
+    /// the `spsr` register.
     SPSR,
+    /// the `cpsr` register.
     CPSR,
+    /// "no operand". since an instruction's `operands` array is always four entries, this is used
+    /// to fill space, if any, after recording an instruction's extant operands.
     Nothing,
 }
 
+/// a register bank for a register in `armv7` or below.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[allow(missing_docs)]
 pub enum Bank {
     Usr,
     Fiq,
@@ -1551,10 +1636,16 @@ impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for Operand {
     }
 }
 
+/// a `armv7` or below instruction.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Instruction {
+    /// the condition code for this instruction, defaults to `AL` if the instruction is
+    /// unconditional.
     pub condition: ConditionCode,
+    /// the opcode of this instruction.
     pub opcode: Opcode,
+    /// operands for the decoded instruction. operands are populated from index 0, to 1, 2, and 3.
+    /// operands from the instruction are non-`Operand::Nothing`.
     pub operands: [Operand; 4],
     /// does this instruction update flags, while variants that do not update flags exist?
     pub s: bool,
@@ -1566,14 +1657,28 @@ pub struct Instruction {
     pub thumb: bool,
 }
 
+/// the kinds of errors possibly encountered in trying to decode an `armv7` or below instruction.
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum DecodeError {
+    /// the input was insufficient to decode a full instruction. for non-thumb instructions, this means
+    /// the input was not at least four bytes long. for thumb instructions, the input was either
+    /// not two bytes, or not four bytes, depending on how much the instruction would need.
     ExhaustedInput,
+    /// the instruction encodes an opcode that is not valid.
     InvalidOpcode,
+    /// the instruction encodes an operand that is not valid.
     InvalidOperand,
+    /// `yaxpeax-arm` doesn't know how to decode this, but it may be a valid instruction. the
+    /// instruction decoder is not complete, sorry. :(
+    ///
+    /// in practice this typically indicates some kinds of coprocessor instruction, or `ARMv7` SIMD
+    /// instruction.
     Incomplete,
+    /// the instruction includes reserved bits that were not set as required.
     Nonconforming,
+    /// the input encodes an instruction that is explicitly undefined.
     Undefined,
+    /// the input encodes an instruction with unpredictable behavior.
     Unpredictable,
 }
 
@@ -1641,18 +1746,23 @@ impl Instruction {
     fn set_s(&mut self, value: bool) {
         self.s = value;
     }
+    /// does this instruction set status flags?
     pub fn s(&self) -> bool { self.s }
     pub(crate) fn set_w(&mut self, value: bool) {
         self.thumb_w = value;
     }
+    /// was this instruction encoded in `thumb` mode and still 4 bytes, *and* requires a `.w`
+    /// suffix on the opcode?
     pub fn w(&self) -> bool { self.thumb_w }
     pub(crate) fn set_wide(&mut self, value: bool) {
         self.wide = value;
     }
+    /// was this instruction encoded in `thumb` mode and still 4 bytes?
     pub fn wide(&self) -> bool { self.wide }
     pub(crate) fn set_thumb(&mut self, value: bool) {
         self.thumb = value;
     }
+    /// was this instruction encoded in `thumb` mode?
     pub fn thumb(&self) -> bool { self.thumb }
 }
 
@@ -1769,7 +1879,9 @@ impl LengthedInstruction for Instruction {
     }
 }
 
+/// a condition code for am `armv7` or below instruction.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[allow(missing_docs)]
 pub enum ConditionCode {
     EQ,
     NE,
@@ -1811,7 +1923,7 @@ impl Display for ConditionCode {
 }
 
 impl ConditionCode {
-    pub fn build(value: u8) -> ConditionCode {
+    fn build(value: u8) -> ConditionCode {
         match value {
             0b0000 => ConditionCode::EQ,
             0b0001 => ConditionCode::NE,
@@ -1918,6 +2030,14 @@ impl Default for ARMVersion {
 }
 
 // nothing checks/rejects by arm version yet, but.. soon....
+/// a struct with decode configuration for `ARMv7` and below. the same decoder is used for `thumb`
+/// and non-`thumb` modes, and the same instruction struct is used for decoded instructions in
+/// either mode.
+///
+/// NOTE: helper functions here create `InstDecoder` for specific revisions, extensions, or lack
+/// thereof, in the supported instruction set. `yaxpeax-arm` does not actually honor these settings
+/// yet. this means any `InstDecoder` will decode all known instructions through the latest `ARMv7`
+/// extensions.
 #[allow(unused)]
 #[derive(Debug)]
 pub struct InstDecoder {
@@ -1939,19 +2059,28 @@ impl Default for InstDecoder {
 }
 
 impl InstDecoder {
+    /// set the decoder to decoding in thumb mode as the specified bool provides; `true` means
+    /// "yes, decode in `thumb` mode", where `false` means to decode as a normal `arm` instruction.
     pub fn set_thumb_mode(&mut self, thumb: bool) {
         self.thumb = thumb;
     }
 
+    /// set the decoder to decoding in thumb mode as the specified bool provides; `true` means
+    /// "yes, decode in `thumb` mode", where `false` means to decode as a normal `arm` instruction.
+    ///
+    /// (this consumes and returns the `InstDecoder` to support use in chained calls.)`
     pub fn with_thumb_mode(mut self, thumb: bool) -> Self {
         self.set_thumb_mode(thumb);
         self
     }
 
+    /// initialize a new `arm` `InstDecoder` with default ("everything") support, but in `thumb`
+    /// mode.
     pub fn default_thumb() -> Self {
         Self::default().with_thumb_mode(true)
     }
 
+    /// create an `InstDecoder` that supports only instructions through to `ARMv4`.
     pub fn armv4() -> Self {
         Self {
             mode: DecodeMode::Any,
@@ -1961,6 +2090,7 @@ impl InstDecoder {
         }
     }
 
+    /// create an `InstDecoder` that supports only instructions through to `ARMv5`.
     pub fn armv5() -> Self {
         Self {
             mode: DecodeMode::Any,
@@ -1970,6 +2100,7 @@ impl InstDecoder {
         }
     }
 
+    /// create an `InstDecoder` that supports only instructions through to `ARMv6`.
     pub fn armv6() -> Self {
         Self {
             mode: DecodeMode::Any,
@@ -1979,6 +2110,7 @@ impl InstDecoder {
         }
     }
 
+    /// create an `InstDecoder` that supports only instructions through to `ARMv6t2`.
     pub fn armv6t2() -> Self {
         Self {
             mode: DecodeMode::Any,
@@ -1988,6 +2120,7 @@ impl InstDecoder {
         }
     }
 
+    /// create an `InstDecoder` that supports only instructions through to `ARMv6t2` in thumb mode.
     pub fn armv6t2_thumb() -> Self {
         Self {
             mode: DecodeMode::Any,
@@ -1997,6 +2130,7 @@ impl InstDecoder {
         }
     }
 
+    /// create an `InstDecoder` that supports only instructions through to `ARMv7`.
     pub fn armv7() -> Self {
         Self {
             mode: DecodeMode::Any,
@@ -2006,6 +2140,7 @@ impl InstDecoder {
         }
     }
 
+    /// create an `InstDecoder` that supports only instructions through to `ARMv7` in thumb mode.
     pub fn armv7_thumb() -> Self {
         Self {
             mode: DecodeMode::Any,
@@ -2015,6 +2150,7 @@ impl InstDecoder {
         }
     }
 
+    /// create an `InstDecoder` that supports only instructions through to `ARMv7ve`.
     pub fn armv7ve() -> Self {
         Self {
             mode: DecodeMode::Any,
@@ -2024,6 +2160,7 @@ impl InstDecoder {
         }
     }
 
+    /// create an `InstDecoder` that supports only instructions through to `ARMv7ve` in thumb mode.
     pub fn armv7ve_thumb() -> Self {
         Self {
             mode: DecodeMode::Any,
@@ -2033,6 +2170,7 @@ impl InstDecoder {
         }
     }
 
+    /// create an `InstDecoder` that supports only instructions through to `ARMv7vese`.
     pub fn armv7vese() -> Self {
         Self {
             mode: DecodeMode::Any,
@@ -3709,6 +3847,7 @@ impl Decoder<ARMv7> for InstDecoder {
     }
 }
 
+/// a struct with a summary of the `ARMv7` instruction set in an associated `impl Arch for ARMv7`.
 #[cfg_attr(feature="use-serde", derive(Serialize, Deserialize))]
 #[derive(Debug)]
 pub struct ARMv7;

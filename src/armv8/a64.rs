@@ -161,11 +161,21 @@ mod docs {
     }
 }
 
+/// the kinds of errors possibly encountered in trying to decode an `aarch64` instruction
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum DecodeError {
+    /// the input was insufficient to decode a full instruction. for `a64` instructions, this means
+    /// the input was not at least four bytes long.
     ExhaustedInput,
+    /// the instruction encodes an opcode that is not valid.
     InvalidOpcode,
+    /// the instruction encodes an operand that is not valid.
     InvalidOperand,
+    /// `yaxpeax-arm` doesn't know how to decode this, but it may be a valid instruction. the
+    /// instruction decoder is not complete, sorry. :(
+    ///
+    /// in practice this means that the instruction is likely either in the `SVE` or `SVE2`
+    /// additions.
     IncompleteDecoder,
 }
 
@@ -210,6 +220,9 @@ impl yaxpeax_arch::Instruction for Instruction {
     fn well_defined(&self) -> bool { true }
 }
 
+/// a context impl to display `a64` instructions with no additional context (no symbol name
+/// information, offset names, etc). this impl results in `some_instruction.contextualize(...)`
+/// displaying an instruction the same way its `Display` impl would.
 pub struct NoContext;
 
 impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, NoContext, T, Y> for Instruction {
@@ -218,10 +231,14 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, NoContext, T, Y> for Inst
     }
 }
 
+/// a struct with a summary of the `ARMv8`/`aarch64` instruction set in an associated `impl Arch
+/// for ARMv8`.
 #[cfg(feature="use-serde")]
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct ARMv8 { }
 
+/// a struct with a summary of the `ARMv8`/`aarch64` instruction set in an associated `impl Arch
+/// for ARMv8`.
 #[cfg(not(feature="use-serde"))]
 #[derive(Copy, Clone, Debug)]
 pub struct ARMv8 { }
@@ -235,13 +252,31 @@ impl Arch for ARMv8 {
     type Operand = Operand;
 }
 
+/// a size marker for a register.
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(u8)]
-pub enum SizeCode { X, W }
+pub enum SizeCode {
+    /// an x-size (64-bits) register.
+    X,
+    /// a w-size (32-bits) register.
+    W
+}
 
+/// a size marker for a SIMD register, a full scalar size, or vector element size.
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(u8)]
-pub enum SIMDSizeCode { B, H, S, D, Q }
+pub enum SIMDSizeCode {
+    /// a byte (8-bits) scalar or element.
+    B,
+    /// a halfword (16-bits) scalar or element.
+    H,
+    /// a single(?) word (32-bits) scalar or element.
+    S,
+    /// a dword (64-bits) scalar or element.
+    D,
+    /// a qword (128-bits) scalar or element.
+    Q
+}
 
 impl SIMDSizeCode {
     fn width(&self) -> u16 {
@@ -265,10 +300,14 @@ impl SIMDSizeCode {
     }
 }
 
+/// an `aarch64` instruction.
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(C)]
 pub struct Instruction {
+    /// the operation of the decoded instruction.
     pub opcode: Opcode,
+    /// operands for the decoded instruction. operands are populated from index 0, to 1, 2, and 3.
+    /// operands from the instruction are non-`Operand::Nothing`.
     pub operands: [Operand; 4],
 }
 
@@ -1078,6 +1117,10 @@ impl Default for Instruction {
     }
 }
 
+/// a descriptor for the operation in a `sys` or `sysl` instruction.
+///
+/// there are two fields of interest, `op1` and `op2`. for a description of how to interpret these
+/// fields of the `sys{,l}` opcodes, consult the `ARM Reference Manual`.
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(transparent)]
 pub struct SysOps {
@@ -1091,10 +1134,12 @@ impl SysOps {
         }
     }
 
+    /// retrieve the `op1` field encoded in this `SysOps`.
     #[inline]
     pub fn op1(&self) -> u8 {
         self.data & 0b1111
     }
+    /// retrieve the `op2` field encoded in this `SysOps`.
     #[inline]
     pub fn op2(&self) -> u8 {
         (self.data >> 4) & 0b1111
@@ -1103,6 +1148,7 @@ impl SysOps {
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(u16)]
+#[allow(missing_docs)]
 pub enum Opcode {
     Invalid,
     MOVN,
@@ -2609,19 +2655,32 @@ impl Display for Opcode {
     }
 }
 
+/// the way a shift operation is carried out.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ShiftStyle {
+    /// left-shift the value, filling in zeroes.
     LSL,
+    /// right-shift the value, filling in zeroes.
     LSR,
+    /// arithmetic shift right, filling with the top bit of the value (sign-extending).
     ASR,
+    /// rotate-right, filling with bits shifted out of the value.
     ROR,
+    /// unsigned extend byte to 64-bit word.
     UXTB,
+    /// unsigned extend half-word (16-bit) to 64-bit word.
     UXTH,
+    /// unsigned extend word (32-bit) to 64-bit word.
     UXTW,
+    /// unsigned extend 64-bit word to 64-bit word (functionally equivalent to left-shift).
     UXTX,
+    /// signed extend byte to 64-bit word.
     SXTB,
+    /// signed extend half-word (16-bit) to 64-bit word.
     SXTH,
+    /// signed extend word (32-bit) to 64-bit word.
     SXTW,
+    /// signed extend 64-bit word to 64-bit word (functionally equivalent to left-shift).
     SXTX,
 }
 
@@ -2644,37 +2703,179 @@ impl Display for ShiftStyle {
     }
 }
 
+/// an operand for an `aarch64` instruction.
+///
+/// an instruction's `operands` array allows many more combination of `Operand` than are possible
+/// in practice; no `aarch64` instruction has multiple `Operand::PCOffset` entries, for example.
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(C)]
 pub enum Operand {
+    /// "no operand". since an instruction's `operands` array is always four entries, this is used
+    /// to fill space, if any, after recording an instruction's extant operands.
     Nothing,
+    /// a general-purpose register.
+    ///
+    /// for example, `x5` would be represented as `Operand::Register(SizeCode::X, 5)`. the register
+    /// number currently does not extend beyond 31. `Operand::Register(_, 31)` is the zero
+    /// register, either `wzr` or `xzr`.
     Register(SizeCode, u16),
+    /// a general-purpose register.
+    ///
+    /// for example, `x5` would be represented as `Operand::Register(SizeCode::X, 5)`. the register
+    /// number ranges between 0 and 31. unlike `Operand::Register`, `Operand::Register(_, 31)` is
+    /// the stack pointer, either `wsp` or `xsp`.
     RegisterPair(SizeCode, u16),
+    /// a SIMD register, used as a scalar element.
+    ///
+    /// for example, `d3` would be represented as `Operand::SIMDRegister(SIMDSizeCode::D, 3)`. the
+    /// register number ranges between 0 and 31.
     SIMDRegister(SIMDSizeCode, u16),
+    /// a SIMD register, used as a vector of elements.
+    ///
+    /// for example, `v10.4h` would be represented as
+    /// `Operand::SIMDRegisterElements(SIMDSizeCode::D, 10, SIMDSizeCode::H)`.
+    ///
+    /// SIMD registers are either `SIMDSizeCode::Q` or `SIMDSizeCode::D` wide, and can have
+    /// elements of width `SIMDSizeCode::{B, H, S, D}`. the register number ranges between 0 and 31.
     SIMDRegisterElements(SIMDSizeCode, u16, SIMDSizeCode),
+    /// one lane in a SIMD vector of elements.
+    ///
+    /// for example, `v10.h[3]` would be represented as
+    /// `Operand::SIMDRegisterElementsLane(SIMDSizeCode::D, 10, SIMDSizeCode::H, 3)`.
+    ///
+    /// SIMD registers are either `SIMDSizeCode::Q` or `SIMDSizeCode::D` wide, and can have
+    /// elements of width `SIMDSizeCode::{B, H, S, D}`. the register number ranges between 0 and 31.
+    /// the lane number can range between 0 and `element.width() / vector.width()`.
     SIMDRegisterElementsLane(SIMDSizeCode, u16, SIMDSizeCode, u8),
+    /// multiple lanes in a SIMD vector of elements.
+    ///
+    /// for example, `v10.4h[3]` would be represented as
+    /// `Operand::SIMDRegisterElementsLane(SIMDSizeCode::Q, 10, SIMDSizeCode::H, 3, 4)`.
+    ///
+    /// SIMD registers are either `SIMDSizeCode::Q` or `SIMDSizeCode::D` wide, and can have
+    /// elements of width `SIMDSizeCode::{B, H, S, D}`. the register number ranges between 0 and 31.
+    /// the lane number can range between 0 and `element.width() / vector.width()`. the number of
+    /// elements is, in practice, always 4.
     SIMDRegisterElementsMultipleLane(SIMDSizeCode, u16, SIMDSizeCode, u8, u8),
+    /// multiple full SIMD vectors.
+    ///
+    /// for example, `{v2.2d, v3.2d, v4.2d}` would be represented as
+    /// `Operand::SIMDRegisterGroup(SIMDSizeCode::Q, 2, SIMDSizeCode::D, 3)`.
+    ///
+    /// SIMD registers are either `SIMDSizeCode::Q` or `SIMDSizeCode::D` wide, and can have
+    /// elements of width `SIMDSizeCode::{B, H, S, D}`. the register number ranges between 0 and 31.
+    /// the number of SIMD registers ranges from 1 to 4.
     SIMDRegisterGroup(SIMDSizeCode, u16, SIMDSizeCode, u8),
+    /// a lane in multiple SIMD vectors.
+    ///
+    /// for example, `{v2.2d, v3.2d, v4.2d}[1]` would be represented as
+    /// `Operand::SIMDRegisterGroup(SIMDSizeCode::Q, 2, SIMDSizeCode::D, 3, 1)`.
+    ///
+    /// SIMD registers are either `SIMDSizeCode::Q` or `SIMDSizeCode::D` wide, and can have
+    /// elements of width `SIMDSizeCode::{B, H, S, D}`. the register number ranges between 0 and 31.
+    /// the number of SIMD registers ranges from 1 to 4. the lane number can range between 0 and
+    /// `element.width() / vector.width()`.
     SIMDRegisterGroupLane(u16, SIMDSizeCode, u8, u8),
+    /// a general-purpose register, where register 31 is `sp`, rather than `zr`.
+    ///
+    /// for example, `x5` would be represented as `Operand::Register(SizeCode::X, 5)`. the register
+    /// number currently does not extend beyond 31. `Operand::Register(_, 31)` is the stack pointer
+    /// register, either `wsp` or `xsp`.
     RegisterOrSP(SizeCode, u16),
+    /// a condition code describing some comparison.
+    ///
+    /// there are 16 condition codes with number 0 to 15: `eq, hs, mi, vs, hi, ge, gt, al, ne, lo,
+    /// pl, vc, ls, lt, le, nv`. the `nv` condition code is identical to `al`, and only has a
+    /// different condition code number in encoded instructions.
     ConditionCode(u8),
-    Offset(i64),
+    /// a pc-relative offset.
+    ///
+    /// this is the addressing mode for instructions like, `bl $+0x1234`, or `adrp $-0x123000`.
     PCOffset(i64),
+    /// a 32-bit immediate.
+    ///
+    /// this immediate may be signed or unsigned, depending on the instruction in question. if the
+    /// immediate is signed, it was sign-extended to 32-bits and that extended value is reported
+    /// here.
     Immediate(u32),
-    ImmediateDouble(f64),
+    /// a 64-bit immediate.
+    ///
+    /// this immediate may be signed or unsigned, depending on the instruction in question. if the
+    /// immediate is signed, it was sign-extended to 64-bits and that extended value is reported
+    /// here.
     Imm64(u64),
+    /// a 16-bit immediate.
+    ///
+    /// this immediate may be signed or unsigned, depending on the instruction in question. if the
+    /// immediate is signed, it was sign-extended to 16-bits and that extended value is reported
+    /// here.
     Imm16(u16),
+    /// a 64-bit floating-point immediate.
+    ///
+    /// the immediate as recorded in the instruction may be `f16`, `f32`, or `f64`, but is
+    /// converted to an `f64` for this operand.
+    ImmediateDouble(f64),
+    /// an immediate, a base number left-shifted by some amount.
+    ///
+    /// this is displayed as, for example, `#0x1234, lsl #12`. the base number may be any 16-bit
+    /// value, and can be shifted by up to 64 bits.
     ImmShift(u16, u8),
+    /// an immediate, a base number left-shifted by some amount, filling with 1's.
+    ///
+    /// this is displayed as, for example, `#0x1234, msl #12`. the base number may be any 16-bit
+    /// value, and can be shifted by up to 64 bits.
     ImmShiftMSL(u16, u8),
+    /// a register, shifted by some constant number of bits.
+    ///
+    /// this is displayed as, for example, `x15, lsl #3`. the operand would be represented by
+    /// `Operand::RegShift(ShiftStyle::LSL, 3, Sizecode::X, 15)`.
     RegShift(ShiftStyle, u8, SizeCode, u16),
-    RegOffset(u16, i16),
+    /// a memory access, with base register offset by another register shifted by some amount.
+    ///
+    /// this is displayed as, for example, `[x6, w9, lsl #5]`, and would be represented by
+    /// `Operand::RegRegOffset(6, 9, SizeCode::W, ShiftStyle::LSL, 5)`.
     RegRegOffset(u16, u16, SizeCode, ShiftStyle, u8),
+    /// a memory access, with a register base address and constant offset, and optional writeback.
+    ///
+    /// this is displayed as, for example:
+    /// * `[x13]` (no writeback, offset of 0)
+    ///   - Offset::RegPreIndex(13, 0, false)`
+    /// * `[x13, #0x80]` (no writeback, offset of 0x80)
+    ///   - Offset::RegPreIndex(13, 0x80, false)`
+    /// * `[x13, #0x80]!` (writeback, offset of 0x80)
+    ///   - Offset::RegPreIndex(13, 0x80, true)`
     RegPreIndex(u16, i32, bool),
+    /// a memory access, with register base address and constant offset, base+offset written back
+    /// to the base register after access.
+    ///
+    /// this is displayed as, for example, `[x5], #-0x40`. the operand would be represented by
+    /// `Operand::RegPostIndex(5, -0x40)`.
     RegPostIndex(u16, i32),
+    /// a memory access, with register base address and register offset, base+offset written back
+    /// to the base register after access.
+    ///
+    /// this is displayed as, for example, `[x5], x9`. the operand would be represented by
+    /// `Operand::RegPostIndex(5, 9)`.
     RegPostIndexReg(u16, u16),
+    /// some kind of operation for a `prfm` or `prfum` operation.
+    ///
+    /// if the operation has a specified name, it will be `{pld,pli,pst}{l1,l2,l3}{keep,strm}`.
+    /// otherwise, the prefetch operation will be shown as the underlying integer from the encoded
+    /// instruction.
     PrefetchOp(u16),
+    /// a system register for an `msr` or `mrs` operation.
+    ///
+    /// if the register is a standard system register, and `yaxpeax-arm` knows about it, its name
+    /// will be used instead. otherwise, this will display as, for example, `sysreg:a6f4`.
     SystemReg(u16),
+    /// a control register for an `sys` or `sysl` operation.
+    ///
+    /// this operand will display as, for example, `cr5`.
     ControlReg(u16),
+    /// a selector for a field of the `pstate` control register.
+    ///
+    /// `yaxpeax-arm` does not name specific fields of `pstate` yet, so this operand displays as
+    /// `pstate.0x50`.
     PstateField(u8),
 }
 
@@ -2738,7 +2939,7 @@ impl Display for Operand {
             Operand::PstateField(reg) => {
                 // `MSR (immediate)` writes to the `PSTATE` register, setting a few bit patterns as
                 // selected by `reg`.
-                write!(fmt, "pstate.{:x}", reg)
+                write!(fmt, "pstate.{:#x}", reg)
             }
             Operand::SIMDRegister(size, reg) => {
                 match size {
@@ -2834,13 +3035,6 @@ impl Display for Operand {
                     _ => { unreachable!(); }
                 }
             }
-            Operand::Offset(offs) => {
-                if *offs < 0 {
-                    write!(fmt, "$-{:#x}", offs.wrapping_neg())
-                } else {
-                    write!(fmt, "$+{:#x}", offs)
-                }
-            }
             Operand::PCOffset(offs) => {
                 if *offs < 0 {
                     write!(fmt, "$-{:#x}", offs.wrapping_neg())
@@ -2906,17 +3100,6 @@ impl Display for Operand {
                     }
                 }
             }
-            Operand::RegOffset(reg, offset) => {
-                if *offset != 0 {
-                    if *offset < 0 {
-                        write!(fmt, "[{}, #-{:#x}]", Operand::RegisterOrSP(SizeCode::X, *reg), -*offset)
-                    } else {
-                        write!(fmt, "[{}, #{:#x}]", Operand::RegisterOrSP(SizeCode::X, *reg), offset)
-                    }
-                } else {
-                    write!(fmt, "[{}]", Operand::RegisterOrSP(SizeCode::X, *reg))
-                }
-            }
             Operand::RegRegOffset(reg, index_reg, index_size, extend, amount) => {
                 if extend == &ShiftStyle::LSL && *amount == 0 {
                     write!(fmt, "[{}, {}]", Operand::RegisterOrSP(SizeCode::X, *reg), Operand::Register(*index_size, *index_reg))
@@ -2958,7 +3141,14 @@ impl Display for Operand {
     }
 }
 
-#[derive(Default, Debug)]
+/// an `aarch64` instruction decoder.
+///
+/// there are no options or levels of decoding support, yet. as a result, any
+/// `armv8::a64::InstDecoder` will decode as much of the a64 instruction set as is implemented.
+///
+/// `InstDecoder` is currently zero-size, but users should not rely on this being the case in the
+/// future.
+#[derive(Default, Debug, PartialEq, Eq, Copy, Clone, Hash, PartialOrd, Ord)]
 pub struct InstDecoder {}
 
 #[allow(non_snake_case)]
@@ -7684,7 +7874,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             let extended_offset = (offset << 11) >> 11;
                             inst.operands = [
                                 Operand::Register(SizeCode::X, (word & 0x1f) as u16),
-                                Operand::Offset((extended_offset as i64) << 12),
+                                Operand::PCOffset((extended_offset as i64) << 12),
                                 Operand::Nothing,
                                 Operand::Nothing
                             ];
@@ -7694,7 +7884,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             let extended_offset = (offset << 11) >> 11;
                             inst.operands = [
                                 Operand::Register(SizeCode::X, (word & 0x1f) as u16),
-                                Operand::Offset(extended_offset as i64),
+                                Operand::PCOffset(extended_offset as i64),
                                 Operand::Nothing,
                                 Operand::Nothing
                             ];
@@ -8022,7 +8212,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             inst.operands = [
                                 Operand::RegisterPair(size_code, Rs),
                                 Operand::RegisterPair(size_code, Rt),
-                                Operand::RegOffset(Rn, 0),
+                                Operand::RegPreIndex(Rn, 0, false),
                                 Operand::Nothing,
                             ];
                             return Ok(());
@@ -8035,14 +8225,14 @@ impl Decoder<ARMv8> for InstDecoder {
                                     inst.operands = [
                                         Operand::Register(SizeCode::W, Rs),
                                         Operand::Register(SizeCode::W, Rt),
-                                        Operand::RegOffset(Rn, 0),
+                                        Operand::RegPreIndex(Rn, 0, false),
                                         Operand::Nothing,
                                     ];
                                 } else if Lo1 == 0b10 {
                                     // load ops
                                     inst.operands = [
                                         Operand::Register(SizeCode::W, Rt),
-                                        Operand::RegOffset(Rn, 0),
+                                        Operand::RegPreIndex(Rn, 0, false),
                                         Operand::Nothing,
                                         Operand::Nothing,
                                     ];
@@ -8088,7 +8278,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         inst.operands = [
                                             Operand::Register(SizeCode::W, Rs),
                                             Operand::Register(size_code, Rt),
-                                            Operand::RegOffset(Rn, 0),
+                                            Operand::RegPreIndex(Rn, 0, false),
                                             Operand::Nothing,
                                         ];
                                         match o0 {
@@ -8102,7 +8292,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                             Operand::Register(SizeCode::W, Rs),
                                             Operand::Register(size_code, Rt),
                                             Operand::Register(size_code, Rt2),
-                                            Operand::RegOffset(Rn, 0),
+                                            Operand::RegPreIndex(Rn, 0, false),
                                         ];
                                         match o0 {
                                             0b0 => Opcode::STXP,
@@ -8113,7 +8303,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     0b10 => {
                                         inst.operands = [
                                             Operand::Register(size_code, Rt),
-                                            Operand::RegOffset(Rn, 0),
+                                            Operand::RegPreIndex(Rn, 0, false),
                                             Operand::Nothing,
                                             Operand::Nothing,
                                         ];
@@ -8127,7 +8317,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         inst.operands = [
                                             Operand::Register(size_code, Rt),
                                             Operand::Register(size_code, Rt2),
-                                            Operand::RegOffset(Rn, 0),
+                                            Operand::RegPreIndex(Rn, 0, false),
                                             Operand::Nothing,
                                         ];
                                         match o0 {
@@ -8176,7 +8366,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             inst.operands = [
                                 Operand::Register(size_code, Rs),
                                 Operand::Register(size_code, Rt),
-                                Operand::RegOffset(Rn, 0),
+                                Operand::RegPreIndex(Rn, 0, false),
                                 Operand::Nothing,
                             ];
                             return Ok(());
@@ -8219,7 +8409,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
                         inst.operands = [
                             Operand::Register(size_code, Rt),
-                            Operand::RegOffset(Rn, 0),
+                            Operand::RegPreIndex(Rn, 0, false),
                             Operand::Nothing,
                             Operand::Nothing,
                         ];
@@ -8283,7 +8473,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             let Rn = ((word >> 5) & 0b11111) as u16;
                             let Rt = ((word >> 0) & 0b11111) as u16;
 
-                            let simm = ((imm9 as i16) << 7) >> 7;
+                            let simm = (((imm9 as i16) << 7) >> 7) as i32;
                             let index = (size << 2) | opc;
 
                             if index == 0b1011 || index >= 0b1110 {
@@ -8306,7 +8496,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             inst.opcode = *opcode;
                             inst.operands = [
                                 Operand::Register(size, Rt),
-                                Operand::RegOffset(Rn, simm),
+                                Operand::RegPreIndex(Rn, simm, false),
                                 Operand::Nothing,
                                 Operand::Nothing,
                             ];
@@ -8321,7 +8511,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             let Rn = ((word >> 5) & 0b11111) as u16;
                             let Rt = ((word >> 0) & 0b11111) as u16;
 
-                            let simm = ((imm9 as i16) << 7) >> 7;
+                            let simm = (((imm9 as i16) << 7) >> 7) as i32;
 
                             let opcode = &[
                                 Opcode::STZGM, Opcode::STG, Opcode::STG, Opcode::STG,
@@ -8337,7 +8527,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     // ldg
                                     inst.operands = [
                                         Operand::Register(SizeCode::X, Rt),
-                                        Operand::RegOffset(Rn, simm),
+                                        Operand::RegPreIndex(Rn, simm, false),
                                         Operand::Nothing,
                                         Operand::Nothing,
                                     ];
@@ -8354,13 +8544,13 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Operand::RegisterOrSP(SizeCode::X, Rt)
                                 },
                                 if op2 == 0b00 {
-                                    Operand::RegOffset(Rn, 0)
+                                    Operand::RegPreIndex(Rn, 0, false)
                                 } else if op2 == 0b01 {
-                                    Operand::RegPostIndex(Rn, simm as i32)
+                                    Operand::RegPostIndex(Rn, simm)
                                 } else if op2 == 0b10 {
-                                    Operand::RegOffset(Rn, simm)
+                                    Operand::RegPreIndex(Rn, simm, false)
                                 } else {
-                                    Operand::RegPreIndex(Rn, simm as i32, true)
+                                    Operand::RegPreIndex(Rn, simm, true)
                                 },
                                 Operand::Nothing,
                                 Operand::Nothing,
@@ -8585,7 +8775,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         let Rt = (word & 0x1f) as u16;
                         let Rn = ((word >> 5) & 0x1f) as u16;
                         let Rt2 = ((word >> 10) & 0x1f) as u16;
-                        let mut imm7 = ((((word >> 15) & 0x7f) as i16) << 9) >> 9;
+                        let mut imm7 = (((((word >> 15) & 0x7f) as i16) << 9) >> 9) as i32;
                         let opc_L = ((word >> 22) & 1) | ((word >> 29) & 0x6);
                         let size = match opc_L {
                             0b000 => {
@@ -8627,7 +8817,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         inst.operands = [
                             Operand::Register(size, Rt),
                             Operand::Register(size, Rt2),
-                            Operand::RegOffset(Rn, imm7),
+                            Operand::RegPreIndex(Rn, imm7, false),
                             Operand::Nothing
                         ];
                     },
@@ -8863,7 +9053,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         inst.operands = [
                                             Operand::Register(size, Rs as u16),
                                             Operand::Register(size, Rt as u16),
-                                            Operand::RegOffset(Rn, 0),
+                                            Operand::RegPreIndex(Rn, 0, false),
                                             Operand::Nothing,
                                         ];
                                     } else {
@@ -8881,7 +9071,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                             inst.operands = [
                                                 Operand::Register(size, Rs as u16),
                                                 Operand::Register(size, Rt as u16),
-                                                Operand::RegOffset(Rn, 0),
+                                                Operand::RegPreIndex(Rn, 0, false),
                                                 Operand::Nothing,
                                             ];
                                         } else if opcode == 0b100 {
@@ -8900,7 +9090,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                             // TOOD: should_is_must, Rs = 11111
                                             inst.operands = [
                                                 Operand::Register(size, Rt as u16),
-                                                Operand::RegOffset(Rn, 0),
+                                                Operand::RegPreIndex(Rn, 0, false),
                                                 Operand::Nothing,
                                                 Operand::Nothing,
                                             ];
@@ -8915,7 +9105,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     // V==0
                                     let w = (word >> 11) & 1;
                                     let imm9 = ((word >> 12) & 0b1_1111_1111) as i16;
-                                    let imm9 = (imm9 << 7) >> 7;
+                                    let imm9 = ((imm9 << 7) >> 7) as i32;
                                     let imm9 = imm9 << 3; // `simm` is stored as a multiple of 8
                                     let m = (word >> 23) & 1;
                                     let size = (word >> 30) & 0b11;
@@ -8932,9 +9122,9 @@ impl Decoder<ARMv8> for InstDecoder {
                                     inst.operands = [
                                         Operand::Register(SizeCode::X, Rt),
                                         if w == 0 {
-                                            Operand::RegOffset(Rn, imm9)
+                                            Operand::RegPreIndex(Rn, imm9, false)
                                         } else {
-                                            Operand::RegPreIndex(Rn, imm9 as i32, true)
+                                            Operand::RegPreIndex(Rn, imm9, true)
                                         },
                                         Operand::Nothing,
                                         Operand::Nothing,
@@ -9008,7 +9198,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 }
                             }
                         } else {
-                            let imm9 = ((((word >> 12) & 0x1ff) as i16) << 7) >> 7;
+                            let imm9 = (((((word >> 12) & 0x1ff) as i16) << 7) >> 7) as i32;
                             match category {
                                 0b00 => {
                                     // Load/store register (unscaled immediate)
@@ -9040,7 +9230,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                         } else {
                                             Operand::Register(size, Rt)
                                         },
-                                        Operand::RegOffset(Rn, imm9),
+                                        Operand::RegPreIndex(Rn, imm9, false),
                                         Operand::Nothing,
                                         Operand::Nothing,
                                     ];
@@ -9320,14 +9510,14 @@ impl Decoder<ARMv8> for InstDecoder {
                         // V == 0
                         let Rt = (word & 0x1f) as u16;
                         let Rn = ((word >> 5) & 0x1f) as u16;
-                        let imm12 = ((word >> 10) & 0x0fff) as i16;
+                        let imm12 = ((word >> 10) & 0x0fff) as i16 as i32;
                         let size_opc = ((word >> 22) & 0x3) | ((word >> 28) & 0xc);
                         match size_opc {
                             0b0000 => {
                                 inst.opcode = Opcode::STRB;
                                 inst.operands = [
                                     Operand::Register(SizeCode::W, Rt),
-                                    Operand::RegOffset(Rn, imm12),
+                                    Operand::RegPreIndex(Rn, imm12, false),
                                     Operand::Nothing,
                                     Operand::Nothing,
                                 ];
@@ -9336,7 +9526,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 inst.opcode = Opcode::LDRB;
                                 inst.operands = [
                                     Operand::Register(SizeCode::W, Rt),
-                                    Operand::RegOffset(Rn, imm12),
+                                    Operand::RegPreIndex(Rn, imm12, false),
                                     Operand::Nothing,
                                     Operand::Nothing,
                                 ];
@@ -9345,7 +9535,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 inst.opcode = Opcode::LDRSB;
                                 inst.operands = [
                                     Operand::Register(SizeCode::X, Rt),
-                                    Operand::RegOffset(Rn, imm12),
+                                    Operand::RegPreIndex(Rn, imm12, false),
                                     Operand::Nothing,
                                     Operand::Nothing,
                                 ];
@@ -9354,7 +9544,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 inst.opcode = Opcode::LDRSB;
                                 inst.operands = [
                                     Operand::Register(SizeCode::W, Rt),
-                                    Operand::RegOffset(Rn, imm12),
+                                    Operand::RegPreIndex(Rn, imm12, false),
                                     Operand::Nothing,
                                     Operand::Nothing,
                                 ];
@@ -9363,7 +9553,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 inst.opcode = Opcode::STRH;
                                 inst.operands = [
                                     Operand::Register(SizeCode::W, Rt),
-                                    Operand::RegOffset(Rn, imm12 << 1),
+                                    Operand::RegPreIndex(Rn, imm12 << 1, false),
                                     Operand::Nothing,
                                     Operand::Nothing,
                                 ];
@@ -9372,7 +9562,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 inst.opcode = Opcode::LDRH;
                                 inst.operands = [
                                     Operand::Register(SizeCode::W, Rt),
-                                    Operand::RegOffset(Rn, imm12 << 1),
+                                    Operand::RegPreIndex(Rn, imm12 << 1, false),
                                     Operand::Nothing,
                                     Operand::Nothing,
                                 ];
@@ -9381,7 +9571,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 inst.opcode = Opcode::LDRSH;
                                 inst.operands = [
                                     Operand::Register(SizeCode::X, Rt),
-                                    Operand::RegOffset(Rn, imm12 << 1),
+                                    Operand::RegPreIndex(Rn, imm12 << 1, false),
                                     Operand::Nothing,
                                     Operand::Nothing,
                                 ];
@@ -9390,7 +9580,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 inst.opcode = Opcode::LDRSH;
                                 inst.operands = [
                                     Operand::Register(SizeCode::W, Rt),
-                                    Operand::RegOffset(Rn, imm12 << 1),
+                                    Operand::RegPreIndex(Rn, imm12 << 1, false),
                                     Operand::Nothing,
                                     Operand::Nothing,
                                 ];
@@ -9399,7 +9589,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 inst.opcode = Opcode::STR;
                                 inst.operands = [
                                     Operand::Register(SizeCode::W, Rt),
-                                    Operand::RegOffset(Rn, imm12 << 2),
+                                    Operand::RegPreIndex(Rn, imm12 << 2, false),
                                     Operand::Nothing,
                                     Operand::Nothing,
                                 ];
@@ -9408,7 +9598,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 inst.opcode = Opcode::LDR;
                                 inst.operands = [
                                     Operand::Register(SizeCode::W, Rt),
-                                    Operand::RegOffset(Rn, imm12 << 2),
+                                    Operand::RegPreIndex(Rn, imm12 << 2, false),
                                     Operand::Nothing,
                                     Operand::Nothing,
                                 ];
@@ -9417,7 +9607,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 inst.opcode = Opcode::LDRSW;
                                 inst.operands = [
                                     Operand::Register(SizeCode::X, Rt),
-                                    Operand::RegOffset(Rn, imm12 << 2),
+                                    Operand::RegPreIndex(Rn, imm12 << 2, false),
                                     Operand::Nothing,
                                     Operand::Nothing,
                                 ];
@@ -9427,7 +9617,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 inst.opcode = Opcode::STR;
                                 inst.operands = [
                                     Operand::Register(SizeCode::X, Rt),
-                                    Operand::RegOffset(Rn, imm12 << 3),
+                                    Operand::RegPreIndex(Rn, imm12 << 3, false),
                                     Operand::Nothing,
                                     Operand::Nothing,
                                 ];
@@ -9436,7 +9626,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 inst.opcode = Opcode::LDR;
                                 inst.operands = [
                                     Operand::Register(SizeCode::X, Rt),
-                                    Operand::RegOffset(Rn, imm12 << 3),
+                                    Operand::RegPreIndex(Rn, imm12 << 3, false),
                                     Operand::Nothing,
                                     Operand::Nothing,
                                 ];
@@ -9445,7 +9635,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 inst.opcode = Opcode::PRFM;
                                 inst.operands = [
                                     Operand::PrefetchOp(Rt),
-                                    Operand::RegOffset(Rn, imm12 << 3),
+                                    Operand::RegPreIndex(Rn, imm12 << 3, false),
                                     Operand::Nothing,
                                     Operand::Nothing,
                                 ];
@@ -9571,7 +9761,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         ];
                         inst.operands = [
                             Operand::SIMDRegisterGroup(datasize, Rt as u16, SIZES[size as usize], num_regs),
-                            Operand::RegOffset(Rn as u16, 0),
+                            Operand::RegPreIndex(Rn as u16, 0, false),
                             Operand::Nothing,
                             Operand::Nothing,
                         ];
@@ -9702,7 +9892,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             ];
                             inst.operands = [
                                 Operand::SIMDRegisterGroup(datasize, Rt as u16, SIZES[size as usize], opc_idx as u8 + 1),
-                                Operand::RegOffset(Rn as u16, 0),
+                                Operand::RegPreIndex(Rn as u16, 0, false),
                                 Operand::Nothing,
                                 Operand::Nothing,
                             ];
@@ -9766,7 +9956,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         };
                         inst.operands = [
                             Operand::SIMDRegisterGroupLane(Rt as u16, item_size, group_size, index as u8),
-                            Operand::RegOffset(Rn as u16, 0),
+                            Operand::RegPreIndex(Rn as u16, 0, false),
                             Operand::Nothing,
                             Operand::Nothing,
                         ];
@@ -9922,7 +10112,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         let extended_offset = (offset << 4) >> 4;
                         inst.opcode = Opcode::B;
                         inst.operands = [
-                            Operand::Offset(extended_offset as i64),
+                            Operand::PCOffset(extended_offset as i64),
                             Operand::Nothing,
                             Operand::Nothing,
                             Operand::Nothing
@@ -9935,7 +10125,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         let Rt = word & 0x1f;
                         inst.operands = [
                             Operand::Register(SizeCode::W, Rt as u16),
-                            Operand::Offset(extended_offset as i64),
+                            Operand::PCOffset(extended_offset as i64),
                             Operand::Nothing,
                             Operand::Nothing
                         ];
@@ -9947,7 +10137,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         let Rt = word & 0x1f;
                         inst.operands = [
                             Operand::Register(SizeCode::W, Rt as u16),
-                            Operand::Offset(extended_offset as i64),
+                            Operand::PCOffset(extended_offset as i64),
                             Operand::Nothing,
                             Operand::Nothing
                         ];
@@ -9961,7 +10151,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         inst.operands = [
                             Operand::Register(SizeCode::W, Rt as u16),
                             Operand::Imm16(b as u16),
-                            Operand::Offset(extended_offset as i64),
+                            Operand::PCOffset(extended_offset as i64),
                             Operand::Nothing
                         ];
                     },
@@ -9974,7 +10164,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         inst.operands = [
                             Operand::Register(SizeCode::W, Rt as u16),
                             Operand::Imm16(b as u16),
-                            Operand::Offset(extended_offset as i64),
+                            Operand::PCOffset(extended_offset as i64),
                             Operand::Nothing
                         ];
                     },
@@ -9984,7 +10174,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         let cond = word & 0x0f;
                         inst.opcode = Opcode::Bcc(cond as u8);
                         inst.operands = [
-                            Operand::Offset(extended_offset as i64),
+                            Operand::PCOffset(extended_offset as i64),
                             Operand::Nothing,
                             Operand::Nothing,
                             Operand::Nothing
@@ -10003,7 +10193,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         let extended_offset = (offset << 4) >> 4;
                         inst.opcode = Opcode::BL;
                         inst.operands = [
-                            Operand::Offset(extended_offset as i64),
+                            Operand::PCOffset(extended_offset as i64),
                             Operand::Nothing,
                             Operand::Nothing,
                             Operand::Nothing
@@ -10016,7 +10206,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         let Rt = word & 0x1f;
                         inst.operands = [
                             Operand::Register(SizeCode::X, Rt as u16),
-                            Operand::Offset(extended_offset as i64),
+                            Operand::PCOffset(extended_offset as i64),
                             Operand::Nothing,
                             Operand::Nothing
                         ];
@@ -10028,7 +10218,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         let Rt = word & 0x1f;
                         inst.operands = [
                             Operand::Register(SizeCode::X, Rt as u16),
-                            Operand::Offset(extended_offset as i64),
+                            Operand::PCOffset(extended_offset as i64),
                             Operand::Nothing,
                             Operand::Nothing
                         ];
@@ -10042,7 +10232,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         inst.operands = [
                             Operand::Register(SizeCode::X, Rt as u16),
                             Operand::Imm16((b as u16) | 0x20),
-                            Operand::Offset(extended_offset as i64),
+                            Operand::PCOffset(extended_offset as i64),
                             Operand::Nothing
                         ];
                     },
@@ -10055,7 +10245,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         inst.operands = [
                             Operand::Register(SizeCode::X, Rt as u16),
                             Operand::Imm16((b as u16) | 0x20),
-                            Operand::Offset(extended_offset as i64),
+                            Operand::PCOffset(extended_offset as i64),
                             Operand::Nothing
                         ];
                     },

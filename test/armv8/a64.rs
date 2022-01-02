@@ -77,7 +77,7 @@ fn test_decode_str_ldr() {
             opcode: Opcode::LDR,
             operands: [
                 Operand::Register(SizeCode::X, 17),
-                Operand::RegOffset(25, 0),
+                Operand::RegPreIndex(25, 0, false),
                 Operand::Nothing,
                 Operand::Nothing,
             ]
@@ -89,7 +89,7 @@ fn test_decode_str_ldr() {
             opcode: Opcode::STR,
             operands: [
                 Operand::Register(SizeCode::X, 21),
-                Operand::RegOffset(31, 0xb0),
+                Operand::RegPreIndex(31, 0xb0, false),
                 Operand::Nothing,
                 Operand::Nothing,
             ]
@@ -101,7 +101,7 @@ fn test_decode_str_ldr() {
             opcode: Opcode::STRB,
             operands: [
                 Operand::Register(SizeCode::W, 0),
-                Operand::RegOffset(19, 0x280),
+                Operand::RegPreIndex(19, 0x280, false),
                 Operand::Nothing,
                 Operand::Nothing,
             ]
@@ -129,7 +129,7 @@ fn test_decode_misc() {
             opcode: Opcode::ADRP,
             operands: [
                 Operand::Register(SizeCode::X, 2),
-                Operand::Offset(0x8725000),
+                Operand::PCOffset(0x8725000),
                 Operand::Nothing,
                 Operand::Nothing
             ]
@@ -214,7 +214,7 @@ fn test_decode_branch() {
             opcode: Opcode::CBZ,
             operands: [
                 Operand::Register(SizeCode::X, 1),
-                Operand::Offset(8),
+                Operand::PCOffset(8),
                 Operand::Nothing,
                 Operand::Nothing
             ]
@@ -226,7 +226,7 @@ fn test_decode_branch() {
             opcode: Opcode::CBZ,
             operands: [
                 Operand::Register(SizeCode::X, 2),
-                Operand::Offset(12),
+                Operand::PCOffset(12),
                 Operand::Nothing,
                 Operand::Nothing
             ]
@@ -4866,7 +4866,7 @@ fn test_misc() {
         ([0x00, 0x30, 0xc0, 0x9a], "pacga x0, x0, x0"),
         ([0x00, 0x00, 0xae, 0x9e], "fmov x0, v0.d[1]"),
         ([0x00, 0x00, 0xe6, 0x9e], "fmov x0, h0"),
-        ([0x7f, 0x41, 0x00, 0xd5], "msr pstate.58, #0x1"),
+        ([0x7f, 0x41, 0x00, 0xd5], "msr pstate.0x58, #0x1"),
         ([0x00, 0x68, 0x20, 0x38], "strb w0, [x0, x0]"),
     ];
     let errs = run_tests(TESTS);

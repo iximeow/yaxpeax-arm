@@ -1,3 +1,10 @@
+## 0.2.0
+* added documentation to all public members.
+* fix tests incorrectly expecting `lsl #0` in memory operands where it would have no effect
+* remove some redundant `a64` operand kinds:
+  - `RegOffset` is now `RegPreIndex` with no writeback.
+  - `Offset` was a duplicate of `PCOffset`, and all uses have been so-renamed.
+
 ## 0.1.4
 * add or fix many a64 instructions, extend support up through armv8.5.
   - some disassembly and optional elements of instruction text does not match
