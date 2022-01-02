@@ -1,18 +1,9 @@
-// use yaxpeax_arch::{Arch, AddressDiff, Decoder, LengthedInstruction};
 use yaxpeax_arch::Arch;
 
-use armv7::ARMv7;
-use armv7::ConditionCode;
-use armv7::DecodeError;
-use armv7::CReg;
-use armv7::Reg;
-use armv7::Reader;
-use armv7::RegShift;
-use armv7::Operand;
-use armv7::Opcode;
-use armv7::Instruction;
-use armv7::InstDecoder;
-use armv7::StatusRegMask;
+use crate::armv7::{
+    ARMv7, ConditionCode, DecodeError, CReg, Reg, Reader, RegShift,
+    Operand, Opcode, Instruction, InstDecoder, StatusRegMask
+};
 
 use bitvec::prelude::*;
 

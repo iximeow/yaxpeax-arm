@@ -4605,7 +4605,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
                                 type OperandSizeTable = [Result<(SIMDSizeCode, SIMDSizeCode, SIMDSizeCode, SIMDSizeCode), DecodeError>; 8];
 
-                                use armv8::a64::SIMDSizeCode::*;
+                                use crate::armv8::a64::SIMDSizeCode::*;
 
                                 const TABLE_A: &'static OperandSizeTable = &[
                                     Ok((D, B, D, B)), Ok((Q, B, Q, B)),
@@ -6086,7 +6086,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 let q = (word >> 30) & 1;
 
                                 type OperandSizeTable = [Result<(SIMDSizeCode, SIMDSizeCode, SIMDSizeCode, SIMDSizeCode), DecodeError>; 8];
-                                use armv8::a64::SIMDSizeCode::*;
+                                use crate::armv8::a64::SIMDSizeCode::*;
 
                                 const TABLE_A: &'static OperandSizeTable = &[
                                     Ok((D, B, D, B)), Ok((Q, B, Q, B)),
@@ -6286,7 +6286,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
                                         type OperandSizeTable = [Result<(SIMDSizeCode, SIMDSizeCode, SIMDSizeCode, SIMDSizeCode), DecodeError>; 4];
 
-                                        use armv8::a64::SIMDSizeCode::*;
+                                        use crate::armv8::a64::SIMDSizeCode::*;
 
                                         const TABLE_A: &'static OperandSizeTable = &[
                                             Ok((Q, B, Q, B)),
