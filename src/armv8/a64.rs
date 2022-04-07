@@ -5563,14 +5563,14 @@ impl Decoder<ARMv8> for InstDecoder {
                                 inst.operands = [
                                     Operand::SIMDRegister(precision, Rd as u16),
                                     Operand::Register(size, Rn as u16),
-                                    Operand::Immediate(std::cmp::min(64 - scale, if size == SizeCode::X { 64 } else { 32 })),
+                                    Operand::Immediate(core::cmp::min(64 - scale, if size == SizeCode::X { 64 } else { 32 })),
                                     Operand::Nothing,
                                 ];
                             } else {
                                 inst.operands = [
                                     Operand::Register(size, Rd as u16),
                                     Operand::SIMDRegister(precision, Rn as u16),
-                                    Operand::Immediate(std::cmp::min(64 - scale, if size == SizeCode::X { 64 } else { 32 })),
+                                    Operand::Immediate(core::cmp::min(64 - scale, if size == SizeCode::X { 64 } else { 32 })),
                                     Operand::Nothing,
                                 ];
                             }
@@ -7694,7 +7694,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
                             let compound_idx = (op << 1) | sf;
                             let (opcode, source_size, dest_size) = DATA_PROCESSING_3_SOURCE.get(compound_idx as usize)
-                                .map(std::borrow::ToOwned::to_owned)
+                                .cloned()
                                 .unwrap_or(Err(DecodeError::InvalidOpcode))?;
 
                             inst.opcode = opcode;
