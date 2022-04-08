@@ -8,6 +8,7 @@ mod armv8;
 use yaxpeax_arch::{Arch, Decoder, U8Reader};
 
 #[test]
+#[ignore]
 fn test_armv7_does_not_panic() {
     let armv7 = <yaxpeax_arm::armv7::ARMv7 as Arch>::Decoder::default();
 
@@ -21,6 +22,7 @@ fn test_armv7_does_not_panic() {
     }
 }
 #[test]
+#[ignore]
 fn test_armv7_thumb_does_not_panic() {
     let mut armv7_t = <yaxpeax_arm::armv7::ARMv7 as Arch>::Decoder::default();
     armv7_t.set_thumb_mode(true);
@@ -35,6 +37,7 @@ fn test_armv7_thumb_does_not_panic() {
     }
 }
 #[test]
+#[ignore]
 fn test_armv8_does_not_panic() {
     let armv8 = <yaxpeax_arm::armv8::a64::ARMv8 as Arch>::Decoder::default();
 
