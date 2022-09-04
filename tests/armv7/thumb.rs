@@ -728,15 +728,37 @@ fn test_decode_bcc_cases() {
 }
 #[test]
 fn test_decode_32b_branch_cases() {
-    // encoding t4
     test_display(
         &[0xf3, 0xf7, 0x7c, 0xbe],
         "b.w $-0xc308"
     );
-    // encoding t4
     test_display(
         &[0x0c, 0xf0, 0x84, 0xb9],
         "b.w $+0xc308"
+    );
+    test_display(
+        &[0x00, 0xf4, 0x00, 0x90],
+        "b.w $-0x1000000"
+    );
+    test_display(
+        &[0xff, 0xf3, 0xff, 0x97],
+        "b.w $+0xfffffe"
+    );
+    test_display(
+        &[0x00, 0xf4, 0x00, 0xc0],
+        "blx.w $-0x1000000"
+    );
+    test_display(
+        &[0xff, 0xf3, 0xfe, 0xc7],
+        "blx.w $+0xfffffc"
+    );
+    test_display(
+        &[0x00, 0xf4, 0x00, 0xd0],
+        "bl.w $-0x1000000"
+    );
+    test_display(
+        &[0xff, 0xf3, 0xff, 0xd7],
+        "bl.w $+0xfffffe"
     );
     test_display(
         &[0x3f, 0xf4, 0xfe, 0xaf],
@@ -1428,6 +1450,10 @@ fn test_decode_cmp_cases() {
     test_display(
         &[0xff, 0x45],
         "cmp pc, pc"
+    );
+    test_display(
+        &[0xb4, 0xeb, 0x55, 0x4f],
+        "cmp.w r4, r5, lsr 17"
     );
 }
 #[test]
