@@ -1491,10 +1491,22 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                     if op & 0b0111000 != 0b0111000 {
                         // `Conditional branch` (`A8-332`)
                         // v6T2
-                        inst.condition = ConditionCode::build(((instr >> 8) & 0b1111) as u8);
+                        let imm11 = lower2[0..11].load::<u32>();
+                        let imm6 = instr2[0..6].load::<u32>();
+                        let s = instr2[10..11].load::<u32>();
+                        let j1 = lower2[13..14].load::<u32>();
+                        let j2 = lower2[11..12].load::<u32>();
+                        let imm =
+                            (imm11 as i32) |
+                            ((imm6 as i32) << 11) |
+                            ((j1 as i32) << 17) |
+                            ((j2 as i32) << 18) |
+                            ((s as i32) << 19);
+                        let imm = (imm << 12) >> 12;
+                        inst.condition = ConditionCode::build(((instr >> 6) & 0b1111) as u8);
                         inst.opcode = Opcode::B;
                         inst.operands = [
-                            Operand::BranchThumbOffset(((instr & 0b11111111) + 1) as i8 as i32),
+                            Operand::BranchThumbOffset(imm),
                             Operand::Nothing,
                             Operand::Nothing,
                             Operand::Nothing,
