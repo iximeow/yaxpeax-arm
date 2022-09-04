@@ -490,6 +490,10 @@ fn test_decode_adr_cases() {
 #[test]
 fn test_decode_bcc_cases() {
     test_display(
+        &[0xfe, 0xe7],
+        "b $-0x4"
+    );
+    test_display(
         &[0x80, 0x47],
         "blx r0"
     );
