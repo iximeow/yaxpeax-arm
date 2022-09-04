@@ -4174,7 +4174,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
             // v4T
             inst.opcode = Opcode::B;
             let imm = instr2[0..11].load::<u32>();
-            let imm = ((imm as i32) << 20) >> 20;
+            let imm = ((imm as i32) << 21) >> 21;
             inst.operands = [
                 Operand::BranchThumbOffset(imm),
                 Operand::Nothing,
