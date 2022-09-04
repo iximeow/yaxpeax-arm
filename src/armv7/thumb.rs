@@ -125,7 +125,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
 
         let op2 = &instr2[4..11];
 
-        if opword < 0b11110 {
+        if opword == 0b11101 {
             // op1 == 0b01
             // interpret `op1 == 0b01` lines of table `A6-9`
             if !op2[6] {
@@ -1022,10 +1022,10 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                 // this means `assert!(instr2[10])`
                 return decode_table_a6_30(decoder, inst, instr2, lower2);
             }
-        } else if opword < 0b11111 {
+        } else if opword == 0b11110 {
             // op1 == 0b10
             // interpret `op1 == 0b10` lines in table `A6-9` on `A6-228`:
-            if lower & 0x80 == 0 {
+            if !lower2[15] {
                 // op == 0
                 if !op2[5] {
                     // `A6.3.1` `Data-processing (modified immediate)` (`A6-229`)
@@ -1473,11 +1473,11 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                     }
                 }
             } else {
-                // op == 1
+                // A6.3 op == 1
                 // `Branches and miscellaneous control` (`A6-233`)
                 let imm8 = lower2[0..8].load::<u16>();
-                let op2 = lower2[8..11].load::<u8>();
-                let op1 = instr2[12..15].load::<u8>();
+                let op2 = lower2[8..12].load::<u8>();
+                let op1 = lower2[12..15].load::<u8>();
                 let op = instr2[4..11].load::<u8>();
                 if op1 & 0b101 == 0b000 {
                     // TODO: This entire section appears wrong? what encoding is the conditional
@@ -1915,74 +1915,50 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                             }
                         }
                     }
-                } else if op1 & 0b101 == 0b001 {
-                    // `Branch` (`A8-332`)
-                    // v6T2
-                    // TODO: encoding T3? unclear
-                    let imm11 = lower2[0..11].load::<u32>();
-                    let imm6 = instr2[0..6].load::<u32>();
-                    let j1 = lower2[13..14].load::<u32>();
-                    let j2 = lower2[11..12].load::<u32>();
-                    let s = instr2[10..11].load::<u32>();
-                    let imm =
-                        (imm11 as u32) |
-                        ((imm6 as u32) << 11) |
-                        ((j1 as u32) << 17) |
-                        ((j2 as u32) << 18) |
-                        ((s as u32) << 19);
-                    let imm = (imm << 12) >> 12;
-                    inst.opcode = Opcode::B;
-                    inst.operands = [
-                        Operand::Imm32(imm as u32),
-                        Operand::Nothing,
-                        Operand::Nothing,
-                        Operand::Nothing,
-                    ];
-                } else if op1 & 0b101 == 0b100 {
-                    // `Branch with Link and Exchange` (`A8-346`)
-                    // `UNDEFINED` in v4T
-                    // v5T
-                    let imm11 = lower2[0..11].load::<u32>();
-                    let imm10 = instr2[0..10].load::<u32>();
-                    let j1 = lower2[13..14].load::<u32>();
-                    let j2 = lower2[11..12].load::<u32>();
-                    let s = instr2[10..11].load::<u32>();
-                    let imm =
-                        (imm11 as u32) |
-                        ((imm10 as u32) << 11) |
-                        ((j1 as u32) << 21) |
-                        ((j2 as u32) << 22) |
-                        ((s as u32) << 23);
-                    let imm = (imm << 8) >> 8;
-                    inst.opcode = Opcode::BLX;
-                    inst.operands = [
-                        Operand::Imm32(imm as u32),
-                        Operand::Nothing,
-                        Operand::Nothing,
-                        Operand::Nothing,
-                    ];
                 } else {
-                    // `Brach with Link` (`A8-346`)
-                    // v4T
                     let imm11 = lower2[0..11].load::<u32>();
                     let imm10 = instr2[0..10].load::<u32>();
                     let j1 = lower2[13..14].load::<u32>();
                     let j2 = lower2[11..12].load::<u32>();
                     let s = instr2[10..11].load::<u32>();
+                    let i1 = 0x1 ^ s ^ j1;
+                    let i2 = 0x1 ^ s ^ j2;
                     let imm =
-                        (imm11 as u32) |
-                        ((imm10 as u32) << 11) |
-                        ((j1 as u32) << 21) |
-                        ((j2 as u32) << 22) |
-                        ((s as u32) << 23);
+                        (imm11 as i32) |
+                        ((imm10 as i32) << 11) |
+                        ((i2 as i32) << 21) |
+                        ((i1 as i32) << 22) |
+                        ((s as i32) << 23);
                     let imm = (imm << 8) >> 8;
-                    inst.opcode = Opcode::BL;
                     inst.operands = [
-                        Operand::Imm32(imm as u32),
+                        Operand::BranchThumbOffset(imm),
                         Operand::Nothing,
                         Operand::Nothing,
                         Operand::Nothing,
                     ];
+
+                    if op1 & 0b101 == 0b001 {
+                        // `Branch` (`A8-332`)
+                        // T4 encoding
+                        // v6T2
+                        inst.opcode = Opcode::B;
+                    } else if op1 & 0b101 == 0b100 {
+                        // `Branch with Link and Exchange` (`A8-346`)
+                        // `UNDEFINED` in v4T
+                        // v5T
+                        // Undefined if low bit of imm10 is set ("H")
+                        if imm11 & 0x1 != 0 {
+                            return Err(DecodeError::Undefined);
+                        }
+                        inst.opcode = Opcode::BLX;
+                    } else if op1 & 0b101 == 0b101 {
+                        // `Brach with Link` (`A8-346`)
+                        // v4T
+                        inst.opcode = Opcode::BL;
+                    } else {
+                        // Permanently undefined by A6-13
+                        return Err(DecodeError::Undefined);
+                    }
                 }
             }
         } else {
