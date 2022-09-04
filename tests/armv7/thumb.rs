@@ -738,6 +738,10 @@ fn test_decode_32b_branch_cases() {
         &[0x0c, 0xf0, 0x84, 0xb9],
         "b.w $+0xc308"
     );
+    test_display(
+        &[0x3f, 0xf4, 0xfe, 0xaf],
+        "b.weq $-0x4"
+    );
 }
 #[test]
 fn test_decode_bkpt_cases() {
