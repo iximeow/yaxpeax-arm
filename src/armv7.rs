@@ -3815,20 +3815,26 @@ impl Decoder<ARMv7> for InstDecoder {
                     ];
                 } else if op < 0b110000 {
                     // 10xxxx
-                    // the + 1 is to compensate for an architecturally-defined initial offset
                     inst.opcode = Opcode::B;
+
+                    // the + 2 is to compensate for an architecturally-defined initial offset
+                    let imm24 = ((((word & 0x00ff_ffff) + 2) << 8) as i32) >> 8;
+
                     inst.operands = [
-                        Operand::BranchOffset(((word & 0x00ffff) + 1) as i16 as i32),
+                        Operand::BranchOffset(imm24),
                         Operand::Nothing,
                         Operand::Nothing,
                         Operand::Nothing,
                     ];
                 } else {
                     // 11xxxx
-                    // the + 1 is to compensate for an architecturally-defined initial offset
+
+                    // the + 2 is to compensate for an architecturally-defined initial offset
+                    let imm24 = ((((word & 0x00ff_ffff) + 2) << 8) as i32) >> 8;
+
                     inst.opcode = Opcode::BL;
                     inst.operands = [
-                        Operand::BranchOffset(((word & 0x00ffff) + 1) as i16 as i32),
+                        Operand::BranchOffset(imm24),
                         Operand::Nothing,
                         Operand::Nothing,
                         Operand::Nothing,
