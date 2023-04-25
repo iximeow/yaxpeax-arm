@@ -1,3 +1,8 @@
+## 0.2.4
+* fix `no_std` builds
+* several fixes relating to arm- and thumb-mode v7 branch offset decoding
+  - thanks to both ehntoo and jam1garner for these!
+
 ## 0.2.3
 * add differential tests, initial impl only tests against capstone
 
