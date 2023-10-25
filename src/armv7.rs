@@ -1105,7 +1105,7 @@ pub struct RegShift {
 }
 
 impl RegShift {
-    fn into_shift(&self) -> RegShiftStyle {
+    pub fn into_shift(&self) -> RegShiftStyle {
         if self.data & 0b10000 == 0 {
             RegShiftStyle::RegImm(RegImmShift { data: self.data })
         } else {
