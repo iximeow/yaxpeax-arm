@@ -1105,6 +1105,8 @@ pub struct RegShift {
 }
 
 impl RegShift {
+    /// convert an instruction's `RegShift` operand into something more appropriate for
+    /// programmatic use.
     pub fn into_shift(&self) -> RegShiftStyle {
         if self.data & 0b10000 == 0 {
             RegShiftStyle::RegImm(RegImmShift { data: self.data })
