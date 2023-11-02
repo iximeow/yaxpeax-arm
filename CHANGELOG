@@ -2,6 +2,9 @@
 * fix `no_std` builds
 * several fixes relating to arm- and thumb-mode v7 branch offset decoding
   - thanks to both ehntoo and jam1garner for these!
+* make `ShiftStyle::into_shift` public. it was private as an oversight; this is
+  a useful conversion involved in programmatic handling of instructions.
+  - thanks to wscp for catching this!
 
 ## 0.2.3
 * add differential tests, initial impl only tests against capstone
