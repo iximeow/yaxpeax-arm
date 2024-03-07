@@ -10306,7 +10306,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
                                         match CRn {
                                             0b0010 => {
-                                                let CRm = (word >> 12) & 0xf;
+                                                let CRm = (word >> 8) & 0xf;
                                                 inst.opcode = Opcode::HINT;
                                                 inst.operands = [
                                                     Operand::ControlReg(CRm as u16),

@@ -65,7 +65,7 @@ fn test_display_misc() {
     );
     test_display(
         [0x1f, 0x20, 0x03, 0xd5],
-        "esb"
+        "nop"
     );
 }
 
@@ -663,7 +663,7 @@ fn test_decode_chrome_entrypoint() {
     );
     test_display(
         [0x1f, 0x20, 0x03, 0xd5],
-        "esb"
+        "nop"
     );
     test_display(
         [0x20, 0x00, 0x1f, 0xd6],
@@ -4175,7 +4175,7 @@ fn test_openblas_simd_movs() {
 #[test]
 fn test_openblas_misc_ops() {
     const TESTS: &[([u8; 4], &'static str)] = &[
-        ([0x1f, 0x20, 0x03, 0xd5], "esb"), // executes as nop, but also a barrier
+        ([0x1f, 0x20, 0x03, 0xd5], "nop"),
         ([0xbf, 0x3a, 0x03, 0xd5], "dmb ishst"),
         ([0xbf, 0x3b, 0x03, 0xd5], "dmb ish"),
         ([0xdf, 0x3f, 0x03, 0xd5], "isb"),
