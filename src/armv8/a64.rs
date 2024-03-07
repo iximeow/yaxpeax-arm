@@ -10301,12 +10301,13 @@ impl Decoder<ARMv8> for InstDecoder {
                                 0b000 => {
                                     // MSR, HINT, CLREX, DSB, DMB, ISB
                                     if Rt == 0b11111 {
+                                        let op1 = (word >> 16) & 0b111;
                                         let CRn = (word >> 12) & 0xf;
-                                        let op2 = (word >> 5) & 0x1f;
+                                        let CRm = (word >> 8) & 0xf;
+                                        let op2 = (word >> 5) & 0b111;
 
                                         match CRn {
                                             0b0010 => {
-                                                let CRm = (word >> 12) & 0xf;
                                                 inst.opcode = Opcode::HINT;
                                                 inst.operands = [
                                                     Operand::ControlReg(CRm as u16),
@@ -10316,8 +10317,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                                 ];
                                             },
                                             0b0011 => {
-                                                let CRm = (word >> 8) & 0xf;
-                                                let op2 = (word >> 5) & 0b111;
                                                 match op2 {
                                                     0b010 => {
                                                         inst.opcode = Opcode::CLREX;
@@ -10384,8 +10383,6 @@ impl Decoder<ARMv8> for InstDecoder {
                                             },
                                             0b0100 => {
                                                 inst.opcode = Opcode::MSR;
-
-                                                let op1 = (word >> 16) & 0b1111;
 
                                                 /*
                                                 if op1 == 0b001 || op1 == 0b010 || op1 >= 0b100 {
