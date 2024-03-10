@@ -1,0 +1,14 @@
+Build.dependencies({"git", "make", "rustc", "cargo"})
+
+Build.metric(
+  "nightly version",
+  string.gsub(Build.check_output({"rustc", "--version"}).stdout, '^%s*(.*)%s*$', '%1')
+)
+
+Step.start("crate")
+Step.push("build")
+Build.run({"cargo", "build"})
+
+Step.advance("test")
+Build.run({"cargo", "test"}, {name="test stdlib/fmt"})
+Build.run({"cargo", "test", "--no-default-features"}, {name="test nostdlib/fmt"})
