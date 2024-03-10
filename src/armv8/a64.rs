@@ -2872,7 +2872,7 @@ pub enum Operand {
     ///
     /// this operand will display as, for example, `cr5`.
     ControlReg(u16),
-    /// a selector for a field of the `pstate` control register.
+    /// a selector for a field of the `pstate` control registers.
     ///
     /// `yaxpeax-arm` does not name specific fields of `pstate` yet, so this operand displays as
     /// `pstate.0x50`.
@@ -2937,7 +2937,7 @@ impl Display for Operand {
                 }
             }
             Operand::PstateField(reg) => {
-                // `MSR (immediate)` writes to the `PSTATE` register, setting a few bit patterns as
+                // `MSR (immediate)` writes to the `PSTATE` registers, setting a few bit patterns as
                 // selected by `reg`.
                 write!(fmt, "pstate.{:#x}", reg)
             }
@@ -10399,7 +10399,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                                 */
 
                                                 inst.operands = [
-                                                    Operand::PstateField(((op1 << 3) | op2 << 3) as u8),
+                                                    Operand::PstateField(((op1 << 3) | op2) as u8),
                                                     Operand::Imm16(
                                                         ((word >> 8) & 0xf) as u16
                                                     ),
