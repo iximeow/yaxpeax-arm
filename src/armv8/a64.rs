@@ -3454,13 +3454,13 @@ impl Decoder<ARMv8> for InstDecoder {
                                 } else /* if opc == Opcode::MOVI || opc == Opcode::MVNI */ {
                                     if cmode == 0b1110 && op == 1 {
                                         let abcdefgh = ((abc << 5) | defgh) as u64;
-                                        let abcdefgh = (abcdefgh | (abcdefgh << 16)) & 0x000000ff000000ff;
-                                        let abcdefgh = (abcdefgh | (abcdefgh << 8))  & 0x00ff00ff00ff00ff;
-                                        let abcdefgh = (abcdefgh | (abcdefgh << 4))  & 0x0f0f0f0f0f0f0f0f;
-                                        let abcdefgh = (abcdefgh | (abcdefgh << 2))  & 0x3333333333333333;
-                                        let abcdefgh = (abcdefgh | (abcdefgh << 1))  & 0x5555555555555555;
+                                        let mut bytes = [0u8; 8];
+                                        for i in 0..8 {
+                                            let byte = ((abcdefgh as i8) << (7 - i)) >> 7;
+                                            bytes[i] = byte as u8;
+                                        }
 
-                                        Operand::Imm64(abcdefgh | (abcdefgh << 1))
+                                        Operand::Imm64(u64::from_le_bytes(bytes))
                                     } else {
                                         let abcdefgh = ((abc << 5) | defgh) as u64;
                                         let imm8 = abcdefgh;
