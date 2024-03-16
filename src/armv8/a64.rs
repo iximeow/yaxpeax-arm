@@ -9105,8 +9105,10 @@ impl Decoder<ARMv8> for InstDecoder {
                                     // V==0
                                     let w = (word >> 11) & 1;
                                     let imm9 = ((word >> 12) & 0b1_1111_1111) as i16;
-                                    let imm9 = ((imm9 << 7) >> 7) as i32;
-                                    let imm9 = imm9 << 3; // `simm` is stored as a multiple of 8
+                                    let S = ((word >> 22) & 1) as i16;
+                                    let imm10 = imm9 | (S << 9);
+                                    let imm10 = imm10 << 3; // `simm` is stored as a multiple of 8
+                                    let imm10 = ((imm10 << 3) >> 3) as i32;
                                     let m = (word >> 23) & 1;
                                     let size = (word >> 30) & 0b11;
                                     if size != 0b11 {
@@ -9122,9 +9124,9 @@ impl Decoder<ARMv8> for InstDecoder {
                                     inst.operands = [
                                         Operand::Register(SizeCode::X, Rt),
                                         if w == 0 {
-                                            Operand::RegPreIndex(Rn, imm9, false)
+                                            Operand::RegPreIndex(Rn, imm10, false)
                                         } else {
-                                            Operand::RegPreIndex(Rn, imm9, true)
+                                            Operand::RegPreIndex(Rn, imm10, true)
                                         },
                                         Operand::Nothing,
                                         Operand::Nothing,
