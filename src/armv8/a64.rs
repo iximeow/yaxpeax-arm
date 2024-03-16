@@ -8433,7 +8433,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             }
                             0b10 => {
                                 inst.opcode = Opcode::LDRSW;
-                                SizeCode::W
+                                SizeCode::X
                             }
                             0b11 => {
                                 inst.opcode = Opcode::PRFM;

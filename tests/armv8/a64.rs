@@ -153,7 +153,6 @@ fn test_decode_misc() {
     );
 }
 
-#[ignore]
 #[test]
 fn test_display_ldr() {
     test_display(
@@ -168,10 +167,7 @@ fn test_display_ldr() {
         [0xff, 0xff, 0x00, 0x9c],
         "ldr q31, $+0x1ffc"
     );
-    test_display(
-        [0xff, 0xff, 0x00, 0xdc],
-        "invalid"
-    );
+    test_err([0xff, 0xff, 0x00, 0xdc], DecodeError::InvalidOpcode);
     test_display(
         [0x88, 0xff, 0x00, 0x18],
         "ldr w8, $+0x1ff0"
@@ -186,7 +182,7 @@ fn test_display_ldr() {
     );
     test_display(
         [0x88, 0xff, 0x00, 0xd8],
-        "prfm plil1keep, #0x1ff0"
+        "prfm plil1keep, $+0x1ff0"
     );
 }
 
