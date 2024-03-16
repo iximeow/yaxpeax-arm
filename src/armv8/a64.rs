@@ -2584,7 +2584,7 @@ impl Display for Opcode {
                     0b1101 => write!(fmt, "dmb ld"),
                     0b1110 => write!(fmt, "dmb st"),
                     0b1111 => write!(fmt, "dmb sy"),
-                    _ => write!(fmt, "dmb {:x}", option)
+                    _ => write!(fmt, "dmb #{}", option)
                 };
             }
             Opcode::DSB(option) => {
@@ -2601,7 +2601,7 @@ impl Display for Opcode {
                     0b1101 => write!(fmt, "dsb ld"),
                     0b1110 => write!(fmt, "dsb st"),
                     0b1111 => write!(fmt, "dsb sy"),
-                    _ => write!(fmt, "dsb {:x}", option)
+                    _ => write!(fmt, "dsb #{}", option)
                 };
             }
             Opcode::HINT => "hint",
