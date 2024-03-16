@@ -12,7 +12,7 @@ use std::num::ParseIntError;
 enum ParsedOperand {
     Register { size: char, num: u8 },
     Memory(String),
-    MemoryWithOffset { base: String, offset: u32, writeback: bool },
+    MemoryWithOffset { base: String, offset: Option<i64>, writeback: bool },
     SIMDRegister { size: char, num: u8 },
 //    SIMDRegisterElements { num: u8, elems: u8, elem_size: char },
 //    SIMDRegisterElement { num: u8, elem_size: char, elem: u8 },
@@ -110,6 +110,21 @@ fn test_instruction_parsing() {
             None,
         ]
     });
+
+    let inst = ParsedDisassembly::parse("stlurb w0, [x0, #0x1]");
+    assert_eq!(inst, ParsedDisassembly {
+        opcode: "stlurb".to_string(),
+        operands: [
+            Some(ParsedOperand::Register { size: 'w', num: 0 }),
+            Some(ParsedOperand::MemoryWithOffset { base: "x0".to_string(), offset: Some(1), writeback: false }),
+            None,
+            None,
+            None,
+            None,
+        ]
+    });
+    let inst2 = ParsedDisassembly::parse("stlurb w0, [x0, #1]");
+    assert_eq!(inst, inst2);
 }
 
 impl ParsedOperand {
@@ -155,12 +170,40 @@ impl ParsedOperand {
             let imm = parse_hex_or_dec(imm_str);
             (ParsedOperand::PCRel(imm), end)
         } else if s.as_bytes()[0] == b'[' {
-            let mut end = s.find(']').map(|x| x + 1).unwrap_or(s.len());
+            let brace_end = s.find(']').map(|x| x + 1).unwrap_or(s.len());
+            let mut end = brace_end;
+            let mut writeback = false;
             if s.as_bytes().get(end) == Some(&b'!') {
                 end += 1;
+                writeback = true;
             }
 
-            (ParsedOperand::Memory(s[0..end].to_string()), end)
+            let addr = &s[1..brace_end - 1];
+
+            let offset = addr.rfind(',').map(|comma| {
+                addr[comma + 1..].trim()
+            }).and_then(|mut offset_str| {
+                if offset_str.as_bytes().get(0) == Some(&b'#') {
+                    offset_str = &offset_str[1..];
+
+                    Some(parse_hex_or_dec(offset_str))
+                } else {
+                    None
+                }
+            });
+
+            let base_end = addr.rfind(',').unwrap_or(addr.len());
+            let base = addr[..base_end].trim();
+
+            if writeback || offset.is_some() {
+                (ParsedOperand::MemoryWithOffset {
+                    base: base.to_string(),
+                    offset: offset,
+                    writeback,
+                }, end)
+            } else {
+                (ParsedOperand::Memory(base.to_string()), end)
+            }
         } else if s.as_bytes()[0] == b'{' {
             let mut brace_end = s.find('}');
             if let Some(brace_end) = brace_end {
