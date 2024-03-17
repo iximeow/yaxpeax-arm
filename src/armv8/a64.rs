@@ -3195,7 +3195,7 @@ impl Decoder<ARMv8> for InstDecoder {
          */
 
         let section_bits = word >> 25;
-        let section = [
+        static SECTIONS: [Section; 16] = [
             Section::SME,                            // 0000 // SME encodings
             Section::Unallocated,                    // 0001
             Section::SVE,                            // 0010 // SVE encodings
@@ -3212,7 +3212,8 @@ impl Decoder<ARMv8> for InstDecoder {
             Section::DataProcessingReg,              // 1101
             Section::LoadStore,                      // 1110
             Section::DataProcessingSimd2,            // 1111
-        ][(section_bits & 0x0f) as usize];
+        ];
+        let section = SECTIONS[(section_bits & 0x0f) as usize];
 
 //        crate::armv8::a64::std::eprintln!("word: {:#x}, bits: {:#b}", word, section_bits & 0xf);
 
