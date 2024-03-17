@@ -608,7 +608,7 @@ fn capstone_differential() {
         */
     }
 
-    const NR_THREADS: u64 = 64;
+    const NR_THREADS: u64 = 512;
 
     let range_size = (u32::MAX as u64 + 1) / NR_THREADS;
 
