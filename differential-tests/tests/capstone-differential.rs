@@ -451,25 +451,10 @@ fn capstone_differential() {
                             }
                         }
 
-                        if yax_text.replace("lsl", "uxtw") == cs_text {
-                            return true;
-                        }
-
-                        if cs_text.starts_with("ubfx ") {
-                            return true;
-                        }
-
                         // some instructions like `11400000` have an immeidate lsl #12 as their
                         // last operand. yax normalizes this to an unshifted `imm << 12`, capstone
                         // just prints lsl #12.
                         if cs_text.starts_with(yax_text) && cs_text.ends_with(", lsl #12") {
-                            return true;
-                        }
-
-                        // yax and capstone deal with immediates in `mov reg, imm` a little
-                        // differently. they're correct, but displayed differently (0xffffffff
-                        // instead of -1)
-                        if cs_text.starts_with("mov ") && yax_text.starts_with("mov ") {
                             return true;
                         }
 
