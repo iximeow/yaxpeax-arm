@@ -4931,3 +4931,19 @@ fn test_misc() {
 
     assert!(errs.is_empty());
 }
+
+#[test]
+fn test_bitfield() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x1c, 0x40, 0xd3], "ubfx x0, x0, #0x0, #0x8"),
+        ([0x1f, 0x1c, 0x00, 0x53], "uxtb wzr, w0"),
+    ];
+
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}

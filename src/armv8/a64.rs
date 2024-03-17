@@ -444,21 +444,15 @@ impl Display for Instruction {
             },
             Opcode::UBFM => {
                 // TODO: handle ubfx alias
-                if let Operand::Immediate(0) = self.operands[2] {
-                    let newdest = if let Operand::Register(_size, destnum) = self.operands[0] {
-                        Operand::Register(SizeCode::W, destnum)
-                    } else {
-                        unreachable!("operand 1 is always a register");
-                    };
-                    let newsrc = if let Operand::Register(_size, srcnum) = self.operands[1] {
-                        Operand::Register(SizeCode::W, srcnum)
-                    } else {
-                        unreachable!("operand 1 is always a register");
-                    };
+                if let (
+                    Operand::Register(SizeCode::W, destnum),
+                    Operand::Register(SizeCode::W, srcnum),
+                    Operand::Immediate(0)
+                ) = (self.operands[0], self.operands[1], self.operands[2]) {
                     if let Operand::Immediate(7) = self.operands[3] {
-                        return write!(fmt, "uxtb {}, {}", newdest, newsrc);
+                        return write!(fmt, "uxtb {}, {}", self.operands[0], self.operands[1]);
                     } else if let Operand::Immediate(15) = self.operands[3] {
-                        return write!(fmt, "uxth {}, {}", newdest, newsrc);
+                        return write!(fmt, "uxth {}, {}", self.operands[0], self.operands[1]);
                     }
                 }
                 if let Operand::Immediate(imms) = self.operands[3] {
