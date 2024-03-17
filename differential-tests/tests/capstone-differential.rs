@@ -390,6 +390,12 @@ fn capstone_differential() {
                             return true;
                         }
 
+                        if parsed_yax.opcode == "sb" && parsed_cs.opcode == "msr" {
+                            // capstone doesn't report the `sb` speculation barrier, for whatever
+                            // reason?
+                            return true;
+                        }
+
                         if false {
                             eprintln!("yax: {} -> {:?}", yax_text, parsed_yax);
                             eprintln!("cs: {} -> {:?}", cs_text, parsed_cs);
@@ -510,10 +516,6 @@ fn capstone_differential() {
 
                         // yax shows dcps{1,2} operand, capstone does not?
                         if yax_text.starts_with("dcps") {
-                            return true;
-                        }
-
-                        if cs_text.starts_with("msr ") {
                             return true;
                         }
 
