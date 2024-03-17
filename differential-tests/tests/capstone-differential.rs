@@ -90,10 +90,12 @@ impl PartialEq for ParsedOperand {
 
 #[test]
 fn test_operand_parsing() {
-    assert_eq!(ParsedOperand::parse("xzr"), (ParsedOperand::Register { size: 'x', num: 0 }, 3));
-    assert_eq!(ParsedOperand::parse("wzr"), (ParsedOperand::Register { size: 'w', num: 0 }, 3));
-    assert_eq!(ParsedOperand::parse("w1"), (ParsedOperand::Register { size: 'w', num: 1 }, 2));
-    assert_eq!(ParsedOperand::parse("x1"), (ParsedOperand::Register { size: 'x', num: 1 }, 2));
+    assert_eq!(ParsedOperand::parse("xzr", 64), (ParsedOperand::Register { size: 'x', num: 32 }, 3));
+    assert_eq!(ParsedOperand::parse("wzr", 64), (ParsedOperand::Register { size: 'w', num: 32 }, 3));
+    assert_eq!(ParsedOperand::parse("xsp", 64), (ParsedOperand::Register { size: 'x', num: 33 }, 3));
+    assert_eq!(ParsedOperand::parse("wsp", 64), (ParsedOperand::Register { size: 'w', num: 33 }, 3));
+    assert_eq!(ParsedOperand::parse("w1", 64), (ParsedOperand::Register { size: 'w', num: 1 }, 2));
+    assert_eq!(ParsedOperand::parse("x1", 64), (ParsedOperand::Register { size: 'x', num: 1 }, 2));
 }
 
 #[test]
@@ -125,10 +127,15 @@ fn test_instruction_parsing() {
     });
     let inst2 = ParsedDisassembly::parse("stlurb w0, [x0, #1]");
     assert_eq!(inst, inst2);
+
+    let inst = ParsedDisassembly::parse("mov wsp, #0x80000001");
+    assert_eq!(inst.opcode, "mov");
+    assert_eq!(inst.operands[0], Some(ParsedOperand::Register { size: 'w', num: 33 }));
+    assert_eq!(inst.operands[1], Some(ParsedOperand::Immediate(-0x7fffffff)));
 }
 
 impl ParsedOperand {
-    fn parse(s: &str) -> (Self, usize) {
+    fn parse(s: &str, width: u8) -> (Self, usize) {
         let parse_hex_or_dec = |mut s: &str| {
             let mut negate = false;
             if s.as_bytes()[0] == b'-' {
@@ -157,6 +164,11 @@ impl ParsedOperand {
                 (ParsedOperand::Float(f64::from_str(imm_str).expect("can parse string")), end)
             } else {
                 let imm = parse_hex_or_dec(imm_str);
+                let imm = if width == 32 {
+                    imm as i32 as i64
+                } else {
+                    imm
+                };
                 (ParsedOperand::Immediate(imm), end)
             }
         } else if s.as_bytes()[0] == b'$' {
@@ -232,7 +244,10 @@ impl ParsedOperand {
             match (s.as_bytes()[0] as char) {
                 sz @ 'w' | sz @ 'x' => {
                     if &s[1..end] == "zr" {
-                        return (ParsedOperand::Register { size: sz, num: 0 }, 3);
+                        return (ParsedOperand::Register { size: sz, num: 32 }, 3);
+                    }
+                    if &s[1..end] == "sp" {
+                        return (ParsedOperand::Register { size: sz, num: 33 }, 3);
                     }
                     let num: Result<u8, ParseIntError> = s[1..end].parse();
                     match num {
@@ -293,14 +308,18 @@ impl ParsedDisassembly {
             let opcode = opcode.to_string();
 
             let mut i = 0;
+            let mut width = 64;
 
             while operands_text.len() > 0 {
                 if operands_text.as_bytes()[0] == b',' {
                     operands_text = &operands_text[1..];
                 }
                 operands_text = operands_text.trim();
-                let (parsed, amount) = ParsedOperand::parse(&operands_text);
+                let (parsed, amount) = ParsedOperand::parse(&operands_text, width);
                 operands[i] = Some(parsed);
+                if let Some(ParsedOperand::Register { size: 'w', .. }) = &operands[i] {
+                    width = 32;
+                }
                 operands_text = &operands_text[amount..];
                 i += 1;
             }
