@@ -384,13 +384,13 @@ fn capstone_differential() {
                     let yax_text = if let Ok(inst) = yax_res {
                         format!("{}", inst)
                     } else if let Err(yaxpeax_arm::armv8::a64::DecodeError::IncompleteDecoder) = yax_res {
-                        stats.missed_incomplete.fetch_add(1, Ordering::SeqCst);
+                        stats.missed_incomplete.fetch_add(1, Ordering::Relaxed);
                         continue;
                     } else {
                         // capstone dedodes the UNDEFINED encodings in C5.1.2 as "mrs", yax returns
                         // a decode error.
                         if cs_text.starts_with("mrs ") || cs_text.starts_with("msr ") {
-                            stats.yax_reject.fetch_add(1, Ordering::SeqCst);
+                            stats.yax_reject.fetch_add(1, Ordering::Relaxed);
                             continue;
                         } else {
                             panic!("yax errored where capstone succeeded. cs text: '{}', bytes: {:x?}", cs_text, bytes);
@@ -565,7 +565,7 @@ fn capstone_differential() {
                         eprintln!("disassembly mismatch: {} != {}. bytes: {:x?}", yax_text, cs_text, bytes);
                         std::process::abort();
                     } else {
-                        stats.good.fetch_add(1, Ordering::SeqCst);
+                        stats.good.fetch_add(1, Ordering::Relaxed);
                     }
                 } else {
                     // yax should also fail?
