@@ -9624,7 +9624,10 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Operand::Nothing,
                                 ];
                             }
-                            0b1011 => { inst.opcode = Opcode::Invalid; }
+                            0b1011 => {
+                                inst.opcode = Opcode::Invalid;
+                                return Err(DecodeError::InvalidOpcode);
+                            }
                             0b1100 => {
                                 inst.opcode = Opcode::STR;
                                 inst.operands = [
@@ -9652,7 +9655,10 @@ impl Decoder<ARMv8> for InstDecoder {
                                     Operand::Nothing,
                                 ];
                             }
-                            0b1111 => { inst.opcode = Opcode::Invalid; }
+                            0b1111 => {
+                                inst.opcode = Opcode::Invalid;
+                                return Err(DecodeError::InvalidOpcode);
+                            }
                             _ => { unreachable!("size and opc are four bits"); }
                         }
                     },
@@ -10292,6 +10298,7 @@ impl Decoder<ARMv8> for InstDecoder {
                             }
                             _ => {
                                 inst.opcode = Opcode::Invalid;
+                                return Err(DecodeError::InvalidOpcode);
                             }
                         }
                         let imm = (word >> 5) & 0xffff;
@@ -10309,14 +10316,27 @@ impl Decoder<ARMv8> for InstDecoder {
                         } else {
                             let Rt = word & 0x1f;
                             let Lop0 = ((word >> 19) & 0x7) as u8;
+                            let op1 = (word >> 16) & 0b111;
+                            let CRn = (word >> 12) & 0b1111;
+                            let CRm = (word >> 8) & 0b1111;
+                            let op2 = (word >> 5) & 0b111;
                             match Lop0 {
                                 0b000 => {
                                     // MSR, HINT, CLREX, DSB, DMB, ISB
                                     if Rt == 0b11111 {
-                                        let op1 = (word >> 16) & 0b111;
-                                        let CRn = (word >> 12) & 0xf;
-                                        let CRm = (word >> 8) & 0xf;
-                                        let op2 = (word >> 5) & 0b111;
+//                                        panic!("crn: {:2x}, op1: {:2x}", CRn, op1);
+
+                                        // the ARM ARM does not, as far as i can see, explicitly
+                                        // talk about these system instructiosn where op1 is a
+                                        // value other than 0b011. capstone disassembles
+                                        // instructions in here as `msr` and things, for example,
+                                        // [1f, 20, 00, d5] which is reported as
+                                        // `msr s0_0_c2_c0_0, xzr`. it seems these are more,
+                                        // invalid? in which case, return invalid.
+                                        if CRn != 0b0100 && op1 != 0b011 {
+                                            inst.opcode = Opcode::Invalid;
+                                            return Err(DecodeError::InvalidOpcode);
+                                        }
 
                                         match CRn {
                                             0b0010 => {
@@ -10390,6 +10410,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                                     }
                                                     _ => {
                                                         inst.opcode = Opcode::Invalid;
+                                                        return Err(DecodeError::InvalidOpcode);
                                                     }
                                                 };
                                             },
@@ -10421,18 +10442,15 @@ impl Decoder<ARMv8> for InstDecoder {
                                             }
                                             _ => {
                                                 inst.opcode = Opcode::Invalid;
+                                                return Err(DecodeError::InvalidOpcode);
                                             }
                                         }
                                     } else {
                                         inst.opcode = Opcode::Invalid;
+                                        return Err(DecodeError::InvalidOpcode);
                                     }
                                 }
                                 0b001 => {
-                                    let Rt = word & 0b11111;
-                                    let op2 = (word >> 5) & 0b111;
-                                    let CRm = (word >> 8) & 0b1111;
-                                    let CRn = (word >> 12) & 0b1111;
-                                    let op1 = (word >> 16) & 0b111;
                                     inst.opcode = Opcode::SYS(SysOps::new(op1 as u8, op2 as u8));
                                     inst.operands = [
                                         Operand::Register(SizeCode::X, Rt as u16),

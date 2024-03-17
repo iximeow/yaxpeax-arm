@@ -4757,10 +4757,14 @@ fn test_vec_shift() {
 #[test]
 fn test_reserved() {
     test_err([0x00, 0x00, 0x20, 0xd5], DecodeError::InvalidOpcode);
+    test_err([0x00, 0x00, 0x00, 0xd5], DecodeError::InvalidOpcode);
 }
 
 #[test]
 fn test_system() {
+    // capstone says `msr s0_0_c2_c0_0, xzr`, but this looks like an unallocated encoding?
+    test_err([0x1f, 0x20, 0x00, 0xd5], DecodeError::InvalidOpcode);
+
     const TESTS: &[([u8; 4], &'static str)] = &[
         ([0x00, 0x00, 0x08, 0xd5], "sys #0x0, c0, c0, #0x0, x0"),
         ([0x00, 0x00, 0x28, 0xd5], "sysl x0, #0x0, c0, c0, #0x0"),
