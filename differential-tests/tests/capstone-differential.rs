@@ -395,6 +395,17 @@ fn capstone_differential() {
                             eprintln!("cs: {} -> {:?}", cs_text, parsed_cs);
                         }
 
+                        if parsed_yax.opcode == parsed_cs.opcode && parsed_yax.opcode == "mrs" && parsed_yax.operands[0] == parsed_cs.operands[0] {
+                            if let Some(ParsedOperand::Other(o)) = parsed_yax.operands[1].as_ref() {
+                                if o.starts_with("s") {
+                                    // capstone knows about more system registers than yaxpeax-arm at the
+                                    // moment, so this is likely a case where the disagreement is on the
+                                    // name of the system register.
+                                    return true;
+                                }
+                            }
+                        }
+
                         if cs_text
                             .replace("uxtw #0", "uxtw")
                             .replace("uxtx #0", "uxtx") == yax_text {
@@ -420,14 +431,6 @@ fn capstone_differential() {
                         }
 
                         if cs_text.starts_with("ubfx ") {
-                            return true;
-                        }
-
-                        if yax_text.starts_with("adrp ") {
-                            return true;
-                        }
-
-                        if yax_text.starts_with("adr ") {
                             return true;
                         }
 
@@ -471,31 +474,6 @@ fn capstone_differential() {
                             return true;
                         }
 
-                        // differences on displaying immediates..
-                        let new_cs_text = cs_text
-                            .replace("#0x", "")
-                            .replace("#-0x", "")
-                            .replace("#-", "")
-                            .replace("#", "");
-                        let new_yax_text = yax_text
-                            .replace("#0x", "")
-                            .replace("#-0x", "")
-                            .replace("#-", "")
-                            .replace("#", "")
-                            .replace("$+0x", "");
-                        if new_cs_text == new_yax_text {
-                            return true;
-                        }
-
-                        if cs_text.len() > 7 && yax_text.len() > 7 {
-                            if &cs_text[..7] == &yax_text[..7] && (cs_text.contains("#-") || yax_text.contains("#-")) {
-                                return true;
-                            }
-                            if &cs_text[..7] == &yax_text[..7] && (cs_text.contains("shll") || yax_text.contains("shll")) {
-                                return true;
-                            }
-                        }
-
                         if parsed_yax.opcode == "mov" && parsed_cs.opcode == "dup" {
                             if parsed_yax.operands == parsed_cs.operands {
                                 return true;
@@ -510,31 +488,9 @@ fn capstone_differential() {
                             return true;
                         }
 
-                        if cs_text.len() > 10 && yax_text.len() > 10 {
-                            // eh they're probably the same but yax has a signed hex and capstone has
-                            // unsigned
-                            if &cs_text[..10] == &yax_text[..10] && cs_text.contains("ffffffff") && yax_text.contains("#-0x") {
-                                return true;
-                            }
-                            // yax, for reg + shifted-reg operands, does not omit shift amount
-                            if &cs_text[..10] == &yax_text[..10] && yax_text.contains(" #0x0]") {
-                                return true;
-                            }
-
-                            // postindex offsets are base 10 in capstone sometimes?
-                            if yax_text.contains("], #0x") && cs_text.contains("], #") &&
-                                &cs_text[..20] == &yax_text[..20] {
-                                return true;
-                            }
-                        }
-
                         // yax omits `uxt{w,x}` for extended reg where extension matches the
                         // register size
                         if cs_text.starts_with(yax_text) && (cs_text.ends_with("uxtx") || cs_text.ends_with("uxtw")) {
-                            return true;
-                        }
-
-                        if cs_text.starts_with(yax_text) && cs_text.ends_with("0") {
                             return true;
                         }
 
@@ -542,10 +498,6 @@ fn capstone_differential() {
                         // way.
                         // yax will not print shift because of its ineffectual nature.
                         if (cs_text.starts_with("strb") || cs_text.starts_with("ldrb") || cs_text.starts_with("ldrsb") || cs_text.starts_with("ldr b") || cs_text.starts_with("str b")) && cs_text.contains(" lsl #0]") {
-                            return true;
-                        }
-
-                        if cs_text == yax_text.replace(" #0", "") {
                             return true;
                         }
 
@@ -595,17 +547,7 @@ fn capstone_differential() {
                         if cs_text.starts_with("sev ") {
                             return true;
                         }
-                        if cs_text.starts_with("mrs ") {
-                            return true;
-                        }
-                        if cs_text.starts_with("sysl ") {
-                            return true;
-                        }
                         if yax_text.starts_with("hint ") {
-                            return true;
-                        }
-
-                        if yax_text == &cs_text[..cs_text.len() - 1] && cs_text.ends_with(" ") {
                             return true;
                         }
 
