@@ -4753,6 +4753,11 @@ fn test_vec_shift() {
 }
 
 #[test]
+fn test_reserved() {
+    test_err([0x00, 0x00, 0x20, 0xd5], DecodeError::InvalidOpcode);
+}
+
+#[test]
 fn test_system() {
     const TESTS: &[([u8; 4], &'static str)] = &[
         ([0x00, 0x00, 0x08, 0xd5], "sys #0x0, c0, c0, #0x0, x0"),

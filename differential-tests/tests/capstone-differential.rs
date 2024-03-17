@@ -368,7 +368,14 @@ fn capstone_differential() {
                         stats.missed_incomplete.fetch_add(1, Ordering::SeqCst);
                         continue;
                     } else {
-                        panic!("yax errored where capstone succeeded. cs text: '{}', bytes: {:x?}", cs_text, bytes);
+                        // capstone dedodes the UNDEFINED encodings in C5.1.2 as "mrs", yax returns
+                        // a decode error.
+                        if cs_text.starts_with("mrs ") {
+                            stats.yax_reject.fetch_add(1, Ordering::SeqCst);
+                            continue;
+                        } else {
+                            panic!("yax errored where capstone succeeded. cs text: '{}', bytes: {:x?}", cs_text, bytes);
+                        }
                     };
 
                     fn acceptable_match(yax_text: &str, cs_text: &str) -> bool {

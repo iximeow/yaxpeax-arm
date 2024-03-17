@@ -10454,7 +10454,12 @@ impl Decoder<ARMv8> for InstDecoder {
                                     ];
                                 }
                                 0b100 => {
+                                    // quote C5.1.2:
+                                    // All encodings with L==1 and op0==0b0x are UNDEFINED, except
+                                    // for encodings in the area reserved for IMPLEMENTATION
+                                    // DEFINED use
                                     inst.opcode = Opcode::Invalid;
+                                    return Err(DecodeError::InvalidOpcode);
                                 }
                                 0b101 => {
                                     let Rt = word & 0b11111;
@@ -10484,6 +10489,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 }
                                 _ => {
                                     inst.opcode = Opcode::Invalid;
+                                    return Err(DecodeError::InvalidOpcode);
                                 }
                             }
                         }
