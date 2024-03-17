@@ -600,20 +600,20 @@ impl Display for Instruction {
                 }
             },
             Opcode::SYS(ops) => {
-                return write!(fmt, "sys {:#x}, {}, {}, {:#x}, {}",
+                return write!(fmt, "sys #{:#x}, {}, {}, #{:#x}, {}",
                     ops.op1(),
-                    self.operands[0],
                     self.operands[1],
-                    ops.op2(),
                     self.operands[2],
+                    ops.op2(),
+                    self.operands[0],
                 );
             }
             Opcode::SYSL(ops) => {
-                return write!(fmt, "sysl {}, {:#x}, {}, {}, {:#x}",
-                    self.operands[0],
-                    ops.op1(),
-                    self.operands[1],
+                return write!(fmt, "sysl {}, #{:#x}, {}, {}, #{:#x}",
                     self.operands[2],
+                    ops.op1(),
+                    self.operands[0],
+                    self.operands[1],
                     ops.op2(),
                 );
             }
@@ -2910,7 +2910,7 @@ impl Display for Operand {
                 write!(fmt, "{}, {}", Operand::Register(*size, *reg), Operand::Register(*size, *reg + 1))
             },
             Operand::ControlReg(reg) => {
-                write!(fmt, "cr{}", reg)
+                write!(fmt, "c{}", reg)
             },
             Operand::PrefetchOp(op) => {
                 let ty = (op >> 3) & 0b11;
@@ -2933,7 +2933,17 @@ impl Display for Operand {
                     0x4000 => fmt.write_str("midr_el1"),
                     0x5e82 => fmt.write_str("tpidr_el0"),
                     0x5f02 => fmt.write_str("cntvct_el0"),
-                    _ => write!(fmt, "sysreg:{:x}", reg),
+                    _ => {
+                        // syntax for otherwise-undescribed system register names is described in
+                        // MRS or similar, S<op0>_<op1>_<Cn>_<Cm>_<op2>
+                        // ... but that "op0" is `o0` + 2.
+                        let op2 = reg & 0b111;
+                        let CRm = (reg >> 3) & 0b1111;
+                        let CRn = (reg >> 7) & 0b1111;
+                        let op1 = (reg >> 11) & 0b111;
+                        let op0 = ((reg >> 14) & 0b1) + 2;
+                        write!(fmt, "s{op0}_{op1}_c{CRn}_c{CRm}_{op2}")
+                    },
                 }
             }
             Operand::PstateField(reg) => {
@@ -10418,7 +10428,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     }
                                 }
                                 0b001 => {
-                                    let Rt = word & 0b1111;
+                                    let Rt = word & 0b11111;
                                     let op2 = (word >> 5) & 0b111;
                                     let CRm = (word >> 8) & 0b1111;
                                     let CRn = (word >> 12) & 0b1111;
@@ -10447,7 +10457,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                     inst.opcode = Opcode::Invalid;
                                 }
                                 0b101 => {
-                                    let Rt = word & 0b1111;
+                                    let Rt = word & 0b11111;
                                     let op2 = (word >> 5) & 0b111;
                                     let CRm = (word >> 8) & 0b1111;
                                     let CRn = (word >> 12) & 0b1111;
