@@ -445,8 +445,8 @@ impl Display for Instruction {
             Opcode::UBFM => {
                 // TODO: handle ubfx alias
                 if let (
-                    Operand::Register(SizeCode::W, destnum),
-                    Operand::Register(SizeCode::W, srcnum),
+                    Operand::Register(SizeCode::W, _),
+                    Operand::Register(SizeCode::W, _),
                     Operand::Immediate(0)
                 ) = (self.operands[0], self.operands[1], self.operands[2]) {
                     if let Operand::Immediate(7) = self.operands[3] {
