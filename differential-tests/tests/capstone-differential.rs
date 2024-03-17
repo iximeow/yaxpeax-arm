@@ -361,7 +361,7 @@ fn capstone_differential() {
             unsafe { capstone_sys::cs_open(capstone_sys::cs_arch::CS_ARCH_ARM64, capstone_sys::cs_mode(0), &mut csh as *mut capstone_sys::csh) },
             0
         );
-        let mut cs_insn: *mut capstone_sys::cs_insn = unsafe { libc::malloc(std::mem::size_of::<capstone_sys::cs_insn>()) as *mut capstone_sys::cs_insn };
+        let cs_insn: *mut capstone_sys::cs_insn = unsafe { libc::malloc(std::mem::size_of::<capstone_sys::cs_insn>()) as *mut capstone_sys::cs_insn };
         /*
         let cs = Capstone::new()
             .arm64()
