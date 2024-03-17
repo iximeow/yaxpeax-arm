@@ -467,21 +467,16 @@ fn capstone_differential() {
                             }
                         }
 
-                        if cs_text
-                            .replace("uxtw #0", "uxtw")
-                            .replace("uxtx #0", "uxtx") == yax_text {
-
-                            return true;
-                        }
-
-                        // capstone discards uxtw in some circumstances for reasons i don't yet
-                        // know
-                        if let Some(yax_text) = yax_text.strip_suffix(", uxtw") {
+                        // capstone decodes [00, 40, 20, 0b] as "add w0, w0, w0, uxtw", note
+                        // missing shift amount (should be lsl, too). yax decodes this as
+                        // "add w0, w0, w0", no shift amount.
+                        //
+                        // same for x registers and uxtx, so handle that too.
+                        if let Some(cs_text) = cs_text.strip_suffix(", uxtw") {
                             if yax_text == cs_text {
                                 return true;
                             }
-                        }
-                        if let Some(cs_text) = cs_text.strip_suffix(", uxtw") {
+                        } else if let Some(cs_text) = cs_text.strip_suffix(", uxtx") {
                             if yax_text == cs_text {
                                 return true;
                             }
@@ -531,12 +526,6 @@ fn capstone_differential() {
                         // capstone bug! e0030033 is `bfxil w0, wzr, #0, #1`, but capstone picks
                         // the bfc alias instead. skip these, generally.
                         if yax_text.starts_with("bfxil") && (cs_text.starts_with("bfc") || cs_text.starts_with("bfi")) {
-                            return true;
-                        }
-
-                        // yax omits `uxt{w,x}` for extended reg where extension matches the
-                        // register size
-                        if cs_text.starts_with(yax_text) && (cs_text.ends_with("uxtx") || cs_text.ends_with("uxtw")) {
                             return true;
                         }
 
