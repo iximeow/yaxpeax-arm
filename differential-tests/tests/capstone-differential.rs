@@ -370,7 +370,7 @@ fn capstone_differential() {
                     } else {
                         // capstone dedodes the UNDEFINED encodings in C5.1.2 as "mrs", yax returns
                         // a decode error.
-                        if cs_text.starts_with("mrs ") {
+                        if cs_text.starts_with("mrs ") || cs_text.starts_with("msr ") {
                             stats.yax_reject.fetch_add(1, Ordering::SeqCst);
                             continue;
                         } else {
