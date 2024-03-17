@@ -356,11 +356,19 @@ fn capstone_differential() {
     };
 
     fn test_range(start: u64, end: u64, stats: Arc<Stats>) {
+        let mut csh: capstone_sys::csh = capstone_sys::csh::default();
+        assert_eq!(
+            unsafe { capstone_sys::cs_open(capstone_sys::cs_arch::CS_ARCH_ARM64, capstone_sys::cs_mode(0), &mut csh as *mut capstone_sys::csh) },
+            0
+        );
+        let mut cs_insn: *mut capstone_sys::cs_insn = unsafe { libc::malloc(std::mem::size_of::<capstone_sys::cs_insn>()) as *mut capstone_sys::cs_insn };
+        /*
         let cs = Capstone::new()
             .arm64()
             .mode(capstone::arch::arm64::ArchMode::Arm)
             .build()
             .expect("can create capstone");
+            */
 
         let yax = <yaxpeax_arm::armv8::a64::ARMv8 as Arch>::Decoder::default();
 
@@ -371,14 +379,34 @@ fn capstone_differential() {
                 eprintln!("case {:08x}", i);
             }
 
-            let res = cs.disasm_all(bytes, 0);
-            if let Ok(insts) = &res {
-                let insts_slice = insts.as_ref();
-                if insts_slice.len() == 1 {
+            let mut address = 0;
+//            let res = cs.disasm_all(bytes, 0);
+            let res = unsafe {
+                capstone_sys::cs_disasm_iter(
+                    csh,
+                    &mut bytes.as_ptr() as *mut *const u8,
+                    &mut bytes.len() as *mut usize,
+                    &mut 0u64 as *mut u64,
+                    cs_insn,
+                )
+            };
+//            if let Ok(insts) = &res {
+            if res {
+//                let insts_slice = insts.as_ref();
+//              if insts_slice.len() == 1 {
+                {
                     // then yax should also succeed..
                     // and it should only be one instruction
-                    let cs_text = format!("{}", insts_slice[0]);
-                    let cs_text = &cs_text[5..];
+//                    let cs_text = format!("{}", insts_slice[0]);
+//                    let cs_text = &cs_text[5..];
+                    let cs_text = unsafe {
+                        use std::ffi::CStr;
+                        format!("{} {}",
+                            CStr::from_ptr((*cs_insn).mnemonic.as_ptr()).to_str().unwrap(),
+                            CStr::from_ptr((*cs_insn).op_str.as_ptr()).to_str().unwrap(),
+                        )
+                    };
+                    let cs_text = &cs_text;
 
                     let yax_res = yax.decode(&mut yaxpeax_arch::U8Reader::new(bytes));
                     let yax_text = if let Ok(inst) = yax_res {
@@ -567,7 +595,7 @@ fn capstone_differential() {
                     } else {
                         stats.good.fetch_add(1, Ordering::Relaxed);
                     }
-                } else {
+//                } else {
                     // yax should also fail?
                 }
             }
