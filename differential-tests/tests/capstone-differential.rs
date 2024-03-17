@@ -1,9 +1,10 @@
 //! this is a distinct set of tests from the `yaxpeax-arm` root tests because i don't want extra
 //! (optional!) dependencies in the disassembler's dependency tree.
 
-use capstone::prelude::*;
+// use capstone::prelude::*;
 use yaxpeax_arch::{Arch, Decoder};
 
+use std::fmt::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::num::ParseIntError;
@@ -146,7 +147,7 @@ impl ParsedOperand {
             let v = if !s.starts_with("0x") {
                 i64::from_str_radix(s, 10).expect("can parse string")
             } else {
-                (u64::from_str_radix(&s[2..], 16).expect("can parse string") as i64)
+                u64::from_str_radix(&s[2..], 16).expect("can parse string") as i64
             };
             if negate {
                 -v
@@ -155,7 +156,6 @@ impl ParsedOperand {
             }
         };
 
-        let mut consumed = 0;
         if s.as_bytes()[0] == b'#' {
             let end = s.find(',').unwrap_or(s.len());
             let imm_str = &s[1..end];
@@ -217,7 +217,7 @@ impl ParsedOperand {
                 (ParsedOperand::Memory(base.to_string()), end)
             }
         } else if s.as_bytes()[0] == b'{' {
-            let mut brace_end = s.find('}');
+            let brace_end = s.find('}');
             if let Some(brace_end) = brace_end {
                 if s.as_bytes().get(brace_end + 1) == Some(&b'[') {
                     if let Some(end) = s.find(']') {
@@ -239,9 +239,9 @@ impl ParsedOperand {
                 (ParsedOperand::Other(s[0..end].to_string()), end)
             }
         } else {
-            let mut end = s.find(',').unwrap_or(s.len());
+            let end = s.find(',').unwrap_or(s.len());
             let substr = &s[..end];
-            match (s.as_bytes()[0] as char) {
+            match s.as_bytes()[0] as char {
                 sz @ 'w' | sz @ 'x' => {
                     if &s[1..end] == "zr" {
                         return (ParsedOperand::Register { size: sz, num: 32 }, 3);
@@ -254,7 +254,7 @@ impl ParsedOperand {
                         Ok(num) => {
                             (ParsedOperand::Register { size: sz, num }, end)
                         }
-                        Err(e) => {
+                        Err(_) => {
                             (ParsedOperand::Other(s[..end].to_string()), end)
                         }
                     }
@@ -265,7 +265,7 @@ impl ParsedOperand {
                         Ok(num) => {
                             (ParsedOperand::SIMDRegister { size: sz, num }, end)
                         }
-                        Err(e) => {
+                        Err(_) => {
                             (ParsedOperand::Other(s[..end].to_string()), end)
                         }
                     }
@@ -285,7 +285,7 @@ impl ParsedOperand {
                         }
                     }
                 }
-                other => {
+                _ => {
                     (ParsedOperand::Other(s[..end].to_string()), end)
                 }
             }
@@ -345,8 +345,6 @@ fn capstone_differential() {
         yax_reject: AtomicUsize,
         missed_incomplete: AtomicUsize,
     }
-    let mut yax_reject = AtomicUsize::new(0);
-    let mut missed_incomplete = AtomicUsize::new(0);
 
     let stats = Stats {
         mismatch: AtomicUsize::new(0),
@@ -356,6 +354,13 @@ fn capstone_differential() {
     };
 
     fn test_range(start: u64, end: u64, stats: Arc<Stats>) {
+        /*
+        let mut local_mismatch = 0usize;
+        let mut local_good = 0usize;
+        let mut local_yax_reject = 0usize;
+        let mut local_missed_incomplete = 0usize;
+        */
+
         let mut csh: capstone_sys::csh = capstone_sys::csh::default();
         assert_eq!(
             unsafe { capstone_sys::cs_open(capstone_sys::cs_arch::CS_ARCH_ARM64, capstone_sys::cs_mode(0), &mut csh as *mut capstone_sys::csh) },
@@ -372,6 +377,9 @@ fn capstone_differential() {
 
         let yax = <yaxpeax_arm::armv8::a64::ARMv8 as Arch>::Decoder::default();
 
+        let mut cs_text = String::new();
+        let mut yax_text = String::new();
+
         for i in start..=end {
             let i = i as u32;
             let bytes = &i.to_le_bytes();
@@ -379,7 +387,6 @@ fn capstone_differential() {
                 eprintln!("case {:08x}", i);
             }
 
-            let mut address = 0;
 //            let res = cs.disasm_all(bytes, 0);
             let res = unsafe {
                 capstone_sys::cs_disasm_iter(
@@ -395,22 +402,23 @@ fn capstone_differential() {
 //                let insts_slice = insts.as_ref();
 //              if insts_slice.len() == 1 {
                 {
+                    cs_text.clear();
+                    yax_text.clear();
                     // then yax should also succeed..
                     // and it should only be one instruction
 //                    let cs_text = format!("{}", insts_slice[0]);
 //                    let cs_text = &cs_text[5..];
-                    let cs_text = unsafe {
+                    unsafe {
                         use std::ffi::CStr;
-                        format!("{} {}",
+                        write!(cs_text, "{} {}",
                             CStr::from_ptr((*cs_insn).mnemonic.as_ptr()).to_str().unwrap(),
                             CStr::from_ptr((*cs_insn).op_str.as_ptr()).to_str().unwrap(),
-                        )
+                        ).unwrap();
                     };
-                    let cs_text = &cs_text;
 
                     let yax_res = yax.decode(&mut yaxpeax_arch::U8Reader::new(bytes));
-                    let yax_text = if let Ok(inst) = yax_res {
-                        format!("{}", inst)
+                    if let Ok(inst) = yax_res {
+                        write!(yax_text, "{}", inst).unwrap();
                     } else if let Err(yaxpeax_arm::armv8::a64::DecodeError::IncompleteDecoder) = yax_res {
                         stats.missed_incomplete.fetch_add(1, Ordering::Relaxed);
                         continue;
@@ -589,7 +597,7 @@ fn capstone_differential() {
                     }
 
     //                eprintln!("{}", yax_text);
-                    if !acceptable_match(&yax_text, cs_text) {
+                    if !acceptable_match(&yax_text, &cs_text) {
                         eprintln!("disassembly mismatch: {} != {}. bytes: {:x?}", yax_text, cs_text, bytes);
                         std::process::abort();
                     } else {
@@ -600,6 +608,15 @@ fn capstone_differential() {
                 }
             }
         }
+
+        // add to stats only once because for some reason on aarch64 the increments here call into
+        // a builtin to conditionally use the armv8.1 atomic instructions....???
+        /*
+        stats.mismatch.fetch_add(local_mismatch, Ordering::Release);
+        stats.good.fetch_add(local_good, Ordering::Release);
+        stats.yax_reject.fetch_add(local_yax_reject, Ordering::Release);
+        stats.missed_incomplete.fetch_add(local_missed_incomplete, Ordering::Release);
+        */
     }
 
     const NR_THREADS: u64 = 64;
