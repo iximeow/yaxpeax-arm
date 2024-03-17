@@ -1526,7 +1526,12 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                     inst.opcode = Opcode::MSR;
                                     inst.operands = [
                                         // TODO: is this the appropriate banked reg?
-                                        Reg::from_sysm(R, sysm as u8).expect("from_sysm works"),
+                                        if let Some(op) = Reg::from_sysm(R, sysm as u8) {
+                                            // TODO: from_sysm should succeed?
+                                            op
+                                        } else {
+                                            return Err(DecodeError::InvalidOperand);
+                                        },
                                         Operand::Reg(Reg::from_u8(rn)),
                                         Operand::Nothing,
                                         Operand::Nothing,
@@ -1570,7 +1575,12 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                             inst.opcode = Opcode::MSR;
                                             inst.operands = [
                                                 // TODO: is this the appropriate?
-                                                Reg::from_sysm(R, mask).expect("from_sysm works"),
+                                                if let Some(op) = Reg::from_sysm(R, mask) {
+                                                    // TODO: from_sysm should succeed?
+                                                    op
+                                                } else {
+                                                    return Err(DecodeError::InvalidOperand);
+                                                },
                                                 Operand::Reg(Reg::from_u8(rn)),
                                                 Operand::Nothing,
                                                 Operand::Nothing,
@@ -1583,7 +1593,12 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                         inst.opcode = Opcode::MSR;
                                         inst.operands = [
                                             // TODO: is this the appropriate?
-                                            Reg::from_sysm(R, mask).expect("from_sysm works"),
+                                            if let Some(op) = Reg::from_sysm(R, mask) {
+                                                // TODO: from_sysm should succeed?
+                                                op
+                                            } else {
+                                                return Err(DecodeError::InvalidOperand);
+                                            },
                                             Operand::Reg(Reg::from_u8(rn)),
                                             Operand::Nothing,
                                             Operand::Nothing,
@@ -1850,7 +1865,12 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                     inst.opcode = Opcode::MRS;
                                     inst.operands = [
                                         Operand::Reg(Reg::from_u8(rd)),
-                                        Reg::from_sysm(r != 0, sysm as u8).expect("from_sysm works"),
+                                        if let Some(op) = Reg::from_sysm(r != 0, sysm as u8) {
+                                            // TODO: from_sysm should succeed?
+                                            op
+                                        } else {
+                                            return Err(DecodeError::InvalidOperand);
+                                        },
                                         Operand::Nothing,
                                         Operand::Nothing,
                                     ];
@@ -1864,7 +1884,12 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                         inst.operands = [
                                             Operand::Reg(Reg::from_u8(rd)),
                                             // TODO: "<spec_reg>"?
-                                            Reg::from_sysm(false, 0).expect("from_sysm works"),
+                                            if let Some(op) = Reg::from_sysm(false, 0) {
+                                                // TODO: from_sysm should succeed?
+                                                op
+                                            } else {
+                                                return Err(DecodeError::InvalidOperand);
+                                            },
                                             Operand::Nothing,
                                             Operand::Nothing,
                                         ];
@@ -1878,7 +1903,12 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                         inst.operands = [
                                             Operand::Reg(Reg::from_u8(rd)),
                                             // TODO: "<spec_reg>"?
-                                            Reg::from_sysm(r != 0, 0).expect("from_sysm works"),
+                                            if let Some(op) = Reg::from_sysm(r != 0, 0) {
+                                                // TODO: from_sysm should succeed?
+                                                op
+                                            } else {
+                                                return Err(DecodeError::InvalidOperand);
+                                            },
                                             Operand::Nothing,
                                             Operand::Nothing,
                                         ];
