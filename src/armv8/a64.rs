@@ -7,7 +7,9 @@
 
 use core::fmt::{self, Display, Formatter};
 
-use yaxpeax_arch::{Arch, AddressDiff, Decoder, LengthedInstruction, Reader, ReadError, ShowContextual, YaxColors};
+use yaxpeax_arch::{Arch, AddressDiff, Decoder, LengthedInstruction, Reader, ReadError};
+#[allow(deprecated)]
+use yaxpeax_arch::{ShowContextual, YaxColors};
 
 #[allow(non_snake_case)]
 mod docs {
@@ -225,6 +227,7 @@ impl yaxpeax_arch::Instruction for Instruction {
 /// displaying an instruction the same way its `Display` impl would.
 pub struct NoContext;
 
+#[allow(deprecated)]
 impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, NoContext, T, Y> for Instruction {
     fn contextualize(&self, _colors: &Y, _address: u64, _context: Option<&NoContext>, out: &mut T) -> fmt::Result {
         write!(out, "{}", self)

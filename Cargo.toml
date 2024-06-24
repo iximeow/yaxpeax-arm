@@ -2,7 +2,7 @@
 
 name = "yaxpeax-arm"
 version = "0.2.6"
-authors = [ "iximeow <me@iximeow.net>" ]
+authors = ["iximeow <me@iximeow.net>"]
 license = "0BSD"
 repository = "http://git.iximeow.net/yaxpeax-arm/"
 description = "arm decoders for the yaxpeax project"
@@ -12,13 +12,11 @@ edition = "2018"
 [lib]
 
 [workspace]
-members = [
-    "differential-tests"
-]
+members = ["differential-tests"]
 
 [dependencies]
-yaxpeax-arch = { version = "0.2.2", default-features = false, features = [] }
-bitvec = "0.19"
+yaxpeax-arch = { version = "0.3.1", default-features = false, features = [] }
+bitvec = "1.0.1"
 "serde" = { version = "1.0", optional = true }
 "serde_derive" = { version = "1.0", optional = true }
 

@@ -7,7 +7,9 @@
 
 use core::fmt::{self, Display, Formatter};
 
-use yaxpeax_arch::{Arch, AddressDiff, Colorize, Decoder, LengthedInstruction, Reader, ReadError, NoColors, ShowContextual, YaxColors};
+use yaxpeax_arch::{Arch, AddressDiff, Decoder, LengthedInstruction, Reader, ReadError};
+#[allow(deprecated)]
+use yaxpeax_arch::{Colorize, NoColors, ShowContextual, YaxColors};
 
 mod thumb;
 
@@ -29,6 +31,7 @@ impl Display for ConditionedOpcode {
 /// displaying an instruction the same way its `Display` impl would.
 pub struct NoContext;
 
+#[allow(deprecated)]
 fn reg_name_colorize<Y: YaxColors>(reg: Reg, colors: &Y) -> impl fmt::Display {
     match reg.number() {
         0 => colors.register("r0"),
@@ -52,6 +55,7 @@ fn reg_name_colorize<Y: YaxColors>(reg: Reg, colors: &Y) -> impl fmt::Display {
 }
 
 #[allow(non_snake_case)]
+#[allow(deprecated)]
 impl <T: fmt::Write, Y: YaxColors> ShowContextual<u32, NoContext, T, Y> for Instruction {
     fn contextualize(&self, colors: &Y, _address: u32, _context: Option<&NoContext>, out: &mut T) -> fmt::Result {
         match self.opcode {
@@ -388,6 +392,7 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u32, NoContext, T, Y> for Inst
     }
 }
 
+#[allow(deprecated)]
 impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for ConditionedOpcode {
     fn colorize(&self, colors: &Y, out: &mut T) -> fmt::Result {
         match self.0 {
@@ -1552,6 +1557,7 @@ impl Display for Bank {
     }
 }
 
+#[allow(deprecated)]
 impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for Operand {
     fn colorize(&self, colors: &Y, f: &mut T) -> fmt::Result {
         match self {
@@ -1768,6 +1774,7 @@ impl Instruction {
     pub fn thumb(&self) -> bool { self.thumb }
 }
 
+#[allow(deprecated)]
 fn format_reg_list<T: fmt::Write, Y: YaxColors>(f: &mut T, mut list: u16, colors: &Y) -> Result<(), fmt::Error> {
     write!(f, "{{")?;
     let mut i = 0;
@@ -1789,6 +1796,7 @@ fn format_reg_list<T: fmt::Write, Y: YaxColors>(f: &mut T, mut list: u16, colors
 }
 
 #[allow(non_snake_case)]
+#[allow(deprecated)]
 fn format_shift<T: fmt::Write, Y: YaxColors>(f: &mut T, shift: RegShift, colors: &Y) -> Result<(), fmt::Error> {
     match shift.into_shift() {
         RegShiftStyle::RegImm(imm_shift) => {
@@ -1805,6 +1813,7 @@ fn format_shift<T: fmt::Write, Y: YaxColors>(f: &mut T, shift: RegShift, colors:
 }
 
 #[allow(non_snake_case)]
+#[allow(deprecated)]
 fn format_reg_shift_mem<T: fmt::Write, Y: YaxColors>(f: &mut T, Rd: Reg, shift: RegShift, add: bool, pre: bool, wback: bool, colors: &Y) -> Result<(), fmt::Error> {
     let op = if add { "" } else { "-" };
 
@@ -1830,6 +1839,7 @@ fn format_reg_shift_mem<T: fmt::Write, Y: YaxColors>(f: &mut T, Rd: Reg, shift: 
 }
 
 #[allow(non_snake_case)]
+#[allow(deprecated)]
 fn format_reg_imm_mem<T: fmt::Write, Y: YaxColors>(f: &mut T, Rn: Reg, imm: u16, add: bool, pre: bool, wback: bool, colors: &Y) -> Result<(), fmt::Error> {
     if imm != 0 {
         let op = if add { "" } else { "-" };
@@ -1862,6 +1872,7 @@ fn format_reg_imm_mem<T: fmt::Write, Y: YaxColors>(f: &mut T, Rn: Reg, imm: u16,
 
 impl Display for Instruction {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
+        #[allow(deprecated)]
         self.contextualize(&NoColors, 0, Some(&NoContext), f)
     }
 }

@@ -103,7 +103,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
     let word = u16::from_le_bytes(word_bytes);
     let instr = word;
 
-    let mut instr2 = bitarr![Lsb0, u16; 0u16; 16];
+    let mut instr2 = bitarr![u16, Lsb0; 0u16; 16];
     instr2[0..16].store(word);
 
     let opword = instr2[11..].load::<u16>();
@@ -120,7 +120,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
         words.next_n(&mut word_bytes)?;
         let lower = u16::from_le_bytes(word_bytes);
 
-        let mut lower2 = bitarr![Lsb0, u16; 0u16; 16];
+        let mut lower2 = bitarr![u16, Lsb0; 0u16; 16];
         lower2[0..16].store(lower);
 
         let op2 = &instr2[4..11];
@@ -4228,7 +4228,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
     Ok(())
 }
 
-fn decode_table_a6_30(decoder: &InstDecoder, inst: &mut Instruction, instr2: BitArray<Lsb0, [u16; 1]>, lower2: BitArray<Lsb0, [u16; 1]>) -> Result<(), DecodeError> {
+fn decode_table_a6_30(decoder: &InstDecoder, inst: &mut Instruction, instr2: BitArray<[u16; 1], Lsb0>, lower2: BitArray<[u16; 1], Lsb0>) -> Result<(), DecodeError> {
     // implementation of table `A6-30 Coprocessor, Advanced SIMD, and Floating-point instructions`
     let op1 = instr2[4..10].load::<usize>();
     if op1 & 0b11_1110 == 0b00_0000 {
