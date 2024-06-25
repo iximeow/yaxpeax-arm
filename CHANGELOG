@@ -1,3 +1,11 @@
+## 0.3.0
+
+* major version bump of yaxpeax-arch (0.2.7 -> 0.3.1)
+  - while there is no direct API breakage of yaxpeax-arch, typical use of the
+    yaxpeax crates would have issues with their yaxpeax-arch dependency not
+    matching the transitive dependency through specific decoder crates. so, major
+    version bump it is!
+
 ## 0.2.6
 
 * aarch64: add support for `udf` (`0000_0000_0000_0000_<imm16>`)
