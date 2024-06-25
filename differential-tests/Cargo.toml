@@ -7,7 +7,7 @@ description = "differential testing between yaxpeax-arm and other disassemblers"
 
 [dependencies]
 yaxpeax-arm = { path = "../", version = "*" }
-yaxpeax-arch = { version = "0.2.2", default-features = false, features = [] }
+yaxpeax-arch = { version = "0.3.1", default-features = false, features = [] }
 
 capstone = "*"
 capstone-sys = "*"
