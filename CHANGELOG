@@ -1,3 +1,8 @@
+## 0.2.6
+
+* aarch64: add support for `udf` (`0000_0000_0000_0000_<imm16>`)
+  - thank you @martin-fink!
+
 ## 0.2.5
 * fix decoding armv8 a64 hint instructions
   - in some cases the displayed hint instruction was incorrect
