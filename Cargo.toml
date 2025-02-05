@@ -16,7 +16,7 @@ members = ["differential-tests"]
 
 [dependencies]
 yaxpeax-arch = { version = "0.3.1", default-features = false, features = [] }
-bitvec = "1.0.1"
+bitvec = { version = "1.0.1", default-features = false, features = [] }
 "serde" = { version = "1.0", optional = true }
 "serde_derive" = { version = "1.0", optional = true }
 
