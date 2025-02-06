@@ -13,4 +13,7 @@ Step.advance("test")
 Build.run({"cargo", "test"}, {name="test stdlib/fmt"})
 Build.run({"cargo", "test", "--no-default-features"}, {name="test nostdlib/fmt"})
 
+Build.run({"cargo", "rustc", "--", "-C", "link-arg=-nostartfiles"}, {cwd="tests/no_std_check"})
+Build.run({"cargo", "rustc", "--release", "--", "-C", "link-arg=-nostartfiles"}, {cwd="tests/no_std_check"})
+
 Build.run({"cargo", "build", "--release"}, {cwd="differential-tests", name="build capstone differential"})

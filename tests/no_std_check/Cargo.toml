@@ -1,0 +1,24 @@
+[package]
+
+name = "no-std-test"
+version = "0.0.1"
+authors = ["iximeow <me@iximeow.net>"]
+license = "0BSD"
+description = "test crate to check that yaxpeax-arm is actually no-stds"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "no-std-test"
+path = "src/main.rs"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+
+[dependencies]
+yaxpeax-arm = { path = "../..", default-features = false }
+
+[workspace]
