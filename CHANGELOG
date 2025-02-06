@@ -1,3 +1,8 @@
+## 0.3.1
+
+* fix no-std transitively depending on std still
+  - thank you @encounter for the patch!
+
 ## 0.3.0
 
 * major version bump of yaxpeax-arch (0.2.7 -> 0.3.1)
