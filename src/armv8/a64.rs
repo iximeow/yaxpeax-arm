@@ -3058,7 +3058,7 @@ impl Display for Operand {
                 if *d as i64 as f64 == *d {
                     write!(fmt, "#{:0.1}", d)
                 } else {
-                    write!(fmt, "#{:0.}", d)
+                    write!(fmt, "#{:0}", d)
                 }
             },
             Operand::Imm16(i) => {
