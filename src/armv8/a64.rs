@@ -1240,6 +1240,7 @@ pub enum Opcode {
     B,
     BR,
     Bcc(u8),
+    BCcc(u8),
     BL,
     BLR,
     SVC,
@@ -1735,6 +1736,41 @@ pub enum Opcode {
     IRG,
     SUBP,
     SUBPS,
+
+    // instructions present with FEAT_PAuth
+    PACIASP,
+    PACIAZ,
+    PACIA1716,
+    PACIA171615,
+    PACIASPPC,
+    PACNBIASPPC,
+    PACIBSP,
+    PACIBZ,
+    PACIB1716,
+    PACIB171615,
+    PACIBSPPC,
+    PACNBIBSPPC,
+
+    AUTIASP,
+    AUTIAZ,
+    AUTIA1716,
+    AUTIA171615,
+    AUTIASPPC,
+    AUTIASPPCR,
+    AUTIBSP,
+    AUTIBZ,
+    AUTIB1716,
+    AUTIB171615,
+    AUTIBSPPC,
+    AUTIBSPPCR,
+
+    XPACLRI,
+    PACM,
+
+    RETAASPPC,
+    RETABSPPC,
+    RETAASPPCR,
+    RETABSPPCR,
 }
 
 impl Display for Opcode {
@@ -2566,8 +2602,44 @@ impl Display for Opcode {
             Opcode::SUBP => "subp",
             Opcode::SUBPS => "subps",
 
+            Opcode::PACIASP => "paciasp",
+            Opcode::PACIAZ => "paciaz",
+            Opcode::PACIA1716 => "pacia1716",
+            Opcode::PACIA171615 => "pacia171615",
+            Opcode::PACIASPPC => "paciasppc",
+            Opcode::PACNBIASPPC => "pacnbiasppc",
+            Opcode::PACIBSP => "pacibsp",
+            Opcode::PACIBZ => "pacibz",
+            Opcode::PACIB1716 => "pacib1716",
+            Opcode::PACIB171615 => "pacib171615",
+            Opcode::PACIBSPPC => "pacibsppc",
+            Opcode::PACNBIBSPPC => "pacnbibsppc",
+
+            Opcode::AUTIASP => "autiasp",
+            Opcode::AUTIAZ => "autiaz",
+            Opcode::AUTIA1716 => "autia1716",
+            Opcode::AUTIA171615 => "autia171615",
+            Opcode::AUTIASPPC => "autiasppc",
+            Opcode::AUTIASPPCR => "autiasppcr",
+            Opcode::AUTIBSP => "autibsp",
+            Opcode::AUTIBZ => "autibz",
+            Opcode::AUTIB1716 => "autib1716",
+            Opcode::AUTIB171615 => "autib171615",
+            Opcode::AUTIBSPPC => "autibsppc",
+            Opcode::AUTIBSPPCR => "autibsppcr",
+
+            Opcode::XPACLRI => "xpaclri",
+            Opcode::PACM => "pacm",
+            Opcode::RETAASPPC => "retaasppc",
+            Opcode::RETABSPPC => "retabsppc",
+            Opcode::RETAASPPCR => "retaasppcr",
+            Opcode::RETABSPPCR => "retabsppcr",
+
             Opcode::Bcc(cond) => {
                 return write!(fmt, "b.{}", Operand::ConditionCode(cond));
+            },
+            Opcode::BCcc(cond) => {
+                return write!(fmt, "bc.{}", Operand::ConditionCode(cond));
             },
             Opcode::DMB(option) => {
                 return match option {
@@ -7630,11 +7702,11 @@ impl Decoder<ARMv8> for InstDecoder {
                                             return Err(DecodeError::InvalidOpcode);
                                         }
 
-                                        if opcode >= 0b100000 {
+                                        if opcode >= 0b1000000 {
                                             return Err(DecodeError::InvalidOperand);
                                         }
 
-                                        let opc = &[
+                                        static OPCODES: [Result<Opcode, DecodeError>; 64] = [
                                             Ok(Opcode::PACIA),  Ok(Opcode::PACIB),
                                             Ok(Opcode::PACDA),  Ok(Opcode::PACDB),
                                             Ok(Opcode::AUTIA),  Ok(Opcode::AUTIB),
@@ -7651,21 +7723,58 @@ impl Decoder<ARMv8> for InstDecoder {
                                             Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
                                             Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
                                             Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
-                                        ][opcode as usize]?;
-                                        inst.opcode = *opc;
-                                        inst.operands = [
-                                            Operand::Register(SizeCode::X, Rd),
-                                            if opcode < 0b001000 {
-                                                Operand::RegisterOrSP(SizeCode::X, Rn)
-                                            } else {
-                                                if Rn != 0b11111 {
-                                                    return Err(DecodeError::InvalidOpcode);
-                                                }
-                                                Operand::Nothing
-                                            },
-                                            Operand::Nothing,
-                                            Operand::Nothing,
+                                            // 0b10_0000
+                                            Ok(Opcode::PACNBIASPPC), Ok(Opcode::PACNBIBSPPC),
+                                            Ok(Opcode::PACIA171615), Ok(Opcode::PACIB171615),
+                                            Ok(Opcode::AUTIASPPCR), Ok(Opcode::AUTIBSPPCR),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                            Ok(Opcode::PACIASPPC), Ok(Opcode::PACIBSPPC),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                            Ok(Opcode::AUTIA171615), Ok(Opcode::AUTIB171615),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
+                                            Err(DecodeError::InvalidOpcode), Err(DecodeError::InvalidOpcode),
                                         ];
+                                        let opc = OPCODES[opcode as usize]?;
+                                        inst.opcode = opc;
+                                        if opcode & 0b111110 == 0b100100 {
+                                            if Rd != 0b11110 {
+                                                return Err(DecodeError::InvalidOpcode);
+                                            }
+                                            inst.operands = [
+                                                Operand::RegisterOrSP(SizeCode::X, Rn),
+                                                Operand::Nothing,
+                                                Operand::Nothing,
+                                                Operand::Nothing,
+                                            ];
+                                        } else {
+                                            inst.operands = [
+                                                if opcode < 0b100000 {
+                                                    Operand::Register(SizeCode::X, Rd)
+                                                } else {
+                                                    if Rd != 0b11110 {
+                                                        return Err(DecodeError::InvalidOpcode);
+                                                    }
+                                                    Operand::Nothing
+                                                },
+                                                if opcode < 0b001000 {
+                                                    Operand::RegisterOrSP(SizeCode::X, Rn)
+                                                } else {
+                                                    if Rn != 0b11111 {
+                                                        return Err(DecodeError::InvalidOpcode);
+                                                    }
+                                                    Operand::Nothing
+                                                },
+                                                Operand::Nothing,
+                                                Operand::Nothing,
+                                            ];
+                                        }
                                     }
                                     _ => {
                                         // Data-processing (1 source), op2 > 0b00001 is (currently
@@ -8145,7 +8254,7 @@ impl Decoder<ARMv8> for InstDecoder {
                         ];
                     },
                     0b111 => {
-                        // extract
+                        // extract or data-processing (1 source immediate)
                         // let Rd = word & 0x1f;
                         // let Rn = (word >> 5) & 0x1f;
                         let imms = (word >> 10) & 0x3f;
@@ -8170,6 +8279,27 @@ impl Decoder<ARMv8> for InstDecoder {
                                 inst.opcode = Opcode::EXTR;
                                 SizeCode::X
                             }
+                        } else if sf_op21 == 0b111 {
+                            // C4.1.93.1 Data-processing (1 source immediate)
+                            let opc = No0;
+                            if opc == 0b00 {
+                                inst.opcode = Opcode::AUTIASPPC;
+                            } else if opc == 0b01 {
+                                inst.opcode = Opcode::AUTIBSPPC;
+                            } else {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+
+                            let raw_imm16 = (word >> 5) & 0xffff;
+                            let imm16 = -((0xffff - raw_imm16) as i64);
+
+                            inst.operands = [
+                                Operand::PCOffset(imm16 << 2),
+                                Operand::Nothing,
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+                            return Ok(());
                         } else {
                             inst.opcode = Opcode::Invalid;
                             return Err(DecodeError::InvalidOpcode);
@@ -10206,7 +10336,12 @@ impl Decoder<ARMv8> for InstDecoder {
                         let offset = (word as i32 & 0x00ff_ffe0) >> 3;
                         let extended_offset = (offset << 11) >> 11;
                         let cond = word & 0x0f;
-                        inst.opcode = Opcode::Bcc(cond as u8);
+                        if word & 0x10 == 0 {
+                            inst.opcode = Opcode::Bcc(cond as u8);
+                        } else {
+                            // (FEAT_HBC)
+                            inst.opcode = Opcode::BCcc(cond as u8);
+                        }
                         inst.operands = [
                             Operand::PCOffset(extended_offset as i64),
                             Operand::Nothing,
@@ -10214,9 +10349,43 @@ impl Decoder<ARMv8> for InstDecoder {
                             Operand::Nothing
                         ];
                     }
-                    0b01001 => { // conditional branch (imm)
+                    0b01001 => {
+                        // Miscellaneous branch (immediate) (FEAT_PAuth_LR)
                         // o1 -> unallocated, reserved
-                        return Err(DecodeError::InvalidOpcode);
+                        let opc = (word >> 21) & 0b111;
+                        let raw_imm16 = (word >> 5) & 0xffff;
+                        let imm16 = -((0xffff - raw_imm16) as i64);
+                        let op2 = word & 0b11111;
+
+                        match opc {
+                            0b000 => {
+                                if op2 != 0b11111 {
+                                    return Err(DecodeError::InvalidOperand);
+                                }
+                                inst.opcode = Opcode::RETAASPPC;
+                                inst.operands = [
+                                    Operand::PCOffset(imm16 << 2),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            }
+                            0b001 => {
+                                if op2 != 0b11111 {
+                                    return Err(DecodeError::InvalidOperand);
+                                }
+                                inst.opcode = Opcode::RETABSPPC;
+                                inst.operands = [
+                                    Operand::PCOffset(imm16 << 2),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
+                            }
+                            _ => {
+                                return Err(DecodeError::InvalidOpcode);
+                            }
+                        }
                     }
                     /* 0b01010 to 0b01111 seem all invalid? */
                     0b10000 |
@@ -10326,6 +10495,8 @@ impl Decoder<ARMv8> for InstDecoder {
                         ];
                     },
                     0b11001 => { // system
+                        // somewhere in here:
+                        // System instructions with register argument (C4.1.94)
                         let remainder = word & 0xffffff;
                         if remainder >= 0x400000 {
                             return Err(DecodeError::InvalidOperand);
@@ -10356,13 +10527,61 @@ impl Decoder<ARMv8> for InstDecoder {
 
                                         match CRn {
                                             0b0010 => {
-                                                inst.opcode = Opcode::HINT;
-                                                inst.operands = [
-                                                    Operand::ControlReg(CRm as u16),
-                                                    Operand::Immediate(op2),
-                                                    Operand::Nothing,
-                                                    Operand::Nothing,
-                                                ];
+                                                let hint_num = (CRm << 3) | op2;
+                                                inst.operands = [Operand::Nothing; 4];
+                                                match hint_num {
+                                                    0b0000_111 => {
+                                                        inst.opcode = Opcode::XPACLRI;
+                                                    }
+                                                    0b0001_000 => {
+                                                        inst.opcode = Opcode::PACIA1716;
+                                                    },
+                                                    0b0001_010 => {
+                                                        inst.opcode = Opcode::PACIB1716;
+                                                    }
+                                                    0b0001_100 => {
+                                                        inst.opcode = Opcode::AUTIA1716;
+                                                    }
+                                                    0b0001_110 => {
+                                                        inst.opcode = Opcode::AUTIB1716;
+                                                    }
+                                                    0b0011_000 => {
+                                                        inst.opcode = Opcode::PACIAZ;
+                                                    }
+                                                    0b0011_001 => {
+                                                        inst.opcode = Opcode::PACIASP;
+                                                    }
+                                                    0b0011_010 => {
+                                                        inst.opcode = Opcode::PACIBZ;
+                                                    }
+                                                    0b0011_011 => {
+                                                        inst.opcode = Opcode::PACIBSP;
+                                                    }
+                                                    0b0011_100 => {
+                                                        inst.opcode = Opcode::AUTIAZ;
+                                                    }
+                                                    0b0011_101 => {
+                                                        inst.opcode = Opcode::AUTIASP;
+                                                    }
+                                                    0b0011_110 => {
+                                                        inst.opcode = Opcode::AUTIBZ;
+                                                    }
+                                                    0b0011_111 => {
+                                                        inst.opcode = Opcode::AUTIBSP;
+                                                    }
+                                                    0b0100_111 => {
+                                                        inst.opcode = Opcode::PACM;
+                                                    }
+                                                    _ => {
+                                                        inst.opcode = Opcode::HINT;
+                                                        inst.operands = [
+                                                            Operand::ControlReg(CRm as u16),
+                                                            Operand::Immediate(op2),
+                                                            Operand::Nothing,
+                                                            Operand::Nothing,
+                                                        ];
+                                                    }
+                                                }
                                             },
                                             0b0011 => {
                                                 match op2 {
@@ -10604,22 +10823,44 @@ impl Decoder<ARMv8> for InstDecoder {
                                         Operand::Nothing,
                                         Operand::Nothing
                                     ];
-                                } else if (word & 0x1fffff) == 0x1f0bff {
-                                    inst.opcode = Opcode::RETAA;
-                                    inst.operands = [
-                                        Operand::Nothing,
-                                        Operand::Nothing,
-                                        Operand::Nothing,
-                                        Operand::Nothing,
-                                    ];
-                                } else if (word & 0x1fffff) == 0x1f0fff {
-                                    inst.opcode = Opcode::RETAB;
-                                    inst.operands = [
-                                        Operand::Nothing,
-                                        Operand::Nothing,
-                                        Operand::Nothing,
-                                        Operand::Nothing,
-                                    ];
+                                } else if (word & 0x1fffe0) == 0x1f0be0 {
+                                    let op4 = word & 0b11111;
+                                    if op4 == 0b11111 {
+                                        inst.opcode = Opcode::RETAA;
+                                        inst.operands = [
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    } else {
+                                        inst.opcode = Opcode::RETAASPPCR;
+                                        inst.operands = [
+                                            Operand::Register(SizeCode::X, op4 as u16),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    }
+                                } else if (word & 0x1fffe0) == 0x1f0fe0 {
+                                    let op4 = word & 0b11111;
+                                    if op4 == 0b11111 {
+                                        inst.opcode = Opcode::RETAB;
+                                        inst.operands = [
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    } else {
+                                        inst.opcode = Opcode::RETABSPPCR;
+                                        inst.operands = [
+                                            Operand::Register(SizeCode::X, op4 as u16),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                    }
                                 } else {
                                     inst.opcode = Opcode::Invalid;
                                     return Err(DecodeError::InvalidOpcode);
