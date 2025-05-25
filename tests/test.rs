@@ -3,7 +3,7 @@
 // extern crate test;
 
 mod armv7;
-mod armv8;
+mod aarch64;
 
 use yaxpeax_arch::{Arch, Decoder, U8Reader};
 use std::fmt::Write;
@@ -70,10 +70,10 @@ fn test_armv7_thumb_does_not_panic() {
 
 #[test]
 #[ignore]
-fn test_armv8_does_not_panic() {
+fn test_aarch64_does_not_panic() {
     par_test_u32(|start, end| {
-        let armv8 = <yaxpeax_arm::armv8::a64::ARMv8 as Arch>::Decoder::default();
+        let aarch64 = <yaxpeax_arm::aarch64::AArch64 as Arch>::Decoder::default();
 
-        test_range::<yaxpeax_arm::armv8::a64::ARMv8>(&armv8, start, end);
+        test_range::<yaxpeax_arm::aarch64::AArch64>(&aarch64, start, end);
     });
 }

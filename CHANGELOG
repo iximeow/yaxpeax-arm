@@ -1,3 +1,12 @@
+## 0.4.0
+
+* the armv8 module is now aarch64
+* `armv8::a64::InstDecoder` is moved to `aarch64::InstDecoder`.
+  - this struct had no members and could be matched on, it now has private
+    members and cannot be matched on
+* `aarch64::InstDecoder` can now specify an ARM version that should be decoded.
+  - the default `aarch64::InstDecoder` still decodes all supported instructions.
+
 ## 0.3.1
 
 * fix no-std transitively depending on std still

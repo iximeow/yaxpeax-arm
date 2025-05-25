@@ -13,7 +13,7 @@ use yaxpeax_arch::{ShowContextual, YaxColors};
 
 #[allow(non_snake_case)]
 mod docs {
-    use crate::armv8::a64::DecodeError;
+    use crate::aarch64::DecodeError;
 
     #[test]
     fn test_ones() {
@@ -234,19 +234,17 @@ impl <T: fmt::Write, Y: YaxColors> ShowContextual<u64, NoContext, T, Y> for Inst
     }
 }
 
-/// a struct with a summary of the `ARMv8`/`aarch64` instruction set in an associated `impl Arch
-/// for ARMv8`.
+/// a struct with a summary of the `AArch64` architecture in an associated `impl Arch for AArch64`.
 #[cfg(feature="use-serde")]
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
-pub struct ARMv8 { }
+pub struct AArch64 { }
 
-/// a struct with a summary of the `ARMv8`/`aarch64` instruction set in an associated `impl Arch
-/// for ARMv8`.
+/// a struct with a summary of the `AArch64` architecture in an associated `impl Arch for AArch64`.
 #[cfg(not(feature="use-serde"))]
 #[derive(Copy, Clone, Debug)]
-pub struct ARMv8 { }
+pub struct AArch64 { }
 
-impl Arch for ARMv8 {
+impl Arch for AArch64 {
     type Word = u8;
     type Address = u64;
     type Instruction = Instruction;
@@ -1096,7 +1094,7 @@ impl Display for Instruction {
 }
 
 impl LengthedInstruction for Instruction {
-    type Unit = AddressDiff<<ARMv8 as Arch>::Address>;
+    type Unit = AddressDiff<<AArch64 as Arch>::Address>;
     fn min_size() -> Self::Unit {
         AddressDiff::from_const(4)
     }
@@ -3222,19 +3220,176 @@ impl Display for Operand {
     }
 }
 
-/// an `aarch64` instruction decoder.
-///
-/// there are no options or levels of decoding support, yet. as a result, any
-/// `armv8::a64::InstDecoder` will decode as much of the a64 instruction set as is implemented.
+/// an `aarch64` instruction decoder, decoding as much as `yaxpeax-arm` supports.
 ///
 /// `InstDecoder` is currently zero-size, but users should not rely on this being the case in the
 /// future.
 #[derive(Default, Debug, PartialEq, Eq, Copy, Clone, Hash, PartialOrd, Ord)]
 pub struct InstDecoder {}
 
+/*
+/// an `aarch64` instruction decoder supporting selection of individual architecture extensions.
+pub struct FeaturefulDecoder {
+    bits: [u64; 4]
+}
+
+impl FeaturefulDecoder {
+    /// the minimum set of features to be ARMv8.0-compliant.
+    fn v8_0() -> Self {
+
+    }
+
+    // introduced v8.0
+    aa32el0, // optional v8.0
+    aa32el1, // optional v8.0, not v9.0+, implies aa32el0
+    aa32el2, // optional v8.0, not v9.0+, implies aa32el1
+    aa32el3, // optional v8.0, not v9.0+, if el2 implies aa32el2
+    aa64el0, // optional v8.0, mandatory v9.0, implies aa64el1
+    aa64el1, // optional v8.0, mandatory v9.0, implies aa64el0
+    aa64el2, // optional v8.0, v9.0, implies aa64el1, if el3 implies aa64el3
+    aa64el3, // optional v8.0, v9.0, implies aa64el1, if el2 implies aa64el2
+    aes,     // optional v8.0, implies crypto
+    asid16,  // optional v8.0,
+    advsimd, // optional v8.0
+    crc32,   // optional v8.0, mandatory v8.1
+    csv2_1p1,// optional v8.0, implies csv2
+    csv2_1p2,// optional v8.0, implies csv2_1p1
+    csv2_2,  // optional v8.0, implies csv2, !csv2_1p1
+    csv2_3,  // optional v8.0, implies csv2_2,
+    crypto,  // optiona, v8.0, implies aes, sha1, if >=v8.2 implies pmull, sha256, sm3, sm4,
+    double_lock, // optional v8.0, not in v9.0
+    el0,    // mandatory v8.0
+    el1,    // mandatory v8.0,
+    el2,    // optional v8.0,
+    el3,    // optional v8.0,
+    etmv4   // optional v8.0, not in v9.0,
+    ets2,   // optional v8.0, mandatory v8.8
+    fp,     // optional v8.0, implies advsimd
+    ivipt,  // optional v8.0,
+    mixed_end, // optional v8.0, implies mixed_end_el0,
+    mixed_end_el0, // optional v8.0
+    pcsrv8, // optional v8.0, implies not pcsrv8p2
+    pmull,  // optional v8.0, implies aes
+    pmuv3,  // optional v8.0
+    pmuv3_ext,  // optional v8.0, implies pmuv3, implies one of pmuv3_ext32, pmuv3_ext64
+    pmuv3_ext32, // optional v8.0, implies pmuv3_ext, !pmuv3_ext64
+    sha1,   // optional v8.0, implies crypto
+    sha256, // optional v8.0, implies sha1
+    secure, // optional v8.0, if !rme, el3, then secure, "not supported if el2 is using AArch32"?
+    spec_sei, // optional v8.0
+    tgran16k, // optional v8.0
+    tgran4k, // optional v8.0,
+    tgran64k, // optional v8.0
+    trc_ext, // optional v8.0, implies etmv4 or ete
+    trc_sr, // optional v8.0, implies etmv4 or ete
+    ntlbpa, // optional v8.0
+
+    // v8.1 implies v8.0
+    debugv8p1, // optional v8.0
+    hafdbs, // optional v8.0
+    hpds,   // optional v8.0, mandatory v8.1
+    lor,    // optional v8.0, mandatory v8.1
+    lse,    // optional v8.0, mandatory v8.1
+    pan,    // optional v8.0, mandatory v8.1
+    pmuv3p1,// optional v8.0, implies pmuv3, in v8.1 if pmuv3, then pmuv3p1
+    rdm,    // optional v8.0, in v8.1 advsimd, then rdm
+    vhe,    // optional v8.0, if vhe, then lse, debugv8p1, aa64el2, in v8.1 if aa64el2, then vhe
+    vmid,   // optional v8.0
+
+    // v8.2 implies v8.1
+    aa32hpd,// optional v8.1, aarch32 only
+    aa32i8mm, // optional v8.1, implies i8mm, aarch32 only
+    asmv8p2,// optional v8.1, mandatory v8.2
+    dpb,    // optional v8.1, mandatory v8.2
+    debugv8p2, // optional v8.1, mandatory v8.2, implies debugv8p1
+    f32mm,  // optional v8.2, aarch64 only, implies sve
+    f64mm,  // optional v8.2, aarch64 only, implies sve
+    fp16,   // optional v8.2, in v8.4 if not fhm, then not fp16
+    hpds2,  // optional v8.1, if aa32el1 and hpds2, then aa32hpd, implies hpds
+    i8mm,   // optional v8.1, mandatory v8.6, aarch64 only
+    iesb,   // optional v8.1, implies ras
+    lpa,    // optional v8.1, aarch64 only
+    lsmaoc, // optional v8.1
+    lva,    // optional v8.1, aarch64 only
+    pan2,   // optional v8.1, mandatory v8.2, implies pan
+    pcsrv8p2,// optional v8.1, implies not pcsrv8
+    ras,    // optional v8.0, mandatory v8.2
+    rassav1,// optional v8.2
+    sha3,   // optional v8.1, implies crypto, sha256, sha1, aarch64 only
+    sha512, // optional v8.1, implies crypto, sha512, sha1, aarch64 only
+    sm3,    // optional v8.1, implies crypto
+    sm4,    // optional v8.1, implies crypto
+    spe,    // optional v8.1, if spe and pmuv3, then pmuv3p1, aarch64 only
+    sve,    // optional v8.2, implies fcma, fp16, if spe and pmuv3, then pmuv3p1, aarch64 only
+    ttcnp,  // optional v8.1, mandatory v8.2
+    uao,    // optional v8.1, mandatory v8.2
+    xnx,    // optional v8.1
+
+    // v8.3 implies v8.2
+    ccidx,  // optional v8.2
+    constpacfield,// optional v8.2, aarch64 only
+    dopd,   // optional v8.2
+    epac,   // optional v8.2, aarch64 only
+    fcma,   // optional v8.2, in v8.3 fp implies fcma, fcma implies fp
+    fpac,   // optional v8.2, aarch64 only, implies pauth2
+    fpaccombine, // optional v8.2, implies fpac
+    fpacc_spec, // optional v8.2, aarch64 only, implies fpaccombine
+    jscvt,  // optional v8.2, in v8.3, fp implies jscvt
+    lrcpc,  // optional v8.2, mandatory v8.3, aarch64 only
+    nv,     // optional v8.2, aarch64 only
+    pacimp, // optional v8.2, implies pauth, aarch64 only
+    pacqarma3, // optional v8.2, implies pauth, aarch64 only
+    pacqarma5, // optional v8.2, implies pauth, aarch64 only
+    pauth,  // optional v8.2, mandatory v8.3, implies constraints on implemented PAC algorithms
+    spev1p1,// optional v8.2, in v8.5 spe implies spev1p1, aarch64 only
+
+    // v8.4 implies v8.3
+    amu_ext,// optional v8.4, implies amu_ext32 or amu_ext64, implies amuv1
+    amu_ext32,// optional v8.4, implies amu_ext, !amu_ext64
+    amuv1,  // optional v8.3
+    bbm,    // optional v8.3, mandatory v8.4, aarch64 only
+    cntsc,  // optional v8.3
+    dit,    // optional v8.3, mandatory v8.4
+    debugv8p4,// optional v8.3, mandatory v8.4, implies debugv8p2, implied by sel2
+    dotprod,// optional v8.1, in v8.4, implied by advsimd
+    doublefault,// optional v8.3, implied by aa64el3, implies doublefault2 or aa64el3. aarch64 only
+    fhm,    // optional v8.1, in v8.4 implied fp16, implies fp16
+    flagm,  // optional v8.1, mandatory v8.4, aarch64 only
+    idst,   // optional v8.3, mandatory v8.4, aarch64 only
+    lrcpc2, // optional v8.2, mandatory v8.4, implies lrcpc, aarch64 only
+    lse2,   // optional v8.2, mandatory v8.4, aarch64 only
+    mpam,   // optional v8.2, aarch64 only
+    nv2,    // optional v8.3, implies nv, aarch64 only
+    pmuv3p4,// optional v8.3, in v8.4 implied by pmuv3, implies pmuv3p1, aarch64 only
+    rassav1p1,// optional v8.2, in v8.4 if ras then rassav1p1, if rasv1p1 then rassav1p1
+    rasv1p1,// optional v8.2, in v8.4 if ras then rasv1p1, if rasv1p1 then ras, rassav1p1
+    s2fwb,  // optional v8.3, in v8.4 if el2 then s2fwb, aarch64 only
+    sel2,   // optional v8.3, in v8.4 if aa64el2 and secure, sel2. if sel2 then ttst, pcsrv8, el2,
+    tlbios, // optional v8.3, mandatory v8.4, aarch64 only
+    tlbirange,// optional v8.3, mandatory v8.4, implies tlbios, aarch64 only
+    trf,    // optional v8.3, in v8.4 if etmv4 then trf, implies trc_sr
+    ttl,    // optional v8.3, mandatory v8.4
+    ttst,   // optional v8.3, if sel2 then ttst, aarch64 only
+
+    // v8.5 implies v8.4
+    // v8.6 implies v8.5
+    // v8.7 implies v8.6
+    // v8.8 implies v8.7
+    // v8.9 implies v8.8
+    // v9.0 implies v8.5
+    // v9.1 implies v9.0, v8.6
+    // v9.2 implies v9.1, v8.7
+    // v9.3 implies v9.2, v8.8
+    // v9.4 implies v9.3, v8.9
+    // v9.5 implies v9.4
+
+    fn feat_aa32el0(mut self
+}
+*/
+
 #[allow(non_snake_case)]
-impl Decoder<ARMv8> for InstDecoder {
-    fn decode_into<T: Reader<<ARMv8 as Arch>::Address, <ARMv8 as Arch>::Word>>(&self, inst: &mut Instruction, words: &mut T) -> Result<(), <ARMv8 as Arch>::DecodeError> {
+impl Decoder<AArch64> for InstDecoder {
+    fn decode_into<T: Reader<<AArch64 as Arch>::Address, <AArch64 as Arch>::Word>>(&self, inst: &mut Instruction, words: &mut T) -> Result<(), <AArch64 as Arch>::DecodeError> {
         let mut word_bytes = [0u8; 4];
         words.next_n(&mut word_bytes)?;
         let word = u32::from_le_bytes(word_bytes);
@@ -3292,7 +3447,7 @@ impl Decoder<ARMv8> for InstDecoder {
         ];
         let section = SECTIONS[(section_bits & 0b1111) as usize];
 
-//        crate::armv8::a64::std::eprintln!("word: {:#x}, bits: {:#b}", word, section_bits & 0xf);
+//        crate::aarch64::std::eprintln!("word: {:#x}, bits: {:#b}", word, section_bits & 0xf);
 
         let op0 = (word >> 31) & 1;
         match section {
@@ -4703,7 +4858,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
                                 type OperandSizeTable = [Result<(SIMDSizeCode, SIMDSizeCode, SIMDSizeCode, SIMDSizeCode), DecodeError>; 8];
 
-                                use crate::armv8::a64::SIMDSizeCode::*;
+                                use crate::aarch64::SIMDSizeCode::*;
 
                                 const TABLE_A: &'static OperandSizeTable = &[
                                     Ok((D, B, D, B)), Ok((Q, B, Q, B)),
@@ -6184,7 +6339,7 @@ impl Decoder<ARMv8> for InstDecoder {
                                 let q = (word >> 30) & 1;
 
                                 type OperandSizeTable = [Result<(SIMDSizeCode, SIMDSizeCode, SIMDSizeCode, SIMDSizeCode), DecodeError>; 8];
-                                use crate::armv8::a64::SIMDSizeCode::*;
+                                use crate::aarch64::SIMDSizeCode::*;
 
                                 const TABLE_A: &'static OperandSizeTable = &[
                                     Ok((D, B, D, B)), Ok((Q, B, Q, B)),
@@ -6384,7 +6539,7 @@ impl Decoder<ARMv8> for InstDecoder {
 
                                         type OperandSizeTable = [Result<(SIMDSizeCode, SIMDSizeCode, SIMDSizeCode, SIMDSizeCode), DecodeError>; 4];
 
-                                        use crate::armv8::a64::SIMDSizeCode::*;
+                                        use crate::aarch64::SIMDSizeCode::*;
 
                                         const TABLE_A: &'static OperandSizeTable = &[
                                             Ok((Q, B, Q, B)),

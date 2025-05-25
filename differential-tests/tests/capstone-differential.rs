@@ -386,7 +386,7 @@ fn capstone_differential() {
             .expect("can create capstone");
             */
 
-        let yax = <yaxpeax_arm::armv8::a64::ARMv8 as Arch>::Decoder::default();
+        let yax = <yaxpeax_arm::aarch64::AArch64 as Arch>::Decoder::default();
 
         let mut cs_text = String::new();
         let mut yax_text = String::new();
@@ -395,7 +395,7 @@ fn capstone_differential() {
             let i = i as u32;
             let bytes = &i.to_le_bytes();
             if i % 0x00_10_00_00 == 0 {
-                eprintln!("case {:08x}", i);
+//                eprintln!("case {:08x}", i);
             }
 
 //            let res = cs.disasm_all(bytes, 0);
@@ -430,7 +430,7 @@ fn capstone_differential() {
                     let yax_res = yax.decode(&mut yaxpeax_arch::U8Reader::new(bytes));
                     if let Ok(inst) = yax_res {
                         write!(yax_text, "{}", inst).unwrap();
-                    } else if let Err(yaxpeax_arm::armv8::a64::DecodeError::IncompleteDecoder) = yax_res {
+                    } else if let Err(yaxpeax_arm::aarch64::DecodeError::IncompleteDecoder) = yax_res {
                         stats.missed_incomplete.fetch_add(1, Ordering::Relaxed);
                         continue;
                     } else {
@@ -517,6 +517,7 @@ fn capstone_differential() {
                             continue;
                         } else {
                             eprintln!("yax errored where capstone succeeded. cs text: '{}', bytes: {:x?}", cs_text, bytes);
+//                            std::process::abort();
                         }
                     };
                     if cs_text.starts_with("bc.eq #0xfffffffffff00000.") {
@@ -659,9 +660,9 @@ fn capstone_differential() {
                         }
 
                         // some kinda bug to deal with hint value width
-                        if cs_text.starts_with("hint ") {
-                            return true;
-                        }
+//                        if cs_text.starts_with("hint ") {
+//                            return true;
+//                        }
                         if cs_text.starts_with("dsb ") {
                             return true;
                         }

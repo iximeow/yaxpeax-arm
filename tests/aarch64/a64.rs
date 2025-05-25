@@ -1,12 +1,12 @@
 use yaxpeax_arch::{Arch, Decoder};
-use yaxpeax_arm::armv8::a64::{ARMv8, Instruction, Operand, Opcode, SizeCode, ShiftStyle};
-use yaxpeax_arm::armv8::a64::DecodeError;
+use yaxpeax_arm::aarch64::{AArch64, Instruction, Operand, Opcode, SizeCode, ShiftStyle};
+use yaxpeax_arm::aarch64::DecodeError;
 
 use std::fmt;
 
 fn test_decode(data: [u8; 4], expected: Instruction) {
     let mut reader = yaxpeax_arch::U8Reader::new(&data[..]);
-    let instr = <ARMv8 as Arch>::Decoder::default().decode(&mut reader).unwrap();
+    let instr = <AArch64 as Arch>::Decoder::default().decode(&mut reader).unwrap();
     assert!(
         instr == expected,
         "decode error for {:02x}{:02x}{:02x}{:02x}:\n  decoded: {:?}\n expected: {:?}\n",
@@ -17,7 +17,7 @@ fn test_decode(data: [u8; 4], expected: Instruction) {
 
 fn test_err(data: [u8; 4], err: DecodeError) {
     let mut reader = yaxpeax_arch::U8Reader::new(&data[..]);
-    let result = <ARMv8 as Arch>::Decoder::default().decode(&mut reader);
+    let result = <AArch64 as Arch>::Decoder::default().decode(&mut reader);
     assert_eq!(
         result, Err(err),
         "expected IncompleteDecoder error for {:02x}{:02x}{:02x}{:02x}:\n  decoded: {:?}\n",
@@ -28,7 +28,7 @@ fn test_err(data: [u8; 4], err: DecodeError) {
 
 fn test_display(data: [u8; 4], expected: &'static str) {
     let mut reader = yaxpeax_arch::U8Reader::new(&data[..]);
-    let instr = <ARMv8 as Arch>::Decoder::default().decode(&mut reader).unwrap();
+    let instr = <AArch64 as Arch>::Decoder::default().decode(&mut reader).unwrap();
     let text = format!("{}", instr);
     assert!(
         text == expected,
@@ -2450,7 +2450,7 @@ fn test_decode_span() {
     let mut i = 0u64;
     while i < INSTRUCTION_BYTES.len() as u64 {
         let mut reader = yaxpeax_arch::U8Reader::new(&INSTRUCTION_BYTES[i as usize..]);
-        let res = <ARMv8 as Arch>::Decoder::default().decode(&mut reader);
+        let res = <AArch64 as Arch>::Decoder::default().decode(&mut reader);
         if let Err(DecodeError::IncompleteDecoder) = res {
             i += 4;
             continue;
@@ -2475,7 +2475,7 @@ pub fn bench_60000_instrs(b: &mut Bencher) {
     b.iter(|| {
         for i in (0..1000) {
             let mut iter = INSTRUCTION_BYTES.iter().map(|x| *x);
-            let decoder = <ARMv8 as Arch>::Decoder::default();
+            let decoder = <AArch64 as Arch>::Decoder::default();
             let mut result = Instruction::default();
             loop {
                 match decoder.decode_into(&mut result, &mut iter) {
@@ -2517,7 +2517,7 @@ impl fmt::Display for ErrorDesc {
 }
 
 fn run_tests(cases: &[([u8; 4], &'static str)]) -> Vec<ErrorDesc> {
-    let decoder = <ARMv8 as Arch>::Decoder::default();
+    let decoder = <AArch64 as Arch>::Decoder::default();
 
     let mut errors = Vec::new();
 
