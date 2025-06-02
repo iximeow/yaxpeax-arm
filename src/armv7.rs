@@ -1291,6 +1291,7 @@ impl Reg {
     /// create a new `Reg` with the specified number.
     ///
     /// panics if `bits` is out of range (16 or above).
+    #[inline]
     pub fn from_u8(bits: u8) -> Reg {
         if bits > 0b1111 {
             panic!("register number out of range");
@@ -1322,6 +1323,7 @@ impl CReg {
     /// create a new `CReg` with the specified number.
     ///
     /// panics if `bits` is out of range (16 or above).
+    #[inline]
     pub fn from_u8(bits: u8) -> CReg {
         if bits > 0b1111 {
             panic!("register number out of range");
@@ -1936,6 +1938,7 @@ impl Display for ConditionCode {
 }
 
 impl ConditionCode {
+    #[inline]
     fn build(value: u8) -> ConditionCode {
         match value {
             0b0000 => ConditionCode::EQ,
@@ -2204,6 +2207,7 @@ impl InstDecoder {
 
 #[allow(non_snake_case)]
 impl Decoder<ARMv7> for InstDecoder {
+    #[inline]
     fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(&self, inst: &mut Instruction, words: &mut T) -> Result<(), <ARMv7 as Arch>::DecodeError> {
         inst.set_w(false);
         inst.set_wide(false);
