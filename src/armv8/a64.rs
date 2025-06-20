@@ -138,6 +138,7 @@ mod docs {
         Ok((wmask, tmask))
     }
 
+    #[inline(always)]
     pub fn DecodeShift(op: u8) -> super::ShiftStyle {
         assert!(op <= 0b11);
         [

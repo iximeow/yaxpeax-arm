@@ -1,3 +1,12 @@
+## 0.3.2
+
+* fully support PAC instructions
+* support hinted branch instructions from ARMv<VERSION>
+* inline some armv7 decode helper functions
+  - this actually makes the armv7 decoder both faster *and* smaller. measured
+    against tdfx_dri.so, this takes decode throughput from ~410mb/s to ~709mb/s
+    while shedding about 100 bytes of code from the decoder's footprint
+
 ## 0.3.1
 
 * fix no-std transitively depending on std still
