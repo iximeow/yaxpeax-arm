@@ -21,7 +21,15 @@ bitvec = { version = "1.0.1", default-features = false, features = [] }
 "serde_derive" = { version = "1.0", optional = true }
 
 [features]
-default = ["std", "use-serde"]
+default = ["std", "alloc", "fmt", "use-serde"]
+
+# fmt-related features that depend on the alloc crate
+alloc = []
+
+# formatting code (Display, Debug impls, etc) are optional on `fmt`.
+#
+# some `fmt` code also has `alloc` features (`InstructionDisplayBuffer`)
+fmt = []
 
 # opt-in for std-related Error impl - necessary to `?`-unwrap `DecodeError`.
 std = ["yaxpeax-arch/std"]

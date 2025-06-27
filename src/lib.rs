@@ -48,6 +48,8 @@
 #![no_std]
 #![deny(missing_docs)]
 
+#[cfg(feature="alloc")]
+extern crate alloc;
 #[cfg(feature="use-serde")]
 #[macro_use] extern crate serde_derive;
 #[cfg(feature="use-serde")]

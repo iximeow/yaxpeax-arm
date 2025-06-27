@@ -4,7 +4,7 @@ name = "no-std-test"
 version = "0.0.1"
 authors = ["iximeow <me@iximeow.net>"]
 license = "0BSD"
-description = "test crate to check that yaxpeax-arm is actually no-stds"
+description = "test crate to check that yaxpeax-arm is actually no-std"
 edition = "2021"
 publish = false
 

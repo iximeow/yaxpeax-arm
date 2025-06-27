@@ -9,9 +9,14 @@ use core::fmt::{self, Display, Formatter};
 
 use yaxpeax_arch::{Arch, AddressDiff, Decoder, LengthedInstruction, Reader, ReadError};
 #[allow(deprecated)]
-use yaxpeax_arch::{Colorize, NoColors, ShowContextual, YaxColors};
+use yaxpeax_arch::{NoColors, ShowContextual};
 
 mod thumb;
+// #[cfg(feature = "fmt")]
+mod display;
+
+#[cfg(all(feature="alloc", feature="fmt"))]
+pub use display::InstructionTextBuffer;
 
 // opcode, s, w, cond
 /// a struct for the combined display of an opcode and possible suffixes.
@@ -30,835 +35,6 @@ impl Display for ConditionedOpcode {
 /// information, offset names, etc). this impl results in `some_instruction.contextualize(...)`
 /// displaying an instruction the same way its `Display` impl would.
 pub struct NoContext;
-
-#[allow(deprecated)]
-fn reg_name_colorize<Y: YaxColors>(reg: Reg, colors: &Y) -> impl fmt::Display {
-    match reg.number() {
-        0 => colors.register("r0"),
-        1 => colors.register("r1"),
-        2 => colors.register("r2"),
-        3 => colors.register("r3"),
-        4 => colors.register("r4"),
-        5 => colors.register("r5"),
-        6 => colors.register("r6"),
-        7 => colors.register("r7"),
-        8 => colors.register("r8"),
-        9 => colors.register("sb"),
-        10 => colors.register("r10"),
-        11 => colors.register("fp"),
-        12 => colors.register("ip"),
-        13 => colors.register("sp"),
-        14 => colors.register("lr"),
-        15 => colors.program_counter("pc"),
-        _ => { unreachable!(); }
-    }
-}
-
-#[allow(non_snake_case)]
-#[allow(deprecated)]
-impl <T: fmt::Write, Y: YaxColors> ShowContextual<u32, NoContext, T, Y> for Instruction {
-    fn contextualize(&self, colors: &Y, _address: u32, _context: Option<&NoContext>, out: &mut T) -> fmt::Result {
-        match self.opcode {
-            Opcode::IT => {
-                if let (Operand::Imm32(cond), Operand::Imm32(mask)) = (&self.operands[0], &self.operands[1]) {
-                    let inv = cond & 1 == 1;
-                    let condition = ConditionCode::build(*cond as u8);
-                    if mask & 0b0001 != 0 {
-                        // three flags
-                        write!(
-                            out,
-                            "it{}{}{} {}",
-                            if inv ^ ((mask & 0b1000) != 0) { "e" } else { "t" },
-                            if inv ^ ((mask & 0b0100) != 0) { "e" } else { "t" },
-                            if inv ^ ((mask & 0b0010) != 0) { "e" } else { "t" },
-                            condition,
-                        )?;
-                    } else if mask & 0b0010 != 0 {
-                        // two flags
-                        write!(
-                            out,
-                            "it{}{} {}",
-                            if inv ^ ((mask & 0b1000) != 0) { "e" } else { "t" },
-                            if inv ^ ((mask & 0b0100) != 0) { "e" } else { "t" },
-                            condition,
-                        )?;
-                    } else if mask & 0b0100 != 0 {
-                        // one flag
-                        write!(
-                            out,
-                            "it{} {}",
-                            if inv ^ ((mask & 0b1000) != 0) { "e" } else { "t" },
-                            condition,
-                        )?;
-                    } else {
-                        // no flags
-                        write!(out, "it {}", condition)?;
-                    }
-                    // if the condition is AL, it won't get displayed. append it here.
-                    if *cond == 14 {
-                        write!(out, "al")?;
-                    }
-                    return Ok(());
-                } else {
-                    panic!("impossible it operand");
-                }
-            }
-            Opcode::CPS(_) => {
-                if let Operand::Imm12(aif) = &self.operands[0] {
-                    write!(
-                        out,
-                        "{} {}{}{}",
-                        &self.opcode,
-                        if aif & 0b100 != 0 { "a" } else { "" },
-                        if aif & 0b010 != 0 { "i" } else { "" },
-                        if aif & 0b001 != 0 { "f" } else { "" },
-                    )?;
-                    if let Operand::Imm12(mode) = &self.operands[1] {
-                       write!(out, ", #{:x}", mode)?;
-                    }
-                    return Ok(());
-                } else {
-                    panic!("impossible cps operand");
-                }
-            }
-            Opcode::SETEND => {
-                if let Operand::Imm12(i) = &self.operands[0] {
-                    return write!(out, "setend {}", if *i == 0 { "le" } else { "be" });
-                } else {
-                    panic!("impossible setend operand");
-                }
-            }
-            Opcode::LDR => {
-                match self.operands {
-                    // TODO: should this be PostindexOffset?
-                    [Operand::Reg(Rt), Operand::RegDerefPostindexOffset(Reg { bits: 13 }, 4, true, false), Operand::Nothing, Operand::Nothing] => {
-                        ConditionedOpcode(Opcode::POP, self.s(), self.w(), self.condition).colorize(colors, out)?;
-                        return write!(out, " {{{}}}", reg_name_colorize(Rt, colors));
-                    },
-                    _ => {}
-                }
-            },
-            Opcode::STR => {
-                match self.operands {
-                    // TODO: should this be PreindexOffset?
-                    [Operand::Reg(Rt), Operand::RegDerefPreindexOffset(Reg { bits: 13 }, 4, false, true), Operand::Nothing, Operand::Nothing] => {
-                        ConditionedOpcode(Opcode::PUSH, self.s(), self.w(), self.condition).colorize(colors, out)?;
-                        return write!(out, " {{{}}}", reg_name_colorize(Rt, colors));
-                    },
-                    _ => {}
-                }
-            },
-            Opcode::LDM(true, false, false, _usermode) => {
-                // TODO: what indicates usermode in the ARM syntax?
-                match self.operands {
-                    [Operand::RegWBack(Reg { bits: 13 }, true), Operand::RegList(list), Operand::Nothing, Operand::Nothing] => {
-                        ConditionedOpcode(Opcode::POP, self.s(), self.w(), self.condition).colorize(colors, out)?;
-                        write!(out, " ")?;
-                        return format_reg_list(out, list, colors);
-                    }
-                    _ => {}
-                }
-            }
-            Opcode::STM(false, true, false, _usermode) => {
-                // TODO: what indicates usermode in the ARM syntax?
-                match self.operands {
-                    [Operand::RegWBack(Reg { bits: 13 }, true), Operand::RegList(list), Operand::Nothing, Operand::Nothing] => {
-                        ConditionedOpcode(Opcode::PUSH, self.s(), self.w(), self.condition).colorize(colors, out)?;
-                        write!(out, " ")?;
-                        return format_reg_list(out, list, colors);
-                    }
-                    _ => {}
-                }
-            }
-            _ => {}
-        }
-
-        match self.opcode {
-            // TODO: [add, pre, usermode]
-            Opcode::STM(_add, _pre, _wback, _usermode) |
-            Opcode::LDM(_add, _pre, _wback, _usermode) => {
-                match self.operands {
-                    [Operand::RegWBack(Rr, wback), Operand::RegList(list), Operand::Nothing, Operand::Nothing] => {
-                        ConditionedOpcode(self.opcode, self.s(), self.w(), self.condition).colorize(colors, out)?;
-                        write!(
-                            out, " {}{}, ",
-                            reg_name_colorize(Rr, colors),
-                            if wback { "!" } else { "" }
-                        )?;
-                        return format_reg_list(out, list, colors);
-                    },
-                    _ => { unreachable!(); }
-                }
-            },
-            Opcode::STCL(coproc) => {
-                write!(out, "stcl p{}", coproc)?;
-                let ops = self.operands.iter();
-                for op in ops {
-                    if let Operand::Nothing = op {
-                        break;
-                    }
-                    write!(out, ", ")?;
-                    op.colorize(colors, out)?;
-                }
-
-                Ok(())
-            }
-            Opcode::STC(coproc) => {
-                write!(out, "stc p{}", coproc)?;
-                let ops = self.operands.iter();
-                for op in ops {
-                    if let Operand::Nothing = op {
-                        break;
-                    }
-                    write!(out, ", ")?;
-                    op.colorize(colors, out)?;
-                }
-
-                Ok(())
-            }
-            Opcode::STC2L(coproc) => {
-                write!(out, "stc2l p{}", coproc)?;
-                let ops = self.operands.iter();
-                for op in ops {
-                    if let Operand::Nothing = op {
-                        break;
-                    }
-                    write!(out, ", ")?;
-                    op.colorize(colors, out)?;
-                }
-
-                Ok(())
-            }
-            Opcode::STC2(coproc) => {
-                write!(out, "stc2 p{}", coproc)?;
-                let ops = self.operands.iter();
-                for op in ops {
-                    if let Operand::Nothing = op {
-                        break;
-                    }
-                    write!(out, ", ")?;
-                    op.colorize(colors, out)?;
-                }
-
-                Ok(())
-            }
-            Opcode::LDC(coproc) => {
-                write!(out, "ldc p{}", coproc)?;
-                let ops = self.operands.iter();
-                for op in ops {
-                    if let Operand::Nothing = op {
-                        break;
-                    }
-                    write!(out, ", ")?;
-                    op.colorize(colors, out)?;
-                }
-
-                Ok(())
-            }
-            Opcode::LDCL(coproc) => {
-                write!(out, "ldcl p{}", coproc)?;
-                let ops = self.operands.iter();
-                for op in ops {
-                    if let Operand::Nothing = op {
-                        break;
-                    }
-                    write!(out, ", ")?;
-                    op.colorize(colors, out)?;
-                }
-
-                Ok(())
-            }
-            Opcode::LDC2(coproc) => {
-                write!(out, "ldc2 p{}", coproc)?;
-                let ops = self.operands.iter();
-                for op in ops {
-                    if let Operand::Nothing = op {
-                        break;
-                    }
-                    write!(out, ", ")?;
-                    op.colorize(colors, out)?;
-                }
-
-                Ok(())
-            }
-            Opcode::LDC2L(coproc) => {
-                write!(out, "ldc2l p{}", coproc)?;
-                let ops = self.operands.iter();
-                for op in ops {
-                    if let Operand::Nothing = op {
-                        break;
-                    }
-                    write!(out, ", ")?;
-                    op.colorize(colors, out)?;
-                }
-
-                Ok(())
-            }
-            Opcode::MRRC2(coproc, opc) => {
-                write!(out, "mrrc2 p{}, {}", coproc, opc)?;
-                let ops = self.operands.iter();
-                for op in ops {
-                    if let Operand::Nothing = op {
-                        break;
-                    }
-                    write!(out, ", ")?;
-                    op.colorize(colors, out)?;
-                }
-
-                Ok(())
-            }
-            Opcode::MCRR2(coproc, opc) => {
-                write!(out, "mcrr2 p{}, {}", coproc, opc)?;
-                let ops = self.operands.iter();
-                for op in ops {
-                    if let Operand::Nothing = op {
-                        break;
-                    }
-                    write!(out, ", ")?;
-                    op.colorize(colors, out)?;
-                }
-
-                Ok(())
-            }
-            Opcode::MRC2(coproc, opc1, opc2) => {
-                write!(out, "mrc2 p{}, {}", coproc, opc1)?;
-                let ops = self.operands.iter();
-                for op in ops {
-                    if let Operand::Nothing = op {
-                        break;
-                    }
-                    write!(out, ", ")?;
-                    op.colorize(colors, out)?;
-                }
-
-                write!(out, ", {}", opc2)?;
-
-                Ok(())
-            }
-            Opcode::MCR2(coproc, opc1, opc2) => {
-                write!(out, "mcr2 p{}, {}", coproc, opc1)?;
-                let ops = self.operands.iter();
-                for op in ops {
-                    if let Operand::Nothing = op {
-                        break;
-                    }
-                    write!(out, ", ")?;
-                    op.colorize(colors, out)?;
-                }
-
-                write!(out, ", {}", opc2)?;
-
-                Ok(())
-            }
-            Opcode::CDP2(coproc, opc1, opc2) => {
-                write!(out, "cdp2 p{}, {}", coproc, opc1)?;
-                let ops = self.operands.iter();
-                for op in ops {
-                    if let Operand::Nothing = op {
-                        break;
-                    }
-                    write!(out, ", ")?;
-                    op.colorize(colors, out)?;
-                }
-
-                write!(out, ", {}", opc2)?;
-
-                Ok(())
-            }
-            _ => {
-                ConditionedOpcode(self.opcode, self.s(), self.w(), self.condition).colorize(colors, out)?;
-                let mut ops = self.operands.iter();
-                if let Some(first_op) = ops.next() {
-                    if let Operand::Nothing = first_op {
-                        return Ok(());
-                    }
-                    write!(out, " ")?;
-                    first_op.colorize(colors, out)?;
-                } else {
-                    return Ok(());
-                }
-
-                for op in ops {
-                    if let Operand::Nothing = op {
-                        break;
-                    }
-                    write!(out, ", ")?;
-                    op.colorize(colors, out)?;
-                }
-
-                Ok(())
-            }
-        }
-    }
-}
-
-#[allow(deprecated)]
-impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for ConditionedOpcode {
-    fn colorize(&self, colors: &Y, out: &mut T) -> fmt::Result {
-        match self.0 {
-            Opcode::UDF |
-            Opcode::Invalid => { write!(out, "{}", colors.invalid_op(self)) },
-            Opcode::TBB |
-            Opcode::TBH |
-            Opcode::CBZ |
-            Opcode::CBNZ |
-            Opcode::IT |
-            Opcode::B |
-            Opcode::BL |
-            Opcode::BLX |
-            Opcode::BX |
-            Opcode::BXJ => { write!(out, "{}", colors.control_flow_op(self)) },
-
-            Opcode::AND |
-            Opcode::EOR |
-            Opcode::ORR |
-            Opcode::ORN |
-            Opcode::LSL |
-            Opcode::LSR |
-            Opcode::ROR |
-            Opcode::ASR |
-            Opcode::RRX |
-            Opcode::BIC |
-
-            Opcode::ADR |
-            Opcode::SUB |
-            Opcode::RSB |
-            Opcode::ADD |
-            Opcode::ADC |
-            Opcode::SBC |
-            Opcode::RSC |
-
-            Opcode::QADD |
-            Opcode::QSUB |
-            Opcode::QDADD |
-            Opcode::QDSUB |
-
-            Opcode::SADD16 |
-            Opcode::QADD16 |
-            Opcode::SHADD16 |
-            Opcode::SASX |
-            Opcode::QASX |
-            Opcode::SHASX |
-            Opcode::SSAX |
-            Opcode::QSAX |
-            Opcode::SHSAX |
-            Opcode::SSUB16 |
-            Opcode::QSUB16 |
-            Opcode::SHSUB16 |
-            Opcode::SADD8 |
-            Opcode::QADD8 |
-            Opcode::SHADD8 |
-            Opcode::SSUB8 |
-            Opcode::QSUB8 |
-            Opcode::SHSUB8 |
-            Opcode::UADD16 |
-            Opcode::UQADD16 |
-            Opcode::UHADD16 |
-            Opcode::UASX |
-            Opcode::UQASX |
-            Opcode::UHASX |
-            Opcode::USAX |
-            Opcode::UQSAX |
-            Opcode::UHSAX |
-            Opcode::USUB16 |
-            Opcode::UQSUB16 |
-            Opcode::UHSUB16 |
-            Opcode::UADD8 |
-            Opcode::UQADD8 |
-            Opcode::UHADD8 |
-            Opcode::USUB8 |
-            Opcode::UQSUB8 |
-            Opcode::UHSUB8 |
-
-            Opcode::CLZ |
-
-            Opcode::MUL |
-            Opcode::MLA |
-            Opcode::UMAAL |
-            Opcode::MLS |
-            Opcode::UMULL |
-            Opcode::UMLAL |
-            Opcode::SMLSD |
-            Opcode::SMMLA |
-            Opcode::SMMLS |
-            Opcode::USADA8 |
-            Opcode::USAD8 |
-            Opcode::SDIV |
-            Opcode::UDIV |
-            Opcode::SMLALD(_) |
-            Opcode::SMLSLD(_) |
-            Opcode::SMLAD |
-            Opcode::SMUSD |
-            Opcode::SMMUL |
-            Opcode::SMULW(_) |
-            Opcode::SMUAD |
-            Opcode::SMULL |
-            Opcode::SMUL(_, _) |
-            Opcode::SMAL(_, _) |
-            Opcode::SMLA(_, _) |
-            Opcode::SMLAW(_) |
-            Opcode::SMLAL |
-            Opcode::SMLAL_halfword(_, _) => { write!(out, "{}", colors.arithmetic_op(self)) },
-
-            Opcode::PUSH |
-            Opcode::POP => { write!(out, "{}", colors.stack_op(self)) },
-
-            Opcode::TST |
-            Opcode::TEQ |
-            Opcode::CMP |
-            Opcode::CMN => { write!(out, "{}", colors.comparison_op(self)) },
-
-            Opcode::LDRSH |
-            Opcode::LDRSHT |
-            Opcode::LDRSB |
-            Opcode::LDRSBT |
-            Opcode::STRD |
-            Opcode::LDRD |
-            Opcode::LDREXH |
-            Opcode::STREXH |
-            Opcode::LDREXB |
-            Opcode::STREXB |
-            Opcode::LDREXD |
-            Opcode::STREXD |
-            Opcode::LDREX |
-            Opcode::STREX |
-            Opcode::LDM(false, false, _, _) |
-            Opcode::LDM(false, true, _, _) |
-            Opcode::LDM(true, false, _, _) |
-            Opcode::LDM(true, true, _, _) |
-            Opcode::STM(false, false, _, _) |
-            Opcode::STM(false, true, _, _) |
-            Opcode::STM(true, false, _, _) |
-            Opcode::STM(true, true, _, _) |
-            Opcode::LDR |
-            Opcode::STR |
-            Opcode::LDRH |
-            Opcode::STRH |
-            Opcode::LDRB |
-            Opcode::STRB |
-            Opcode::LDRT |
-            Opcode::STRT |
-            Opcode::LDRHT |
-            Opcode::STRHT |
-            Opcode::LDRBT |
-            Opcode::STRBT |
-            Opcode::SWP |
-            Opcode::SWPB |
-            Opcode::MSR |
-            Opcode::MRS |
-            Opcode::CLREX |
-            Opcode::SXTAB |
-            Opcode::SXTAB16 |
-            Opcode::SXTAH |
-            Opcode::SXTB |
-            Opcode::SXTB16 |
-            Opcode::SXTH |
-            Opcode::UXTAB |
-            Opcode::UXTAB16 |
-            Opcode::UXTAH |
-            Opcode::UXTB |
-            Opcode::UXTB16 |
-            Opcode::UXTH |
-            Opcode::PKHTB |
-            Opcode::PKHBT |
-            Opcode::REV |
-            Opcode::REV16 |
-            Opcode::REVSH |
-            Opcode::SSAT |
-            Opcode::SSAT16 |
-            Opcode::SBFX |
-            Opcode::USAT |
-            Opcode::USAT16 |
-            Opcode::UBFX |
-            Opcode::BFI |
-            Opcode::BFC |
-            Opcode::RBIT |
-            Opcode::SEL |
-            Opcode::MOV |
-            Opcode::MOVT |
-            Opcode::MVN => { write!(out, "{}", colors.data_op(self)) },
-
-            Opcode::HINT |
-            Opcode::NOP |
-            Opcode::PLD |
-            Opcode::PLI |
-            Opcode::ISB |
-            Opcode::DMB |
-            Opcode::DSB |
-            Opcode::CSDB |
-            Opcode::SRS(_, _) |
-            Opcode::BKPT => { write!(out, "{}", colors.misc_op(self)) },
-
-            Opcode::DBG |
-            Opcode::CPS(_) |
-            Opcode::CPS_modeonly |
-            Opcode::SETEND |
-            Opcode::ENTERX |
-            Opcode::LEAVEX |
-            Opcode::YIELD |
-            Opcode::WFE |
-            Opcode::WFI |
-            Opcode::SEV |
-            Opcode::ERET |
-            Opcode::RFE(_, _) |
-            Opcode::HVC |
-            Opcode::SVC |
-            Opcode::SMC |
-            Opcode::LDC(_) |
-            Opcode::LDCL(_) |
-            Opcode::LDC2(_) |
-            Opcode::LDC2L(_) |
-            Opcode::STC(_) |
-            Opcode::STCL(_) |
-            Opcode::STC2(_) |
-            Opcode::STC2L(_) |
-            Opcode::MCRR2(_, _) |
-            Opcode::MCR2(_, _, _) |
-            Opcode::MRRC2(_, _) |
-            Opcode::MRC2(_, _, _) |
-            Opcode::MCRR(_, _) |
-            Opcode::MRRC(_, _) |
-            Opcode::CDP2(_, _, _) => { write!(out, "{}", colors.platform_op(self)) },
-        }
-    }
-}
-
-impl Display for Opcode {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        match self {
-            Opcode::LDRSH => { write!(f, "ldrsh") },
-            Opcode::LDRSHT => { write!(f, "ldrsht") },
-            Opcode::LDRSB => { write!(f, "ldrsb") },
-            Opcode::LDRSBT => { write!(f, "ldrsbt") },
-            Opcode::STRD => { write!(f, "strd") },
-            Opcode::LDRD => { write!(f, "ldrd") },
-            Opcode::LDC(_) => { write!(f, "ldc") },
-            Opcode::LDCL(_) => { write!(f, "ldcl") },
-            Opcode::LDC2(_) => { write!(f, "ldc2") },
-            Opcode::LDC2L(_) => { write!(f, "ldc2l") },
-            Opcode::STC(_) => { write!(f, "stc") },
-            Opcode::STCL(_) => { write!(f, "stcl") },
-            Opcode::STC2(_) => { write!(f, "stc2") },
-            Opcode::STC2L(_) => { write!(f, "stc2l") },
-            Opcode::MCRR2(_, _) => { write!(f, "mcrr2") },
-            Opcode::MCR2(_, _, _) => { write!(f, "mcr2") },
-            Opcode::MRRC2(_, _) => { write!(f, "mrrc2") },
-            Opcode::MRC2(_, _, _) => { write!(f, "mrc2") },
-            Opcode::MCRR(_, _) => { write!(f, "mcrr") },
-            Opcode::MRRC(_, _) => { write!(f, "mrrc") },
-            Opcode::CDP2(_, _, _) => { write!(f, "cdp2") },
-            Opcode::SRS(p, u) => { write!(f, "srs{}{}", if *u { "i" } else { "d" }, if *p { "b" } else { "a" }) },
-            Opcode::RFE(p, u) => { write!(f, "rfe{}{}", if *u { "i" } else { "d" }, if *p { "b" } else { "a" }) },
-            Opcode::ERET => { write!(f, "eret") },
-            Opcode::HVC => { write!(f, "hvc") },
-            Opcode::BKPT => { write!(f, "bkpt") },
-            Opcode::SMC => { write!(f, "smc") },
-            Opcode::MOVT => { write!(f, "movt") },
-            Opcode::QADD => { write!(f, "qadd") },
-            Opcode::QSUB => { write!(f, "qsub") },
-            Opcode::QDADD => { write!(f, "qdadd") },
-            Opcode::QDSUB => { write!(f, "qdsub") },
-            Opcode::Invalid => { write!(f, "invalid") },
-            Opcode::POP => { write!(f, "pop") },
-            Opcode::PUSH => { write!(f, "push") },
-            Opcode::B => { write!(f, "b") },
-            Opcode::BL => { write!(f, "bl") },
-            Opcode::BLX => { write!(f, "blx") },
-            Opcode::BX => { write!(f, "bx") },
-            Opcode::BXJ => { write!(f, "bxj") },
-            Opcode::CLZ => { write!(f, "clz") },
-            Opcode::AND => { write!(f, "and") },
-            Opcode::EOR => { write!(f, "eor") },
-            Opcode::SUB => { write!(f, "sub") },
-            Opcode::RSB => { write!(f, "rsb") },
-            Opcode::ADD => { write!(f, "add") },
-            Opcode::ADC => { write!(f, "adc") },
-            Opcode::SBC => { write!(f, "sbc") },
-            Opcode::RSC => { write!(f, "rsc") },
-            Opcode::TST => { write!(f, "tst") },
-            Opcode::TEQ => { write!(f, "teq") },
-            Opcode::CMP => { write!(f, "cmp") },
-            Opcode::CMN => { write!(f, "cmn") },
-            Opcode::ORR => { write!(f, "orr") },
-            Opcode::MOV => { write!(f, "mov") },
-            Opcode::MSR => { write!(f, "msr") },
-            Opcode::MRS => { write!(f, "mrs") },
-            Opcode::BIC => { write!(f, "bic") },
-            Opcode::MVN => { write!(f, "mvn") },
-            Opcode::LSL => { write!(f, "lsl") },
-            Opcode::LSR => { write!(f, "lsr") },
-            Opcode::ASR => { write!(f, "asr") },
-            Opcode::RRX => { write!(f, "rrx") },
-            Opcode::ROR => { write!(f, "ror") },
-            Opcode::ADR => { write!(f, "adr") },
-            Opcode::LDREXH => { write!(f, "ldrexh") },
-            Opcode::STREXH => { write!(f, "strexh") },
-            Opcode::LDREXB => { write!(f, "ldrexb") },
-            Opcode::STREXB => { write!(f, "strexb") },
-            Opcode::LDREXD => { write!(f, "ldrexd") },
-            Opcode::STREXD => { write!(f, "strexd") },
-            Opcode::LDREX => { write!(f, "ldrex") },
-            Opcode::STREX => { write!(f, "strex") },
-            Opcode::LDM(false, false, _, _) => { write!(f, "ldmda") },
-            Opcode::LDM(false, true, _, _) => { write!(f, "ldmdb") },
-            // TODO: seems like these are backwards
-            Opcode::LDM(true, false, _, _) => { write!(f, "ldm") },
-            Opcode::LDM(true, true, _, _) => { write!(f, "ldmia") },
-            Opcode::STM(false, false, _, _) => { write!(f, "stmda") },
-            Opcode::STM(false, true, _, _) => { write!(f, "stmdb") },
-            // TODO: seems like these are backwards
-            Opcode::STM(true, false, _, _) => { write!(f, "stm") },
-            Opcode::STM(true, true, _, _) => { write!(f, "stmia") },
-            Opcode::LDR => { write!(f, "ldr") },
-            Opcode::STR => { write!(f, "str") },
-            Opcode::LDRH => { write!(f, "ldrh") },
-            Opcode::STRH => { write!(f, "strh") },
-            Opcode::LDRB => { write!(f, "ldrb") },
-            Opcode::STRB => { write!(f, "strb") },
-            Opcode::LDRT => { write!(f, "ldrt") },
-            Opcode::STRT => { write!(f, "strt") },
-            Opcode::LDRHT => { write!(f, "ldrht") },
-            Opcode::STRHT => { write!(f, "strht") },
-            Opcode::LDRBT => { write!(f, "ldrbt") },
-            Opcode::STRBT => { write!(f, "strbt") },
-            Opcode::SWP => { write!(f, "swp") },
-            Opcode::SWPB => { write!(f, "swpb") },
-            Opcode::SDIV => { write!(f, "sdiv") },
-            Opcode::UDIV => { write!(f, "udiv") },
-            Opcode::MUL => { write!(f, "mul") },
-            Opcode::MLA => { write!(f, "mla") },
-            Opcode::UMAAL => { write!(f, "umaal") },
-            Opcode::MLS => { write!(f, "mls") },
-            Opcode::UMULL => { write!(f, "umull") },
-            Opcode::UMLAL => { write!(f, "umlal") },
-            Opcode::SMULL => { write!(f, "smull") },
-            Opcode::SMLA(first, second) => {
-                write!(f, "smla{}{}", if *first { "t" } else { "b" }, if *second { "t" } else { "b" })
-            }
-            Opcode::SMLAL => { write!(f, "smlal") },
-            Opcode::SMLAL_halfword(first, second) => {
-                write!(f, "smlal{}{}", if *first { "t" } else { "b" }, if *second { "t" } else { "b" })
-            }
-            Opcode::SMUL(first, second) => {
-                write!(f, "smul{}{}", if *first { "t" } else { "b" }, if *second { "t" } else { "b" })
-            },
-            Opcode::SMAL(first, second) => {
-                write!(f, "smal{}{}", if *first { "t" } else { "b" }, if *second { "t" } else { "b" })
-            },
-            Opcode::SMLAW(second) => {
-                write!(f, "smlaw{}", if *second { "t" } else { "b" })
-            },
-            Opcode::SMULW(second) => {
-                write!(f, "smulw{}", if *second { "t" } else { "b" })
-            },
-            Opcode::SMLALD(second) => {
-                write!(f, "smlald{}", if *second { "t" } else { "b" })
-            },
-            Opcode::SMLSLD(second) => {
-                write!(f, "smlsld{}", if *second { "t" } else { "b" })
-            },
-            Opcode::SMLSD => { write!(f, "smlsd") },
-            Opcode::SMMLA => { write!(f, "smmla") },
-            Opcode::SMMLS => { write!(f, "smmls") },
-            Opcode::USADA8 => { write!(f, "usada8") },
-            Opcode::USAD8 => { write!(f, "usad8") },
-            Opcode::SMLAD => { write!(f, "smlad") },
-            Opcode::SMUSD => { write!(f, "smusd") },
-            Opcode::SMMUL => { write!(f, "smmul") },
-            Opcode::SMUAD => { write!(f, "smuad") },
-            Opcode::TBB => { write!(f, "tbb") },
-            Opcode::TBH => { write!(f, "tbh") },
-            Opcode::UDF => { write!(f, "udf") },
-            Opcode::SVC => { write!(f, "svc") },
-            Opcode::WFE => { write!(f, "wfe") },
-            Opcode::WFI => { write!(f, "wfi") },
-            Opcode::SEV => { write!(f, "sev") },
-            Opcode::CSDB => { write!(f, "csdb") },
-            Opcode::YIELD => { write!(f, "yield") },
-            Opcode::HINT => { write!(f, "hint") },
-            Opcode::NOP => { write!(f, "nop") },
-            Opcode::LEAVEX => { write!(f, "leavex") },
-            Opcode::ENTERX => { write!(f, "enterx") },
-            Opcode::CLREX => { write!(f, "clrex") },
-            Opcode::DSB => { write!(f, "dsb") },
-            Opcode::DMB => { write!(f, "dmb") },
-            Opcode::ISB => { write!(f, "isb") },
-            Opcode::SXTH => { write!(f, "sxth") },
-            Opcode::UXTH => { write!(f, "uxth") },
-            Opcode::SXTB16 => { write!(f, "sxtb16") },
-            Opcode::UXTB16 => { write!(f, "uxtb16") },
-            Opcode::SXTB => { write!(f, "sxtb") },
-            Opcode::UXTB => { write!(f, "uxtb") },
-            Opcode::SXTAH => { write!(f, "sxtah") },
-            Opcode::UXTAH => { write!(f, "uxtah") },
-            Opcode::SXTAB16 => { write!(f, "sxtab16") },
-            Opcode::UXTAB16 => { write!(f, "uxtab16") },
-            Opcode::SXTAB => { write!(f, "sxtab") },
-            Opcode::UXTAB => { write!(f, "uxtab") },
-            Opcode::CBZ => { write!(f, "cbz") },
-            Opcode::CBNZ => { write!(f, "cbnz") },
-            Opcode::SETEND => { write!(f, "setend") },
-            Opcode::CPS(disable) => { write!(f, "cps{}", if *disable { "id" } else { "ie" }) },
-            Opcode::CPS_modeonly => { write!(f, "cps") },
-            Opcode::REV => { write!(f, "rev") },
-            Opcode::REV16 => { write!(f, "rev16") },
-            Opcode::REVSH => { write!(f, "revsh") },
-            Opcode::IT => { write!(f, "it") },
-            Opcode::PKHTB => { write!(f, "pkhtb") },
-            Opcode::PKHBT => { write!(f, "pkhbt") },
-            Opcode::ORN => { write!(f, "orn") },
-            Opcode::SSAT => { write!(f, "ssat") },
-            Opcode::SSAT16 => { write!(f, "ssat16") },
-            Opcode::SBFX => { write!(f, "sbfx") },
-            Opcode::USAT => { write!(f, "usat") },
-            Opcode::USAT16 => { write!(f, "usat16") },
-            Opcode::UBFX => { write!(f, "ubfx") },
-            Opcode::BFI => { write!(f, "bfi") },
-            Opcode::BFC => { write!(f, "bfc") },
-            Opcode::DBG => { write!(f, "dbg") },
-            Opcode::PLD => { write!(f, "pld") },
-            Opcode::PLI => { write!(f, "pli") },
-            Opcode::RBIT => { write!(f, "rbit") },
-            Opcode::SEL => { write!(f, "sel") },
-            Opcode::SADD16 => { write!(f, "sadd16") },
-            Opcode::QADD16 => { write!(f, "qadd16") },
-            Opcode::SHADD16 => { write!(f, "shadd16") },
-            Opcode::SASX => { write!(f, "sasx") },
-            Opcode::QASX => { write!(f, "qasx") },
-            Opcode::SHASX => { write!(f, "shasx") },
-            Opcode::SSAX => { write!(f, "ssax") },
-            Opcode::QSAX => { write!(f, "qsax") },
-            Opcode::SHSAX => { write!(f, "shsax") },
-            Opcode::SSUB16 => { write!(f, "ssub16") },
-            Opcode::QSUB16 => { write!(f, "qsub16") },
-            Opcode::SHSUB16 => { write!(f, "shsub16") },
-            Opcode::SADD8 => { write!(f, "sadd8") },
-            Opcode::QADD8 => { write!(f, "qadd8") },
-            Opcode::SHADD8 => { write!(f, "shadd8") },
-            Opcode::SSUB8 => { write!(f, "ssub8") },
-            Opcode::QSUB8 => { write!(f, "qsub8") },
-            Opcode::SHSUB8 => { write!(f, "shsub8") },
-            Opcode::UADD16 => { write!(f, "uadd16") },
-            Opcode::UQADD16 => { write!(f, "uqadd16") },
-            Opcode::UHADD16 => { write!(f, "uhadd16") },
-            Opcode::UASX => { write!(f, "uasx") },
-            Opcode::UQASX => { write!(f, "uqasx") },
-            Opcode::UHASX => { write!(f, "uhasx") },
-            Opcode::USAX => { write!(f, "usax") },
-            Opcode::UQSAX => { write!(f, "uqsax") },
-            Opcode::UHSAX => { write!(f, "uhsax") },
-            Opcode::USUB16 => { write!(f, "usub16") },
-            Opcode::UQSUB16 => { write!(f, "uqsub16") },
-            Opcode::UHSUB16 => { write!(f, "uhsub16") },
-            Opcode::UADD8 => { write!(f, "uadd8") },
-            Opcode::UQADD8 => { write!(f, "uqadd8") },
-            Opcode::UHADD8 => { write!(f, "uhadd8") },
-            Opcode::USUB8 => { write!(f, "usub8") },
-            Opcode::UQSUB8 => { write!(f, "uqsub8") },
-            Opcode::UHSUB8 => { write!(f, "uhsub8") },
-        }
-    }
-}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
@@ -1156,12 +332,12 @@ pub enum ShiftStyle {
 
 impl Display for ShiftStyle {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            ShiftStyle::LSL => write!(f, "lsl"),
-            ShiftStyle::LSR => write!(f, "lsr"),
-            ShiftStyle::ASR => write!(f, "asr"),
-            ShiftStyle::ROR => write!(f, "ror"),
-        }
+        use core::fmt::Write;
+        let name = self.name();
+        f.write_char(name[0] as char)?;
+        f.write_char(name[1] as char)?;
+        f.write_char(name[2] as char)?;
+        Ok(())
     }
 }
 
@@ -1173,6 +349,15 @@ impl ShiftStyle {
             0b10 => ShiftStyle::ASR,
             0b11 => ShiftStyle::ROR,
             _ => unreachable!("bad ShiftStyle index")
+        }
+    }
+
+    fn name(&self) -> &'static [u8; 3] {
+        match self {
+            ShiftStyle::LSL => &[b'l', b's', b'l'],
+            ShiftStyle::LSR => &[b'l', b's', b'r'],
+            ShiftStyle::ASR => &[b'a', b's', b'r'],
+            ShiftStyle::ROR => &[b'r', b'o', b'r'],
         }
     }
 }
@@ -1338,44 +523,6 @@ impl CReg {
     }
 }
 
-impl Display for StatusRegMask {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            StatusRegMask::CPSR_C => write!(f, "cpsr_c"),
-            StatusRegMask::CPSR_X => write!(f, "cpsr_x"),
-            StatusRegMask::CPSR_XC => write!(f, "cpsr_xc"),
-            StatusRegMask::APSR_G => write!(f, "apsr_g"),
-            StatusRegMask::CPSR_SC => write!(f, "cpsr_sc"),
-            StatusRegMask::CPSR_SX => write!(f, "cpsr_sx"),
-            StatusRegMask::CPSR_SXC => write!(f, "cpsr_sxc"),
-            StatusRegMask::APSR_NZCVQ => write!(f, "apsr_nzcvq"),
-            StatusRegMask::CPSR_FC => write!(f, "cpsr_fc"),
-            StatusRegMask::CPSR_FX => write!(f, "cpsr_fx"),
-            StatusRegMask::CPSR_FXC => write!(f, "cpsr_fxc"),
-            StatusRegMask::APSR_NZCVQG => write!(f, "apsr_nzcvqg"),
-            StatusRegMask::CPSR_FSC => write!(f, "cpsr_fsc"),
-            StatusRegMask::CPSR_FSX => write!(f, "cpsr_fsx"),
-            StatusRegMask::CPSR_FSXC => write!(f, "cpsr_fsxc"),
-            StatusRegMask::SPSR => write!(f, "spsr"),
-            StatusRegMask::SPSR_C => write!(f, "spsr_c"),
-            StatusRegMask::SPSR_X => write!(f, "spsr_x"),
-            StatusRegMask::SPSR_XC => write!(f, "spsr_xc"),
-            StatusRegMask::SPSR_S => write!(f, "spsr_s"),
-            StatusRegMask::SPSR_SC => write!(f, "spsr_sc"),
-            StatusRegMask::SPSR_SX => write!(f, "spsr_sx"),
-            StatusRegMask::SPSR_SXC => write!(f, "spsr_sxc"),
-            StatusRegMask::SPSR_F => write!(f, "spsr_f"),
-            StatusRegMask::SPSR_FC => write!(f, "spsr_fc"),
-            StatusRegMask::SPSR_FX => write!(f, "spsr_fx"),
-            StatusRegMask::SPSR_FXC => write!(f, "spsr_fxc"),
-            StatusRegMask::SPSR_FS => write!(f, "spsr_fs"),
-            StatusRegMask::SPSR_FSC => write!(f, "spsr_fsc"),
-            StatusRegMask::SPSR_FSX => write!(f, "spsr_fsx"),
-            StatusRegMask::SPSR_FSXC => write!(f, "spsr_fsxc"),
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
 #[allow(missing_docs)]
@@ -1507,6 +654,11 @@ pub enum Operand {
     /// a pc-relative branch, with 32-bit signed offset, left-shifted by 1.
     BranchThumbOffset(i32),
     /// a coprocessor index.
+    #[deprecated(
+        since = "0.3.2",
+        note = "`Coprocessor` was prematurely added: `CoprocOption` the operand used to indicate \
+                coprocessor selection and has always been the variant used as such"
+    )]
     Coprocessor(u8),
     /// a coprocessor option number.
     CoprocOption(u8),
@@ -1530,6 +682,77 @@ pub enum Operand {
     Nothing,
 }
 
+/// a trait describing functions in support of processing operands
+///
+/// this is interesting more for future implementation of `yaxpeax-arm`: operands currently are
+/// backed by an `Operand` enum, which means that operating on an operand involves potentially more
+/// copies and data management than strictly necessary. in the future, operands may be described
+/// more granularly, where `OperandVisitor` is the stable interface to the pre-enum constituent
+/// parts of operands.
+///
+/// see `yaxpeax-x86`'s equivalent trait for examples of that direction.
+pub trait OperandVisitor {
+    /// the result for successful processing of an operand. for formatting, as an example, this is
+    /// likely `()`.
+    type Ok;
+    /// the result for an error in processing an operand.
+    type Error;
+
+    /// process an operand that is a simple general purpose register.
+    fn visit_reg(&mut self, reg: Reg) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is a simple general purpose register with writeback.
+    fn visit_reg_wback(&mut self, reg: Reg, wback: bool) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is a list of registers.
+    fn visit_reglist(&mut self, list: u16) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is a memory access through a general purpose register.
+    fn visit_reg_deref(&mut self, reg: Reg) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is a shifted general pupose register.
+    fn visit_reg_shift(&mut self, reg_shift: RegShift) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is the dereference of a register, afterward incremented by index.
+    fn visit_reg_deref_postindex_reg_shift(&mut self, base: Reg, index: RegShift, add: bool, wback: bool) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is the dereference of a register incremented by index.
+    fn visit_reg_deref_preindex_reg_shift(&mut self, base: Reg, index: RegShift, add: bool, wback: bool) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is the dereference of a register, afterward incremented by offset.
+    fn visit_reg_deref_postindex_offset(&mut self, base: Reg, offset: u16, add: bool, wback: bool) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is the dereference of a register incremented by offset.
+    fn visit_reg_deref_preindex_offset(&mut self, base: Reg, offset: u16, add: bool, wback: bool) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is the dereference of a register, afterward incremented by offset.
+    fn visit_reg_deref_postindex_reg(&mut self, base: Reg, offset: Reg, add: bool, wback: bool) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is the dereference of a register incremented by offset.
+    fn visit_reg_deref_preindex_reg(&mut self, base: Reg, offset: Reg, add: bool, wback: bool) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is a 12-bit immediate.
+    fn visit_imm12(&mut self, imm: u16) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is a 32-bit immediate.
+    fn visit_imm32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is a branch with i32 offset.
+    fn visit_branch_offset(&mut self, offset: i32) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is a branch with i32 offset that also exchanges instruction sets.
+    ///
+    /// this is typically rendered in the same way as `visit_branch_offset` but is a distinct
+    /// helper due to support uses emphasizing the ISA-changing behavior.
+    fn visit_blx_offset(&mut self, offset: i32) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is a coprocessor option access. not exactly clear what this means,
+    /// this may need to get foled into an opcode or redefinition of the operand.
+    fn visit_coprocessor_option(&mut self, nr: u8) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is a control register.
+    fn visit_creg(&mut self, creg: CReg) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is a banked register.
+    fn visit_banked_reg(&mut self, bank: Bank, reg: u16) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is a banked version of `SPSR`.
+    fn visit_banked_spsr(&mut self, bank: Bank) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is some set of bits out of a status register.
+    fn visit_status_reg_mask(&mut self, mask: StatusRegMask) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is `APSR`.
+    fn visit_apsr(&mut self) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is `SPSR`.
+    fn visit_spsr(&mut self) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is `CPSR`.
+    fn visit_cpsr(&mut self) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is not defined above. there are no parameters as for an unknown
+    /// operand kind there is no appropriate tuple of values to provide.
+    fn visit_other(&mut self) -> Result<Self::Ok, Self::Error>;
+}
+
 /// a register bank for a register in `armv7` or below.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[allow(missing_docs)]
@@ -1542,108 +765,6 @@ pub enum Bank {
     Und,
     Mon,
     Hyp,
-}
-
-impl Display for Bank {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Bank::Usr => write!(f, "usr"),
-            Bank::Fiq => write!(f, "fiq"),
-            Bank::Irq => write!(f, "irq"),
-            Bank::Svc => write!(f, "svc"),
-            Bank::Abt => write!(f, "abt"),
-            Bank::Und => write!(f, "und"),
-            Bank::Mon => write!(f, "mon"),
-            Bank::Hyp => write!(f, "hyp"),
-        }
-    }
-}
-
-#[allow(deprecated)]
-impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for Operand {
-    fn colorize(&self, colors: &Y, f: &mut T) -> fmt::Result {
-        match self {
-            Operand::RegList(list) => {
-                format_reg_list(f, *list, colors)
-            }
-            Operand::BankedReg(bank, reg) => {
-                write!(f, "{}_{}", reg_name_colorize(*reg, colors), bank)
-            },
-            Operand::BankedSPSR(bank) => {
-                write!(f, "spsr_{}", bank)
-            },
-            Operand::Reg(reg) => {
-                write!(f, "{}", reg_name_colorize(*reg, colors))
-            }
-            Operand::RegDeref(reg) => {
-                write!(f, "[{}]", reg_name_colorize(*reg, colors))
-            }
-            Operand::RegShift(shift) => {
-                format_shift(f, *shift, colors)
-            }
-            Operand::RegDerefPostindexRegShift(reg, shift, add, wback) => {
-                format_reg_shift_mem(f, *reg, *shift, *add, false, *wback, colors)
-            }
-            Operand::RegDerefPreindexRegShift(reg, shift, add, wback) => {
-                format_reg_shift_mem(f, *reg, *shift, *add, true, *wback, colors)
-            }
-            Operand::RegDerefPostindexOffset(reg, offs, add, wback) => {
-                format_reg_imm_mem(f, *reg, *offs, *add, false, *wback, colors)
-            }
-            Operand::RegDerefPreindexOffset(reg, offs, add, wback) => {
-                format_reg_imm_mem(f, *reg, *offs, *add, true, *wback, colors)
-            }
-            Operand::RegDerefPostindexReg(reg, offsreg, add, wback) => {
-                write!(f, "[{}], {}{}{}", reg_name_colorize(*reg, colors), if *add { "" } else { "-" }, reg_name_colorize(*offsreg, colors), if *wback { "!" } else { "" })
-            }
-            Operand::RegDerefPreindexReg(reg, offsreg, add, wback) => {
-                write!(f, "[{}, {}{}]{}", reg_name_colorize(*reg, colors), if *add { "" } else { "-" }, reg_name_colorize(*offsreg, colors), if *wback { "!" } else { "" })
-            }
-            Operand::Imm12(imm) => {
-                write!(f, "{:#x}", imm)
-            }
-            Operand::Imm32(imm) => {
-                write!(f, "{:#x}", imm)
-            }
-            Operand::BranchOffset(imm) => {
-                if *imm < 0 {
-                    write!(f, "$-{:#x}", (-*imm) * 4)
-                } else {
-                    write!(f, "$+{:#x}", *imm * 4)
-                }
-            }
-            Operand::BranchThumbOffset(imm) => {
-                if *imm < 0 {
-                    write!(f, "$-{:#x}", (-*imm) * 2)
-                } else {
-                    write!(f, "$+{:#x}", *imm * 2)
-                }
-            }
-            Operand::Coprocessor(num) => {
-                write!(f, "p{}", num)
-            }
-            Operand::CoprocOption(num) => {
-                write!(f, "{{{:#x}}}", num)
-            }
-            Operand::RegWBack(reg, wback) => {
-                if *wback {
-                    write!(f, "{}!", reg_name_colorize(*reg, colors))
-                } else {
-                    write!(f, "{}", reg_name_colorize(*reg, colors))
-                }
-            }
-            Operand::CReg(creg) => {
-                write!(f, "{}", creg)
-            }
-            Operand::StatusRegMask(mask) => {
-                write!(f, "{}", mask)
-            }
-            Operand::APSR => write!(f, "apsr"),
-            Operand::SPSR => write!(f, "spsr"),
-            Operand::CPSR => write!(f, "cpsr"),
-            Operand::Nothing => { panic!("tried to print Nothing operand") },
-        }
-    }
 }
 
 /// a `armv7` or below instruction.
@@ -1776,102 +897,6 @@ impl Instruction {
     pub fn thumb(&self) -> bool { self.thumb }
 }
 
-#[allow(deprecated)]
-fn format_reg_list<T: fmt::Write, Y: YaxColors>(f: &mut T, mut list: u16, colors: &Y) -> Result<(), fmt::Error> {
-    write!(f, "{{")?;
-    let mut i = 0;
-    let mut tail = false;
-    while i < 16 {
-        let present = (list & 1) == 1;
-        if present {
-            if tail {
-                write!(f, ", ")?;
-            } else {
-                tail = true;
-            }
-            write!(f, "{}", reg_name_colorize(Reg::from_u8(i), colors))?;
-        }
-        i += 1;
-        list >>= 1;
-    }
-    write!(f, "}}")
-}
-
-#[allow(non_snake_case)]
-#[allow(deprecated)]
-fn format_shift<T: fmt::Write, Y: YaxColors>(f: &mut T, shift: RegShift, colors: &Y) -> Result<(), fmt::Error> {
-    match shift.into_shift() {
-        RegShiftStyle::RegImm(imm_shift) => {
-            if imm_shift.imm() == 0 && imm_shift.stype() == ShiftStyle::LSL {
-                write!(f, "{}", reg_name_colorize(imm_shift.shiftee(), colors))
-            } else {
-                write!(f, "{}, {} {}", reg_name_colorize(imm_shift.shiftee(), colors), imm_shift.stype(), imm_shift.imm())
-            }
-        }
-        RegShiftStyle::RegReg(reg_shift) => {
-            write!(f, "{}, {} {}", reg_name_colorize(reg_shift.shiftee(), colors), reg_shift.stype(), reg_name_colorize(reg_shift.shifter(), colors))
-        },
-    }
-}
-
-#[allow(non_snake_case)]
-#[allow(deprecated)]
-fn format_reg_shift_mem<T: fmt::Write, Y: YaxColors>(f: &mut T, Rd: Reg, shift: RegShift, add: bool, pre: bool, wback: bool, colors: &Y) -> Result<(), fmt::Error> {
-    let op = if add { "" } else { "-" };
-
-    match (pre, wback) {
-        (true, true) => {
-            write!(f, "[{}, {}", reg_name_colorize(Rd, colors), op)?;
-            format_shift(f, shift, colors)?;
-            write!(f, "]!")
-        },
-        (true, false) => {
-            write!(f, "[{}, {}", reg_name_colorize(Rd, colors), op)?;
-            format_shift(f, shift, colors)?;
-            write!(f, "]")
-        },
-        (false, true) => {
-            unreachable!("preindex with writeback is not an ARM addressing mode. this is a decoder bug.");
-        },
-        (false, false) => {
-            write!(f, "[{}], {}", reg_name_colorize(Rd, colors), op)?;
-            format_shift(f, shift, colors)
-        }
-    }
-}
-
-#[allow(non_snake_case)]
-#[allow(deprecated)]
-fn format_reg_imm_mem<T: fmt::Write, Y: YaxColors>(f: &mut T, Rn: Reg, imm: u16, add: bool, pre: bool, wback: bool, colors: &Y) -> Result<(), fmt::Error> {
-    if imm != 0 {
-        let op = if add { "" } else { "-" };
-
-        match (pre, wback) {
-            (true, true) => {
-                write!(f, "[{}, {}{:#x}]!", reg_name_colorize(Rn, colors), op, imm)
-            },
-            (true, false) => {
-                write!(f, "[{}, {}{:#x}]", reg_name_colorize(Rn, colors), op, imm)
-            },
-            (false, _) => {
-                write!(f, "[{}], {}{:#x}", reg_name_colorize(Rn, colors), op, imm)
-            }
-        }
-    } else {
-        match (pre, wback) {
-            (true, true) => {
-                write!(f, "[{}]!", reg_name_colorize(Rn, colors))
-            },
-            (true, false) => {
-                write!(f, "[{}]", reg_name_colorize(Rn, colors))
-            },
-            (false, _) => {
-                write!(f, "[{}]", reg_name_colorize(Rn, colors))
-            }
-        }
-    }
-}
-
 impl Display for Instruction {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         #[allow(deprecated)]
@@ -1915,25 +940,37 @@ pub enum ConditionCode {
     AL
 }
 
+impl ConditionCode {
+    fn name(&self) -> &'static [u8; 2] {
+        match self {
+            ConditionCode::EQ => &[b'e', b'q'],
+            ConditionCode::NE => &[b'n', b'e'],
+            ConditionCode::HS => &[b'h', b's'],
+            ConditionCode::LO => &[b'l', b'o'],
+            ConditionCode::MI => &[b'm', b'i'],
+            ConditionCode::PL => &[b'p', b'l'],
+            ConditionCode::VS => &[b'v', b's'],
+            ConditionCode::VC => &[b'v', b'c'],
+            ConditionCode::HI => &[b'h', b'i'],
+            ConditionCode::LS => &[b'l', b's'],
+            ConditionCode::GE => &[b'g', b'e'],
+            ConditionCode::LT => &[b'l', b't'],
+            ConditionCode::GT => &[b'g', b't'],
+            ConditionCode::LE => &[b'l', b'e'],
+            ConditionCode::AL => &[b'a', b'l'],
+        }
+    }
+}
+
 impl Display for ConditionCode {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        match self {
-            ConditionCode::EQ => write!(f, "eq"),
-            ConditionCode::NE => write!(f, "ne"),
-            ConditionCode::HS => write!(f, "hs"),
-            ConditionCode::LO => write!(f, "lo"),
-            ConditionCode::MI => write!(f, "mi"),
-            ConditionCode::PL => write!(f, "pl"),
-            ConditionCode::VS => write!(f, "vs"),
-            ConditionCode::VC => write!(f, "vc"),
-            ConditionCode::HI => write!(f, "hi"),
-            ConditionCode::LS => write!(f, "ls"),
-            ConditionCode::GE => write!(f, "ge"),
-            ConditionCode::LT => write!(f, "lt"),
-            ConditionCode::GT => write!(f, "gt"),
-            ConditionCode::LE => write!(f, "le"),
-            ConditionCode::AL => Ok(())
+        if *self != ConditionCode::AL {
+            use core::fmt::Write;
+            f.write_char(self.name()[0] as char)?;
+            f.write_char(self.name()[1] as char)?;
         }
+
+        Ok(())
     }
 }
 
