@@ -2535,7 +2535,7 @@ impl Display for Opcode {
             Opcode::TBX => "tbx",
             Opcode::FCADD => "fcadd",
             Opcode::LDGM => "ldgm",
-            Opcode::LDG => "ldm",
+            Opcode::LDG => "ldg",
             Opcode::STGM => "stgm",
             Opcode::STZGM => "stzgm",
             Opcode::STG => "stg",
