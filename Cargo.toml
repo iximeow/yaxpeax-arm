@@ -49,8 +49,9 @@ default = ["std", "alloc", "fmt", "use-serde", "non-exhaustive-enums"]
 # dependency tree.
 non-exhaustive-enums = []
 
-# fmt-related features that depend on the alloc crate
-alloc = []
+# fmt-related features that depend on the alloc crate. additionally, some
+# supporting implementation comes from `yaxpeax-arch`'s alloc feature.
+alloc = ["yaxpeax-arch/alloc"]
 
 # formatting code (Display, Debug impls, etc) are (inconsistently) optional on
 # `fmt`. future crate releases will move `fmt` impls consistently behind this
