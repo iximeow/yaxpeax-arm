@@ -29,4 +29,4 @@ Build.run({"cargo", "rustc", "--no-default-features", "--", "-C", "link-arg=-nos
 Build.run({"cargo", "rustc", "--no-default-features", "--release", "--", "-C", "link-arg=-nostartfiles"}, {cwd="tests/no_std_check"})
 
 Step.advance("differential")
-Build.run({"cargo", "build", "--release"}, {cwd="differential-tests", name="build capstone differential"})
+Build.run({"cargo", "test", "--release"}, {cwd="differential-tests", name="run capstone differential test"})
