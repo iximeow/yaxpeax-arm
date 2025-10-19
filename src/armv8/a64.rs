@@ -1263,7 +1263,10 @@ pub enum Opcode {
     DSB(u8),
     DMB(u8),
     SB,
+    #[deprecated(since = "0.4.0", note = "i spelled `ssbb` incorrectly.")]
     SSSB,
+    PSSBB,
+    SSBB,
     HINT,
     CLREX,
     CSEL,
@@ -1867,6 +1870,10 @@ impl Display for Opcode {
             Opcode::MRS => "mrs",
             Opcode::ISB => "isb",
             Opcode::SB => "sb",
+            Opcode::SSBB => "ssbb",
+            Opcode::PSSBB => "pssbb",
+            // this arm should never, never, never be hit
+            #[allow(deprecated)]
             Opcode::SSSB => "sssb",
             Opcode::CLREX => "clrex",
             Opcode::CSEL => "csel",
@@ -8669,6 +8676,9 @@ impl Decoder<ARMv8> for InstDecoder {
                             let Rt = ((word >> 0) & 0b11111) as u16;
 
                             let simm = (((imm9 as i16) << 7) >> 7) as i32;
+                            // tag granularity is 16 bytes, so tags are encoded with the low four
+                            // (`LOG2_TAG_GRANULE `) zeroes shifted out for all tag instructions.
+                            let simm = simm << 4;
 
                             let opcode = &[
                                 Opcode::STZGM, Opcode::STG, Opcode::STG, Opcode::STG,
@@ -10597,7 +10607,15 @@ impl Decoder<ARMv8> for InstDecoder {
                                                     },
                                                     0b100 => {
                                                         if CRm == 0b0000 {
-                                                            inst.opcode = Opcode::SSSB;
+                                                            inst.opcode = Opcode::SSBB;
+                                                            inst.operands = [
+                                                                Operand::Nothing,
+                                                                Operand::Nothing,
+                                                                Operand::Nothing,
+                                                                Operand::Nothing,
+                                                            ];
+                                                        } else if CRm == 0b0100 {
+                                                            inst.opcode = Opcode::PSSBB;
                                                             inst.operands = [
                                                                 Operand::Nothing,
                                                                 Operand::Nothing,

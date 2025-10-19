@@ -523,16 +523,6 @@ fn capstone_differential() {
                         panic!("text: {}, bytes: {:?}", yax_text, bytes);
                     }
 
-                    if cs_text.contains("stz2g ") || cs_text.contains("stzg ") || cs_text.contains("st2g ") || cs_text.contains("stg ") || cs_text.contains("irg ") || cs_text.contains("ssbb") {
-                        // TODO yax might not scale the offset right?
-                        continue;
-                    }
-
-                    if cs_text.contains("ldg ") {
-                        // TODO: yax says ldm, cs says ldg
-                        continue;
-                    }
-
                     if cs_text.contains("dfb ") {
                         // TODO: yax and cs disagree?
                         continue;
@@ -683,14 +673,69 @@ fn capstone_differential() {
                         if cs_text.starts_with("sev ") {
                             return true;
                         }
-//                        if yax_text.starts_with("hint ") {
-//                            return true;
-//                        }
+                        if yax_text.starts_with("hint ") {
+                            return true;
+                        }
 
                         // fmlal v0.2s, v0.4h, v0.h[0] != fmlal v0.2s, v0.2h, v0.h[0]. bytes: [0,
                         // 0, 80, f]
                         // .. i think capstone is wrong on this one
                         if yax_text.starts_with("fmlal ") || yax_text.starts_with("fmlsl ") {
+                            return true;
+                        }
+
+                        if cs_text.starts_with("irg") && yax_text.starts_with(cs_text) && yax_text.ends_with(", xzr") {
+                            // a trailing xzr is implicit in irg if omitted in the instruction
+                            // text. yax includes xzr in this case, capstone does not.
+                            return true;
+                        }
+
+                        const TAG_INSTRUCTIONS: [&'static str; 8] = [
+                            "stzgm", "stg", "ldg", "stzg",
+                            "stgm", "st2g", "ldgm", "stz2g"
+                        ];
+
+                        for mnemonic in TAG_INSTRUCTIONS {
+                            if parsed_yax.opcode != mnemonic || parsed_cs.opcode != mnemonic {
+                                continue;
+                            }
+
+                            for (yax_op, cs_op) in parsed_yax.operands.iter().zip(parsed_cs.operands.iter()) {
+                                if yax_op == cs_op {
+                                    continue;
+                                }
+                                match (yax_op, cs_op) {
+                                    (
+                                        Some(ParsedOperand::MemoryWithOffset {
+                                            base: cs_base, offset: Some(cs_offset), writeback: cs_writeback
+                                        }),
+                                        Some(ParsedOperand::MemoryWithOffset {
+                                            base: yax_base, offset: Some(yax_offset), writeback: yax_writeback
+                                        })
+                                    ) => {
+                                        if cs_base != yax_base || cs_writeback != yax_writeback {
+                                            // a pretty fundamental decode mismatch..
+                                            return false;
+                                        }
+
+                                        if *cs_offset != *yax_offset && *yax_offset < 0 {
+                                            // capstone decodes offsets as an unsigned integer, not
+                                            // clamping to the signed range -4096 to 4080. yaxpeax
+                                            // decodes the operand into this range.
+                                            if (!*yax_offset + 1) & 0x1fff != *cs_offset {
+                                                return false;
+                                            }
+                                        }
+                                    }
+                                    _ => {
+                                        // some operands differ
+                                        return false;
+                                    }
+                                }
+                            }
+
+                            // operand matching above looks OK, opcodes are the same, we're good
+                            // here.
                             return true;
                         }
 
@@ -700,7 +745,7 @@ fn capstone_differential() {
 //                    eprintln!("{}", yax_text);
                     if !acceptable_match(&yax_text, &cs_text) {
                         eprintln!("disassembly mismatch: {} != {}. bytes: {:x?}", yax_text, cs_text, bytes);
-//                        std::process::abort();
+                        std::process::abort();
                     } else {
                         stats.good.fetch_add(1, Ordering::Relaxed);
                     }

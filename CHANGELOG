@@ -1,3 +1,10 @@
+## 0.3.3
+
+* fix some issues with tag instruction decoding
+  - the raw tag offset was reported, rather than the shifted-by-four value that
+    corresponds to a real address
+  - ldg was displayed as "ldm" (thank you @martin-fink!)
+
 ## 0.3.2
 
 * fully support PAC instructions

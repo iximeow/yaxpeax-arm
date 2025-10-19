@@ -83,6 +83,21 @@ fn test_barrier() {
     test_display([0xbf, 0x3f, 0x03, 0xd5], "dmb sy");
     // only with FEAT_SB
     test_display([0xff, 0x30, 0x03, 0xd5], "sb");
+
+    test_display([0x9f, 0x34, 0x03, 0xd5], "pssbb");
+
+    // when printing the instruction the third operand defaults to xzr if omitted, so yax probably
+    // could/should omit it. but it's not *wrong*..
+    test_display([0x00, 0x10, 0xdf, 0x9a], "irg x0, x0, xzr");
+    test_display([0x90, 0x10, 0xdf, 0x9a], "irg x16, x4, xzr");
+    test_display([0x90, 0x10, 0xcf, 0x9a], "irg x16, x4, x15");
+
+    test_display([0x00, 0x10, 0x60, 0xd9], "ldg x0, [x0, #0x10]");
+    test_display([0x90, 0x10, 0x60, 0xd9], "ldg x16, [x4, #0x10]");
+    test_display([0x90, 0x90, 0x60, 0xd9], "ldg x16, [x4, #0x90]");
+    // the immediate offfset in tag instructions is a signed offset in the range of -4096 to 4096.
+    // yax decodes it as signed in this range, capstone does not.
+    test_display([0x90, 0x90, 0x7f, 0xd9], "ldg x16, [x4, #-0x70]");
 }
 
 #[test]
@@ -5016,6 +5031,25 @@ fn test_bitfield() {
     const TESTS: &[([u8; 4], &'static str)] = &[
         ([0x00, 0x1c, 0x40, 0xd3], "ubfx x0, x0, #0x0, #0x8"),
         ([0x1f, 0x1c, 0x00, 0x53], "uxtb wzr, w0"),
+    ];
+
+    let errs = run_tests(TESTS);
+
+    for err in errs.iter() {
+        println!("{}", err);
+    }
+
+    assert!(errs.is_empty());
+}
+
+#[test]
+fn test_tags() {
+    const TESTS: &[([u8; 4], &'static str)] = &[
+        ([0x00, 0x10, 0x60, 0xd9], "ldg x0, [x0, #0x10]"),
+        ([0x00, 0x20, 0x60, 0xd9], "ldg x0, [x0, #0x20]"),
+        ([0x00, 0x21, 0x60, 0xd9], "ldg x0, [x8, #0x20]"),
+        ([0x03, 0x21, 0x60, 0xd9], "ldg x3, [x8, #0x20]"),
+        ([0x03, 0x21, 0x7f, 0xd9], "ldg x3, [x8, #-0xe0]"),
     ];
 
     let errs = run_tests(TESTS);
