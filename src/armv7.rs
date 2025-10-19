@@ -39,6 +39,7 @@ pub struct NoContext;
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
 #[allow(missing_docs)]
+#[cfg_attr(feature = "non-exhaustive-enums", non_exhaustive)]
 pub enum Opcode {
     Invalid,
     /*
@@ -606,6 +607,7 @@ impl StatusRegMask {
 
 /// an operand in an `arm` instruction.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "non-exhaustive-enums", non_exhaustive)]
 pub enum Operand {
     /// a general-purpose register.
     Reg(Reg),

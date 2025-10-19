@@ -21,12 +21,40 @@ bitvec = { version = "1.0.1", default-features = false, features = [] }
 "serde_derive" = { version = "1.0", optional = true }
 
 [features]
-default = ["std", "alloc", "fmt", "use-serde"]
+default = ["std", "alloc", "fmt", "use-serde", "non-exhaustive-enums"]
+
+# IF YOU DISABLE DEFAULT FEATURES, EXPLICITLY ENABLE `non-exhaustive-enums`.
+# unless you read the rest of this section and manage or tolerate additional
+# Operand variants appearing across minor releases.
+#
+# `Opcode` and `Operand` enums are marked non-exhaustive to tolerate future
+# growth of the ISA or additions to the disassembler (NEON, etc). typically
+# disassemblers either care about a specific subset of instructions (`b<cc>`,
+# `bl` come to mind), or many (all?) instructions (program analysis, semantic
+# lifting, ..).
+#
+# this feature allows users to control the presence of the `#[non_exhaustive]`
+# attribute on Opcode and Operand to get feedback on missing variants in large
+# match blocks.
+#
+# additions to `Opcode` and `Operand` will happen across minor version bumps,
+# but not patch versions. code removing `#[non_exhaustive]` should probably
+# lock to a minor versions.
+#
+# this is an enabled-by-default feature to handle cases where a library removes
+# this feature, but something else in the dependency tree enables it. this way,
+# libraries can test with this feature disabled, lock to corresponding
+# major.minor versions of the disassembler and opcode set, and then harmlessly
+# tolerate `#[non_exhaustive]` if it's added inadvertently elsewhere in the
+# dependency tree.
+non-exhaustive-enums = []
 
 # fmt-related features that depend on the alloc crate
 alloc = []
 
-# formatting code (Display, Debug impls, etc) are optional on `fmt`.
+# formatting code (Display, Debug impls, etc) are (inconsistently) optional on
+# `fmt`. future crate releases will move `fmt` impls consistently behind this
+# feature.
 #
 # some `fmt` code also has `alloc` features (`InstructionDisplayBuffer`)
 fmt = []

@@ -1147,7 +1147,7 @@ impl SysOps {
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(u16)]
 #[allow(missing_docs)]
-#[non_exhaustive]
+#[cfg_attr(feature = "non-exhaustive-enums", non_exhaustive)]
 pub enum Opcode {
     Invalid,
     UDF,
@@ -2795,6 +2795,7 @@ impl Display for ShiftStyle {
 /// in practice; no `aarch64` instruction has multiple `Operand::PCOffset` entries, for example.
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(C)]
+#[cfg_attr(feature = "non-exhaustive-enums", non_exhaustive)]
 pub enum Operand {
     /// "no operand". since an instruction's `operands` array is always four entries, this is used
     /// to fill space, if any, after recording an instruction's extant operands.
