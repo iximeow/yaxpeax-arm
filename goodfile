@@ -13,7 +13,20 @@ Step.advance("test")
 Build.run({"cargo", "test"}, {name="test stdlib/fmt"})
 Build.run({"cargo", "test", "--no-default-features"}, {name="test nostdlib/fmt"})
 
-Build.run({"cargo", "rustc", "--", "-C", "link-arg=-nostartfiles"}, {cwd="tests/no_std_check"})
-Build.run({"cargo", "rustc", "--release", "--", "-C", "link-arg=-nostartfiles"}, {cwd="tests/no_std_check"})
+-- testing the full set of feature combinations would be.. unwieldy
+Step.push("feature matrix (subset)")
+Build.run({"cargo", "test", "--no-default-features", "--features", "std"}, {name="test features/fmt"})
+Build.run({"cargo", "test", "--no-default-features", "--features", "alloc"}, {name="test features/alloc"})
+Build.run({"cargo", "test", "--no-default-features", "--features", "fmt"}, {name="test features/fmt"})
+Build.run({"cargo", "test", "--no-default-features", "--features", "use-serde"}, {name="test features/use-serde"})
+Build.run({"cargo", "test", "--no-default-features", "--features", "non-exhaustive-enums"}, {name="test features/non-exhaustive-enums"})
+Build.run({"cargo", "test", "--no-default-features", "--features", "std,alloc"}, {name="test features/std,alloc"})
+Build.run({"cargo", "test", "--no-default-features", "--features", "alloc,fmt"}, {name="test features/alloc,fmt"})
+Build.run({"cargo", "test", "--no-default-features", "--features", "use-serde,alloc,fmt"}, {name="test features/use-serde,alloc,fmt"})
 
+Step.advance("no-std checks")
+Build.run({"cargo", "rustc", "--no-default-features", "--", "-C", "link-arg=-nostartfiles"}, {cwd="tests/no_std_check"})
+Build.run({"cargo", "rustc", "--no-default-features", "--release", "--", "-C", "link-arg=-nostartfiles"}, {cwd="tests/no_std_check"})
+
+Step.advance("differential")
 Build.run({"cargo", "build", "--release"}, {cwd="differential-tests", name="build capstone differential"})
