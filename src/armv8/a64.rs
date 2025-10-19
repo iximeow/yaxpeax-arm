@@ -1147,6 +1147,7 @@ impl SysOps {
 #[derive(Copy, Clone, Debug, PartialEq)]
 #[repr(u16)]
 #[allow(missing_docs)]
+#[non_exhaustive]
 pub enum Opcode {
     Invalid,
     UDF,
@@ -1241,7 +1242,6 @@ pub enum Opcode {
     B,
     BR,
     Bcc(u8),
-    BCcc(u8),
     BL,
     BLR,
     SVC,
@@ -1265,8 +1265,6 @@ pub enum Opcode {
     SB,
     #[deprecated(since = "0.4.0", note = "i spelled `ssbb` incorrectly.")]
     SSSB,
-    PSSBB,
-    SSBB,
     HINT,
     CLREX,
     CSEL,
@@ -1740,6 +1738,15 @@ pub enum Opcode {
     IRG,
     SUBP,
     SUBPS,
+
+    // one would imagine these to be sorted higher, maybe grouped
+    // with `Bcc` and ill-named `sssb`? unfortunately i made this
+    // `repr(u16)` long ago and you can't set a discriminant on
+    // non-unit enum variants, so moving this up just makes
+    // everything a mess.
+    BCcc(u8),
+    PSSBB,
+    SSBB,
 
     // instructions present with FEAT_PAuth
     PACIASP,
