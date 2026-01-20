@@ -241,6 +241,26 @@ fn test_decode_str_ldr() {
 }
 
 #[test]
+fn test_shift_rotate() {
+    test_display(
+        [0x82, 0xa5, 0xa0, 0xe1],
+        // ideally: "lsl sl, r2, 0xb"
+        // but will tolerate:
+        "mov r10, r2, lsl 11"
+    );
+    test_display(
+        [0xa2, 0x2c, 0xb0, 0xe1],
+        // ideally: "lsrs r2, r2, 0x19"
+        // but will tolerate:
+        "movs r2, r2, lsr 25"
+    );
+    test_display(
+        [0x5b, 0x5a, 0xa0, 0xe1],
+        "mov r5, fp, asr r10"
+    );
+}
+
+#[test]
 fn test_synchronization() {
     test_display(
         [0x94, 0x8f, 0x8a, 0xe1],
@@ -519,7 +539,7 @@ fn test_decode_arithmetic() {
         Instruction {
             condition: ConditionCode::AL,
             opcode: Opcode::MOV,
-            operands: [Operand::Reg(Reg::from_u8(3)), Operand::Reg(Reg::from_u8(0)), Operand::RegShift(RegShift::from_raw(0x143)), Operand::Nothing],
+            operands: [Operand::Reg(Reg::from_u8(3)), Operand::RegShift(RegShift::from_raw(0x143)), Operand::Nothing, Operand::Nothing],
             s: false,
             thumb_w: false,
             thumb: false,
