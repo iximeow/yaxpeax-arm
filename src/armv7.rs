@@ -524,6 +524,25 @@ impl CReg {
     }
 }
 
+/// `StatusRegMask` describes the status register mask as encoded in `msr` or `mrs` instructions.
+/// the bit patterns described by this mask are buried in the ARM reference manual, reproduced here
+/// from `B9.3.11 MSR (immediate)`:
+/// > `<spec_reg>` Is one of:
+/// > * `APSR_<bits>`
+/// > * `CPSR_<fields>`
+/// > * `SPSR_<fields>`
+/// > [...]
+/// > `<bits>` Is one of nzcvq, g, or nzcvqg.
+/// > In the A and R profiles:
+/// > * APSR_nzcvq is the same as CPSR_f (mask == '1000')
+/// > * APSR_g is the same as CPSR_s (mask == '0100')
+/// > * APSR_nzcvqg is the same as CPSR_fs (mask == '1100').
+/// >
+/// > `<fields>` Is a sequence of one or more of the following:
+/// > * `c` - `mask<0> = 1' to enable writing of `bits<7:0>` of the destination PSR
+/// > * `x` - `mask<1> = 1' to enable writing of `bits<15:8>` of the destination PSR
+/// > * `s` - `mask<2> = 1' to enable writing of `bits<23:16>` of the destination PSR
+/// > * `f` - `mask<3> = 1' to enable writing of `bits<31:24>` of the destination PSR.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
 #[allow(missing_docs)]
@@ -622,7 +641,7 @@ pub enum Operand {
     /// immediate offset.
     RegShift(RegShift),
     /// a memory access of a register, post-indexed a register shifted by register or immediate.
-    /// the first bool indicates if the shifted-register is added or subtracted ot the base
+    /// the first bool indicates if the shifted-register is added or subtracted to the base
     /// register, while the second bool indicates if the resulting address is written back to the
     /// base register.
     RegDerefPostindexRegShift(Reg, RegShift, bool, bool), // add/sub, wback
@@ -632,19 +651,19 @@ pub enum Operand {
     /// the base register.
     RegDerefPreindexRegShift(Reg, RegShift, bool, bool), // add/sub, wback
     /// a memory access of a register, post-indexed with an immediate. the first bool indicates if
-    /// the shifted-register is added or subtracted ot the base register, while the second bool
+    /// the shifted-register is added or subtracted to the base register, while the second bool
     /// indicates if the resulting address is written back to the base register.
     RegDerefPostindexOffset(Reg, u16, bool, bool), // add/sub, wback
     /// a memory access of a register, pre-indexed with an immediate. the first bool indicates if
-    /// the shifted-register is added or subtracted ot the base register, while the second bool
+    /// the shifted-register is added or subtracted to the base register, while the second bool
     /// indicates if the resulting address is written back to the base register.
     RegDerefPreindexOffset(Reg, u16, bool, bool), // add/sub, wback
     /// a memory access of a register, post-indexed with a register. the first bool indicates if the
-    /// shifted-register is added or subtracted ot the base register, while the second bool
+    /// shifted-register is added or subtracted to the base register, while the second bool
     /// indicates if the resulting address is written back to the base register.
     RegDerefPostindexReg(Reg, Reg, bool, bool), // add/sub, wback
     /// a memory access of a register, pre-indexed with a register. the first bool indicates if the
-    /// shifted-register is added or subtracted ot the base register, while the second bool
+    /// shifted-register is added or subtracted to the base register, while the second bool
     /// indicates if the resulting address is written back to the base register.
     RegDerefPreindexReg(Reg, Reg, bool, bool), // add/sub, wback
     /// a 12-bit immediate, stored in a `u16`.
