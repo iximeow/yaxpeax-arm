@@ -2519,19 +2519,27 @@ impl Decoder<ARMv7> for InstDecoder {
                                     ];
                                 }
                             } else {
-                                if self.should_is_must {
-                                    if opcode == 0b1101 && Rn != 0 {
-                                        // Rn "should" be zero
-                                        return Err(DecodeError::Nonconforming);
+                                if opcode == 0b1101 {
+                                    if self.should_is_must {
+                                        if Rn != 0 {
+                                            // Rn "should" be zero
+                                            return Err(DecodeError::Nonconforming);
+                                        }
                                     }
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(Rd)),
+                                        Operand::RegShift(RegShift::from_raw(shift_spec)),
+                                        Operand::Nothing,
+                                        Operand::Nothing
+                                    ];
+                                } else {
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(Rd)),
+                                        Operand::Reg(Reg::from_u8(Rn)),
+                                        Operand::RegShift(RegShift::from_raw(shift_spec)),
+                                        Operand::Nothing
+                                    ];
                                 }
-
-                                inst.operands = [
-                                    Operand::Reg(Reg::from_u8(Rd)),
-                                    Operand::Reg(Reg::from_u8(Rn)),
-                                    Operand::RegShift(RegShift::from_raw(shift_spec)),
-                                    Operand::Nothing
-                                ];
                             }
                         } else {
                     //    known 0 because it and bit 5 are not both 1 --v
@@ -2548,9 +2556,18 @@ impl Decoder<ARMv7> for InstDecoder {
                             // page A5-200 indicates that saturating add and subtract should be
                             // here?
                             if (0b1101 & opcode) == 0b1101 {
+                                if self.should_is_must {
+                                    if Rn != 0 {
+                                        return Err(DecodeError::Nonconforming);
+                                    }
+                                }
                                 // these are all invalid
-                                inst.opcode = Opcode::Invalid;
-                                return Err(DecodeError::InvalidOpcode);
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(Rd)),
+                                    Operand::RegShift(RegShift::from_raw(shift_spec)),
+                                    Operand::Nothing,
+                                    Operand::Nothing,
+                                ];
                             } else {
                                 // TODO: unsure about this RegShift...
                                 inst.operands = [
