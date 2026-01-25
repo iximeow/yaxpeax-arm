@@ -4154,7 +4154,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
             // `STM (STMIA, STMEA)` on page `A8-665` -- v4T
             let rn = instr2[8..11].load::<u8>();
             let reglist = instr2[0..8].load::<u16>();
-            inst.opcode = Opcode::STM(true, true, false, true); // stmia, no wback, yes usermode
+            inst.opcode = Opcode::STM(true, false, false, true); // stmia, no wback, yes usermode
             inst.operands = [
                 Operand::RegWBack(Reg::from_u8(rn), true), // always wback
                 Operand::RegList(reglist as u16),
