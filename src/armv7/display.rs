@@ -1036,14 +1036,12 @@ impl Opcode {
             Opcode::STREX => { "strex" },
             Opcode::LDM(false, false, _, _) => { "ldmda" },
             Opcode::LDM(false, true, _, _) => { "ldmdb" },
-            // TODO: seems like these are backwards
             Opcode::LDM(true, false, _, _) => { "ldm" },
-            Opcode::LDM(true, true, _, _) => { "ldmia" },
+            Opcode::LDM(true, true, _, _) => { "ldmib" },
             Opcode::STM(false, false, _, _) => { "stmda" },
             Opcode::STM(false, true, _, _) => { "stmdb" },
-            // TODO: seems like these are backwards
             Opcode::STM(true, false, _, _) => { "stm" },
-            Opcode::STM(true, true, _, _) => { "stmia" },
+            Opcode::STM(true, true, _, _) => { "stmib" },
             Opcode::LDR => { "ldr" },
             Opcode::STR => { "str" },
             Opcode::LDRH => { "ldrh" },
