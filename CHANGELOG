@@ -15,6 +15,7 @@
     RegDerefPostindexOffset would report "wback=false", but this operand form
     always writes back the modified address. the textual decoding of these
     instructions was correct and continues to be.
+* a few cases of rejecting valid instructions as `nonconforming` have been fixed
 
 ## 0.4.0
 
