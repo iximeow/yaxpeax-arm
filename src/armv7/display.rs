@@ -388,7 +388,7 @@ pub(crate) fn visit_inst<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fm
         Opcode::LDR => {
             match instr.operands {
                 // TODO: should this be PostindexOffset?
-                [Operand::Reg(Rt), Operand::RegDerefPostindexOffset(Reg { bits: 13 }, 4, true, false), Operand::Nothing, Operand::Nothing] => {
+                [Operand::Reg(Rt), Operand::RegDerefPostindexOffset(Reg { bits: 13 }, 4, true, true), Operand::Nothing, Operand::Nothing] => {
                     out.span_start_opcode();
                     instr.write_conditioned_opcode(&Opcode::POP, out)?;
                     out.span_end_opcode();
