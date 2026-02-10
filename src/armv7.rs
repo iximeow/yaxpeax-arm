@@ -2569,6 +2569,16 @@ impl Decoder<ARMv7> for InstDecoder {
                                 ];
                             }
                         }
+                        // TEQ is a two-operand instruction expecting Rd to be 0.
+                        if inst.opcode == Opcode::TEQ || inst.opcode == Opcode::TST || inst.opcode == Opcode::CMP || inst.opcode == Opcode::CMN {
+                            if inst.operands[0] != Operand::Reg(Reg { bits: 0 }) {
+                                return Err(DecodeError::InvalidOperand);
+                            }
+                            inst.operands = [
+                                inst.operands[1], inst.operands[2],
+                                Operand::Nothing, Operand::Nothing
+                            ];
+                        }
                     }
                 }
             },
@@ -2669,8 +2679,35 @@ impl Decoder<ARMv7> for InstDecoder {
                     };
                     if (opcode == 0b0010 || opcode == 0b0100) && Rn == 0b1111 {
                         inst.opcode = Opcode::ADR;
+                        if opcode == 0b0010 {
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(Rd)),
+                                Operand::Imm32((-(imm as i32)) as u32),
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+                        } else {
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(Rd)),
+                                Operand::Imm32(imm),
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+                        }
+                        return Ok(());
                     }
                     match opcode {
+                        0b1000 |
+                        0b1001 |
+                        0b1010 |
+                        0b1011 => {
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(Rn)),
+                                Operand::Imm32(imm),
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+                        }
                         0b1101 => {
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(Rd)),
