@@ -394,7 +394,7 @@ fn test_decode_pop() {
             opcode: Opcode::LDR,
             operands: [
                 Operand::Reg(Reg::from_u8(1)),
-                Operand::RegDerefPostindexOffset(Reg::from_u8(13), 0x4, true, false),
+                Operand::RegDerefPostindexOffset(Reg::from_u8(13), 0x4, true, true),
                 Operand::Nothing,
                 Operand::Nothing,
             ],

@@ -3,6 +3,11 @@
 * documentation for how to process `StatusRegMask`
 * fix incorrect decoding of STM pre/post increment for encoding T1
   - "stm" would report preincrement when the semantic is postincrement"
+* postincrement operands should always postincrement
+  - through a comedy of errors, the structured decoding of
+    RegDerefPostindexOffset would report "wback=false", but this operand form
+    always writes back the modified address. the textual decoding of these
+    instructions was correct and continues to be.
 
 ## 0.4.0
 

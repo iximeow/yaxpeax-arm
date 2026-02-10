@@ -1438,8 +1438,8 @@ impl Decoder<ARMv7> for InstDecoder {
                                     Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), (imm8 << 2) as u16, U, W)
                                 } else {
                                     if W {
-                                        // preindex has no wback
-                                        Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), (imm8 << 2) as u16, U, false)
+                                        // postindex always has wback
+                                        Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), (imm8 << 2) as u16, U, true)
                                     } else {
                                         Operand::RegDeref(Reg::from_u8(Rn))
                                     }
@@ -1823,9 +1823,10 @@ impl Decoder<ARMv7> for InstDecoder {
                                             if P {
                                                 Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm, U, W)
                                             } else {
-                                                // either this is !P && W, so STRHT, and no wback,
-                                                // or this is !W, and no wback
-                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U, false)
+                                                // from
+                                                // https://developer.arm.com/documentation/111183/2025-09_ASL1/Base-Instructions/STRH--register---Store-Register-Halfword--register--?lang=en
+                                                // > let wback : boolean = (P == '0') || (W == '1');
+                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U, true)
                                             },
                                             Operand::Nothing,
                                             Operand::Nothing,
@@ -1844,9 +1845,10 @@ impl Decoder<ARMv7> for InstDecoder {
                                             if P {
                                                 Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm, U, W)
                                             } else {
-                                                // either this is !P && W, so LDRHT, and no wback,
-                                                // or this is !W, and no wback
-                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U, false)
+                                                // from
+                                                // https://developer.arm.com/documentation/111183/2025-09_ASL1/Base-Instructions/LDRH--register---Load-Register-Halfword--register--?lang=en
+                                                // > let wback : boolean = (P == '0') || (W == '1');
+                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U, true)
                                             },
                                             Operand::Nothing,
                                             Operand::Nothing,
@@ -1948,8 +1950,8 @@ impl Decoder<ARMv7> for InstDecoder {
                                             if P {
                                                 Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm, U, W)
                                             } else {
-                                                // either !P & W (invalid) or !W
-                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U, false)
+                                                // let wback : boolean = (P == '0') || (W == '1');
+                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U, true)
                                             },
                                             Operand::Nothing,
                                         ];
@@ -1974,8 +1976,8 @@ impl Decoder<ARMv7> for InstDecoder {
                                             if P {
                                                 Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm, U, W)
                                             } else {
-                                                // either !P & W (ldrsbt) or !W
-                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U, false)
+                                                // if postindex then R(n) = offset_addr; end
+                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U, true)
                                             },
                                             Operand::Nothing,
                                             Operand::Nothing,
@@ -2071,8 +2073,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                             if P {
                                                 Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm, U, W)
                                             } else {
-                                                // either !P & W (invalid) or !W
-                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U, false)
+                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U, true)
                                             },
                                             Operand::Nothing,
                                         ];
@@ -2098,7 +2099,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                                 Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm, U, W)
                                             } else {
                                                 // either !P & W (ldrsht) or !W
-                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U, false)
+                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm, U, true)
                                             },
                                             Operand::Nothing,
                                             Operand::Nothing,
@@ -2729,7 +2730,7 @@ impl Decoder<ARMv7> for InstDecoder {
                     };
                     inst.operands = [
                         Operand::Reg(Reg::from_u8(Rt)),
-                        Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm as u16, add, false),
+                        Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm as u16, add, true),
                         Operand::Nothing,
                         Operand::Nothing,
                     ];
@@ -2763,7 +2764,10 @@ impl Decoder<ARMv7> for InstDecoder {
                                         if P {
                                             Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm as u16, add, W)
                                         } else {
-                                            Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm as u16, add, W)
+                                            // > wback == !P || W
+                                            //
+                                            // so always true here.
+                                            Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm as u16, add, true)
                                         },
                                         Operand::Nothing,
                                         Operand::Nothing,
@@ -2781,7 +2785,10 @@ impl Decoder<ARMv7> for InstDecoder {
                                         if P {
                                             Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm as u16, add, W)
                                         } else {
-                                            Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm as u16, add, W)
+                                            // > wback == !P || W
+                                            //
+                                            // so always true here.
+                                            Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm as u16, add, true)
                                         },
                                         Operand::Nothing,
                                         Operand::Nothing,
@@ -2799,7 +2806,10 @@ impl Decoder<ARMv7> for InstDecoder {
                         if P {
                             Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm as u16, add, W)
                         } else {
-                            Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm as u16, add, W)
+                            // > wback == !P || W
+                            //
+                            // so always true here.
+                            Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm as u16, add, true)
                         },
                         Operand::Nothing,
                         Operand::Nothing,
