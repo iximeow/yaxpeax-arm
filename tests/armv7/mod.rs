@@ -90,6 +90,11 @@ fn test_nonconformant(data: [u8; 4]) {
         result == Err(DecodeError::Nonconforming),
         "got bad result: {:?} from {:#x?}", result, data
     );
+    let mut reader = yaxpeax_arch::U8Reader::new(&data[..]);
+    let result2 = InstDecoder::default()
+        .with_nonconforming(true)
+        .decode(&mut reader);
+    result2.expect("ok");
 }
 
 fn test_display(data: [u8; 4], expected: &'static str) {
@@ -228,14 +233,15 @@ fn test_decode_str_ldr() {
     test_all([0xbb, 0x38, 0xb5, 0xe1], "ldrh r3, [r5, fp]!");
     test_all([0xbb, 0x38, 0xe5, 0xe1], "strh r3, [r5, 0x8b]!");
     test_all([0xbb, 0x38, 0xf5, 0xe1], "ldrh r3, [r5, 0x8b]!");
+    test_all([0xd6, 0x00, 0x95, 0xe1], "ldrsb r0, [r5, r6]");
     test_armv5([0xdb, 0x48, 0xa6, 0xe1], "ldrd r4, r5, [r6, fp]!");
     test_invalid([0xdb, 0x38, 0xa5, 0xe1]);
-    test_all([0xdb, 0x38, 0xb5, 0xe1], "ldrsb r3, [r5, fp]!");
+    test_nonconformant([0xdb, 0x38, 0xb5, 0xe1]); // , "ldrsb r3, [r5, fp]!");
     test_armv5([0xdb, 0x48, 0xe6, 0xe1], "ldrd r4, r5, [r6, 0x8b]!");
     test_invalid([0xdb, 0x38, 0xe5, 0xe1]);
     test_all([0xdb, 0x38, 0xf5, 0xe1], "ldrsb r3, [r5, 0x8b]!");
     test_invalid([0xfb, 0x38, 0xa5, 0xe1]);
-    test_all([0xfb, 0x48, 0xa6, 0xe1], "strd r4, r5, [r6, fp]!");
+    test_nonconformant([0xfb, 0x48, 0xa6, 0xe1]); //, "strd r4, r5, [r6, fp]!");
     test_all([0xfb, 0x30, 0xb5, 0xe1], "ldrsh r3, [r5, fp]!");
     test_invalid([0xfb, 0x30, 0xe5, 0xe1]);
     test_all([0xfb, 0x48, 0xe6, 0xe1], "strd r4, r5, [r6, 0x8b]!");

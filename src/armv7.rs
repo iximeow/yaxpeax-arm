@@ -1154,6 +1154,13 @@ impl InstDecoder {
         Self::default().with_thumb_mode(true)
     }
 
+    /// control whether bitfields the manual suggests be zeroed, must be. in practice these bits
+    /// may have no architectural effect, and are ignored in decoding if allowed.
+    pub fn with_nonconforming(mut self, allow: bool) -> Self {
+        self.should_is_must = !allow;
+        self
+    }
+
     /// create an `InstDecoder` that supports only instructions through to `ARMv4`.
     pub fn armv4() -> Self {
         Self {
@@ -1909,7 +1916,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                             inst.opcode = Opcode::LDRSB;
                                         }
                                         if self.should_is_must {
-                                            if (word >> 8) & 0b1111 == 0 {
+                                            if (word >> 8) & 0b1111 != 0 {
                                                 return Err(DecodeError::Nonconforming);
                                             }
                                         }
@@ -1997,7 +2004,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                             inst.opcode = Opcode::STRD;
                                         }
                                         if self.should_is_must {
-                                            if (word >> 8) & 0b1111 == 0 {
+                                            if (word >> 8) & 0b1111 != 0 {
                                                 return Err(DecodeError::Nonconforming);
                                             }
                                         }
