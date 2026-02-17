@@ -112,6 +112,10 @@ fn test_unpredictable_instructions() {
 
 #[test]
 fn test_decode_str_ldr() {
+    test_display(
+        [0xfc, 0xb0, 0x98, 0xe1],
+        "ldrsh fp, [r8, ip]"
+    );
     test_decode(
         [0x24, 0xc0, 0x9f, 0xe5],
         Instruction {
@@ -232,8 +236,8 @@ fn test_decode_str_ldr() {
     test_all([0xdb, 0x38, 0xf5, 0xe1], "ldrsb r3, [r5, 0x8b]!");
     test_invalid([0xfb, 0x38, 0xa5, 0xe1]);
     test_all([0xfb, 0x48, 0xa6, 0xe1], "strd r4, r5, [r6, fp]!");
-    test_all([0xfb, 0x38, 0xb5, 0xe1], "ldrsh r3, [r5, fp]!");
-    test_invalid([0xfb, 0x38, 0xe5, 0xe1]);
+    test_all([0xfb, 0x30, 0xb5, 0xe1], "ldrsh r3, [r5, fp]!");
+    test_invalid([0xfb, 0x30, 0xe5, 0xe1]);
     test_all([0xfb, 0x48, 0xe6, 0xe1], "strd r4, r5, [r6, 0x8b]!");
     test_all([0xfb, 0x38, 0xf5, 0xe1], "ldrsh r3, [r5, 0x8b]!");
     test_all([0xfb, 0x38, 0xff, 0xe1], "ldrsh r3, [pc, 0x8b]!");
@@ -257,6 +261,10 @@ fn test_shift_rotate() {
     test_display(
         [0x5b, 0x5a, 0xa0, 0xe1],
         "mov r5, fp, asr r10"
+    );
+    test_display(
+        [0x88, 0x80, 0xa0, 0xe1],
+        "lsl r8, r8, 1"
     );
 }
 
@@ -557,6 +565,19 @@ fn test_decode_arithmetic() {
             thumb: false,
             wide: false,
         }
+    );
+
+    test_display(
+        [0xaa, 0xa4, 0x81, 0xe0],
+        "add r10, r1, r10, lsr 9"
+    );
+    test_display(
+        [0x0f, 0x40, 0x0a, 0xe2],
+        "andeq r1, r0, r8, lsl sp",
+    );
+    test_display(
+        [0x0f, 0x40, 0x0a, 0xe2],
+        "and r4, r10",
     );
 }
 

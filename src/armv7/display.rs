@@ -24,6 +24,15 @@ impl<T: DisplaySink> DisplaySinkExt for T {
     }
 }
 
+#[cfg(feature="fmt")]
+impl Reg {
+    /// translate this register operand into a `str` name.
+    pub fn name(&self) -> &'static str {
+        REG_NAMES.get(self.bits as usize)
+            .unwrap_or_else(|| unsafe { core::hint::unreachable_unchecked() })
+    }
+}
+
 /// an instruction and display settings to configure [`Display](fmt::Display)-formatting of the
 /// instruction.
 ///
@@ -302,7 +311,7 @@ impl<T: DisplaySink> crate::armv7::OperandVisitor for DisplayingOperandVisitor<'
         if offset >= 0 {
             self.f.write_char('+')?;
         }
-        self.f.write_prefixed_i32(offset << 2)
+        self.f.write_prefixed_i32(offset)
     }
 
     fn visit_blx_offset(&mut self, offset: i32) -> Result<Self::Ok, Self::Error> {
@@ -310,7 +319,7 @@ impl<T: DisplaySink> crate::armv7::OperandVisitor for DisplayingOperandVisitor<'
         if offset >= 0 {
             self.f.write_char('+')?;
         }
-        self.f.write_prefixed_i32(offset << 1)
+        self.f.write_prefixed_i32(offset)
     }
 
     fn visit_coprocessor_option(&mut self, nr: u8) -> Result<Self::Ok, Self::Error> {

@@ -1506,7 +1506,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                         inst.condition = ConditionCode::build(((instr >> 6) & 0b1111) as u8);
                         inst.opcode = Opcode::B;
                         inst.operands = [
-                            Operand::BranchThumbOffset(imm),
+                            Operand::BranchThumbOffset(imm << 1),
                             Operand::Nothing,
                             Operand::Nothing,
                             Operand::Nothing,
@@ -1973,7 +1973,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                         ((s as i32) << 23);
                     let imm = (imm << 8) >> 8;
                     inst.operands = [
-                        Operand::BranchThumbOffset(imm),
+                        Operand::BranchThumbOffset(imm << 1),
                         Operand::Nothing,
                         Operand::Nothing,
                         Operand::Nothing,
@@ -3848,7 +3848,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                 };
                 inst.operands = [
                     Operand::Reg(Reg::from_u8(rn)),
-                    Operand::BranchThumbOffset(imm as i32 + 1),
+                    Operand::BranchThumbOffset((imm as i32) << 1),
                     Operand::Nothing,
                     Operand::Nothing,
                 ];
@@ -3914,7 +3914,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                 };
                 inst.operands = [
                     Operand::Reg(Reg::from_u8(rn)),
-                    Operand::BranchThumbOffset(imm as i32 + 1),
+                    Operand::BranchThumbOffset((imm as i32) << 1),
                     Operand::Nothing,
                     Operand::Nothing,
                 ];
@@ -3975,7 +3975,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                 };
                 inst.operands = [
                     Operand::Reg(Reg::from_u8(rn)),
-                    Operand::BranchThumbOffset(imm as i32 + 1),
+                    Operand::BranchThumbOffset((imm as i32) << 1),
                     Operand::Nothing,
                     Operand::Nothing,
                 ];
@@ -4032,7 +4032,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                 };
                 inst.operands = [
                     Operand::Reg(Reg::from_u8(rn)),
-                    Operand::BranchThumbOffset(imm as i32 + 1),
+                    Operand::BranchThumbOffset((imm as i32) << 1),
                     Operand::Nothing,
                     Operand::Nothing,
                 ];
@@ -4183,7 +4183,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                 let imm = instr2[0..8].load::<u8>() as i8 as i32;
                 inst.condition = ConditionCode::build(opcode);
                 inst.operands = [
-                    Operand::BranchThumbOffset(imm + 1),
+                    Operand::BranchThumbOffset(imm << 1),
                     Operand::Nothing,
                     Operand::Nothing,
                     Operand::Nothing,
@@ -4218,7 +4218,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
             let imm = instr2[0..11].load::<u32>();
             let imm = ((imm as i32) << 21) >> 21;
             inst.operands = [
-                Operand::BranchThumbOffset(imm),
+                Operand::BranchThumbOffset(imm << 1),
                 Operand::Nothing,
                 Operand::Nothing,
                 Operand::Nothing,

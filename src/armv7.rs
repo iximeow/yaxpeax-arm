@@ -2949,10 +2949,10 @@ impl Decoder<ARMv7> for InstDecoder {
                     inst.opcode = Opcode::B;
 
                     // the + 2 is to compensate for an architecturally-defined initial offset
-                    let imm24 = ((((word & 0x00ff_ffff) + 2) << 8) as i32) >> 8;
+                    let imm24 = ((((word & 0x00ff_ffff)) << 8) as i32) >> 8;
 
                     inst.operands = [
-                        Operand::BranchOffset(imm24),
+                        Operand::BranchOffset(imm24 << 2),
                         Operand::Nothing,
                         Operand::Nothing,
                         Operand::Nothing,
@@ -2961,11 +2961,11 @@ impl Decoder<ARMv7> for InstDecoder {
                     // 11xxxx
 
                     // the + 2 is to compensate for an architecturally-defined initial offset
-                    let imm24 = ((((word & 0x00ff_ffff) + 2) << 8) as i32) >> 8;
+                    let imm24 = ((((word & 0x00ff_ffff)) << 8) as i32) >> 8;
 
                     inst.opcode = Opcode::BL;
                     inst.operands = [
-                        Operand::BranchOffset(imm24),
+                        Operand::BranchOffset(imm24 << 2),
                         Operand::Nothing,
                         Operand::Nothing,
                         Operand::Nothing,
