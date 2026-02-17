@@ -9,6 +9,9 @@
     always writes back the modified address. the textual decoding of these
     instructions was correct and continues to be.
 * a few cases of rejecting valid instructions as `nonconforming` have been fixed
+* branch offsets are consistently represented as their form in terms of linear
+  addresses and offsets. again, no change to display impls, but `Operand`
+  variants describing Branch/BranchThumb offsets are a little more normal now.
 
 ## 0.4.0
 
