@@ -770,7 +770,7 @@ pub enum Bank {
 }
 
 /// a `armv7` or below instruction.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Instruction {
     /// the condition code for this instruction, defaults to `AL` if the instruction is
     /// unconditional.
