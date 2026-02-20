@@ -368,6 +368,19 @@ impl<T: DisplaySink> crate::armv7::OperandVisitor for DisplayingOperandVisitor<'
     }
 }
 
+fn write_coproc<T: DisplaySink>(coproc: u8, out: &mut T) -> fmt::Result {
+    // coproc is a 4-bit field
+    debug_assert!(coproc < 16);
+
+    out.write_char('p')?;
+    if coproc < 10 {
+        out.write_char((coproc + 0x30) as char)
+    } else {
+        out.write_char('1')?;
+        out.write_char((coproc - 10 + 0x30) as char)
+    }
+}
+
 #[allow(non_snake_case)]
 pub(crate) fn visit_inst<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fmt::Result {
     // handle a few instruction aliasing cases first...
@@ -491,10 +504,9 @@ pub(crate) fn visit_inst<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fm
                 out.write_lt_8(instr.opcode.name())?;
             }
             out.span_end_opcode();
-            out.write_fixed_size(" p")?;
-            // coproc is a 3-bit field
-            out.write_char((coproc + 0x30) as char)?;
 
+            out.write_char(' ')?;
+            write_coproc(coproc, out)?;
             out.write_fixed_size(", ")?;
             // opc1 is a 3-bit field
             out.write_char((opc + 0x30) as char)?;
@@ -521,10 +533,9 @@ pub(crate) fn visit_inst<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fm
                 out.write_lt_8(instr.opcode.name())?;
             }
             out.span_end_opcode();
-            out.write_fixed_size(" p")?;
-            // coproc is a 3-bit field
-            out.write_char((coproc + 0x30) as char)?;
 
+            out.write_char(' ')?;
+            write_coproc(coproc, out)?;
             out.write_fixed_size(", ")?;
             // opc1 is a 3-bit field
             out.write_char((opc1 + 0x30) as char)?;
