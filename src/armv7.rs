@@ -111,11 +111,19 @@ pub enum Opcode {
     STC2(u8),
     STC2L(u8),
     MCRR2(u8, u8),
-    MCR2(u8, u8, u8),
+    /// > MCR (Move to Coprocessor from ARM Register)
+    ///
+    /// fields here are `coproc`, `opcode_1`, `opcode_2`, and a bool indicating if the original
+    /// encoding was `MCR` or `MCR2` (`true` means `MCR2`).
+    MCR(u8, u8, u8, bool),
     MRRC2(u8, u8),
     MCRR(u8, u8),
     MRRC(u8, u8),
-    MRC2(u8, u8, u8),
+    /// > MRC (Move to ARM Register from Coprocessor)
+    ///
+    /// fields here are `coproc`, `opcode_1`, `opcode_2`, and a bool indicating if the original
+    /// encoding was `MRC` or `MRC2` (`true` means `MRC2`).
+    MRC(u8, u8, u8, bool),
     CDP2(u8, u8, u8),
     SRS(bool, bool),
     RFE(bool, bool),
@@ -1461,9 +1469,9 @@ impl Decoder<ARMv7> for InstDecoder {
                             // MCR2/MRC2, page A8-477/A8-493
                             let opc1 = (word >> 21) as u8 & 0b111;
                             if (word >> 20) & 1 == 0 {
-                                inst.opcode = Opcode::MCR2(coproc, opc1, opc2);
+                                inst.opcode = Opcode::MCR(coproc, opc1, opc2, true);
                             } else {
-                                inst.opcode = Opcode::MRC2(coproc, opc1, opc2);
+                                inst.opcode = Opcode::MRC(coproc, opc1, opc2, true);
                             }
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(Rt)),
