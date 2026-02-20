@@ -522,8 +522,8 @@ pub(crate) fn visit_inst<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fm
 
             return Ok(());
         }
-        Opcode::MRC2(coproc, opc1, opc2) |
-        Opcode::MCR2(coproc, opc1, opc2) |
+        Opcode::MRC(coproc, opc1, opc2, _) |
+        Opcode::MCR(coproc, opc1, opc2, _) |
         Opcode::CDP2(coproc, opc1, opc2) => {
             out.span_start_opcode();
             unsafe {
@@ -918,9 +918,9 @@ impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for ConditionedOpcode {
             Opcode::STC2(_) |
             Opcode::STC2L(_) |
             Opcode::MCRR2(_, _) |
-            Opcode::MCR2(_, _, _) |
+            Opcode::MCR(_, _, _, _) |
             Opcode::MRRC2(_, _) |
-            Opcode::MRC2(_, _, _) |
+            Opcode::MRC(_, _, _, _) |
             Opcode::MCRR(_, _) |
             Opcode::MRRC(_, _) |
             Opcode::CDP2(_, _, _) => { write!(out, "{}", colors.platform_op(self)) },
@@ -957,9 +957,11 @@ impl Opcode {
             Opcode::STC2(_) => { "stc2" },
             Opcode::STC2L(_) => { "stc2l" },
             Opcode::MCRR2(_, _) => { "mcrr2" },
-            Opcode::MCR2(_, _, _) => { "mcr2" },
+            Opcode::MCR(_, _, _, false) => { "mcr" },
+            Opcode::MCR(_, _, _, true) => { "mcr2" },
             Opcode::MRRC2(_, _) => { "mrrc2" },
-            Opcode::MRC2(_, _, _) => { "mrc2" },
+            Opcode::MRC(_, _, _, false) => { "mrc" },
+            Opcode::MRC(_, _, _, true) => { "mrc2" },
             Opcode::MCRR(_, _) => { "mcrr" },
             Opcode::MRRC(_, _) => { "mrrc" },
             Opcode::CDP2(_, _, _) => { "cdp2" },
