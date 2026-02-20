@@ -4253,11 +4253,7 @@ fn decode_table_a6_30(decoder: &InstDecoder, inst: &mut Instruction, instr2: Bit
                 let opc1 = lower2[4..8].load::<u8>();
                 let rt = lower2[12..16].load::<u8>();
                 let rt2 = instr2[0..4].load::<u8>();
-                if instr2[12] {
-                    inst.opcode = Opcode::MCRR2(coproc, opc1);
-                } else {
-                    inst.opcode = Opcode::MCRR(coproc, opc1);
-                }
+                inst.opcode = Opcode::MCRR(coproc, opc1, instr2[12]);
                 inst.operands = [
                     Operand::Reg(Reg::from_u8(rt)),
                     Operand::Reg(Reg::from_u8(rt2)),
@@ -4275,11 +4271,7 @@ fn decode_table_a6_30(decoder: &InstDecoder, inst: &mut Instruction, instr2: Bit
                 // but the operand name is `opc1`!
                 //
                 // this is a very uninteresting typo, but fun to spot nonetheless
-                if instr2[12] {
-                    inst.opcode = Opcode::MRRC2(coproc, opc1);
-                } else {
-                    inst.opcode = Opcode::MRRC(coproc, opc1);
-                }
+                inst.opcode = Opcode::MRRC(coproc, opc1, instr2[12]);
                 inst.operands = [
                     Operand::Reg(Reg::from_u8(rt)),
                     Operand::Reg(Reg::from_u8(rt2)),
@@ -4296,18 +4288,10 @@ fn decode_table_a6_30(decoder: &InstDecoder, inst: &mut Instruction, instr2: Bit
                     let crd = lower2[12..16].load::<u8>();
                     let imm8 = lower2[0..8].load::<u16>();
 
-                    if instr2[12] {
-                        if instr2[6] {
-                            inst.opcode = Opcode::STC2L(coproc);
-                        } else {
-                            inst.opcode = Opcode::STC2(coproc);
-                        }
+                    if instr2[6] {
+                        inst.opcode = Opcode::STCL(coproc, instr2[12]);
                     } else {
-                        if instr2[6] {
-                            inst.opcode = Opcode::STCL(coproc);
-                        } else {
-                            inst.opcode = Opcode::STC(coproc);
-                        }
+                        inst.opcode = Opcode::STC(coproc, instr2[12]);
                     }
                     inst.operands = [
                         Operand::CReg(CReg::from_u8(crd)),
@@ -4356,18 +4340,10 @@ fn decode_table_a6_30(decoder: &InstDecoder, inst: &mut Instruction, instr2: Bit
                         // `LDC, LDC2 (immediate) on A8-393`
                     }
 
-                    if instr2[12] {
-                        if instr2[6] {
-                            inst.opcode = Opcode::LDC2L(coproc);
-                        } else {
-                            inst.opcode = Opcode::LDC2(coproc);
-                        }
+                    if instr2[6] {
+                        inst.opcode = Opcode::LDCL(coproc, instr2[12]);
                     } else {
-                        if instr2[6] {
-                            inst.opcode = Opcode::LDCL(coproc);
-                        } else {
-                            inst.opcode = Opcode::LDC(coproc);
-                        }
+                        inst.opcode = Opcode::LDC(coproc, instr2[12]);
                     }
                     inst.operands = [
                         Operand::CReg(CReg::from_u8(crd)),

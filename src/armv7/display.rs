@@ -462,17 +462,19 @@ pub(crate) fn visit_inst<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fm
                 _ => {}
             }
         }
-        Opcode::STCL(coproc) |
-        Opcode::STC(coproc) |
-        Opcode::STC2L(coproc) |
-        Opcode::STC2(coproc) |
-        Opcode::LDC(coproc) |
-        Opcode::LDCL(coproc) |
-        Opcode::LDC2(coproc) |
-        Opcode::LDC2L(coproc) => {
+        Opcode::STCL(coproc, _) |
+        Opcode::STC(coproc, _) |
+        Opcode::LDC(coproc, _) |
+        Opcode::LDCL(coproc, _) => {
             out.span_start_opcode();
             unsafe {
                 out.write_lt_8(instr.opcode.name())?;
+            }
+            if instr.condition != ConditionCode::AL {
+                let name = instr.condition.name();
+                // all condition codes are two characters long
+                out.write_char(name[0] as char)?;
+                out.write_char(name[1] as char)?;
             }
             out.span_end_opcode();
             out.write_fixed_size(" p")?;
@@ -497,11 +499,17 @@ pub(crate) fn visit_inst<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fm
 
             return Ok(());
         }
-        Opcode::MRRC2(coproc, opc) |
-        Opcode::MCRR2(coproc, opc) => {
+        Opcode::MRRC(coproc, opc, _) |
+        Opcode::MCRR(coproc, opc, _) => {
             out.span_start_opcode();
             unsafe {
                 out.write_lt_8(instr.opcode.name())?;
+            }
+            if instr.condition != ConditionCode::AL {
+                let name = instr.condition.name();
+                // all condition codes are two characters long
+                out.write_char(name[0] as char)?;
+                out.write_char(name[1] as char)?;
             }
             out.span_end_opcode();
 
@@ -527,10 +535,16 @@ pub(crate) fn visit_inst<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fm
         }
         Opcode::MRC(coproc, opc1, opc2, _) |
         Opcode::MCR(coproc, opc1, opc2, _) |
-        Opcode::CDP2(coproc, opc1, opc2) => {
+        Opcode::CDP(coproc, opc1, opc2, _) => {
             out.span_start_opcode();
             unsafe {
                 out.write_lt_8(instr.opcode.name())?;
+            }
+            if instr.condition != ConditionCode::AL {
+                let name = instr.condition.name();
+                // all condition codes are two characters long
+                out.write_char(name[0] as char)?;
+                out.write_char(name[1] as char)?;
             }
             out.span_end_opcode();
 
@@ -911,21 +925,15 @@ impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for ConditionedOpcode {
             Opcode::HVC |
             Opcode::SVC |
             Opcode::SMC |
-            Opcode::LDC(_) |
-            Opcode::LDCL(_) |
-            Opcode::LDC2(_) |
-            Opcode::LDC2L(_) |
-            Opcode::STC(_) |
-            Opcode::STCL(_) |
-            Opcode::STC2(_) |
-            Opcode::STC2L(_) |
-            Opcode::MCRR2(_, _) |
+            Opcode::LDC(_, _) |
+            Opcode::LDCL(_, _) |
+            Opcode::STC(_, _) |
+            Opcode::STCL(_, _) |
+            Opcode::MCRR(_, _, _) |
             Opcode::MCR(_, _, _, _) |
-            Opcode::MRRC2(_, _) |
+            Opcode::MRRC(_, _, _) |
             Opcode::MRC(_, _, _, _) |
-            Opcode::MCRR(_, _) |
-            Opcode::MRRC(_, _) |
-            Opcode::CDP2(_, _, _) => { write!(out, "{}", colors.platform_op(self)) },
+            Opcode::CDP(_, _, _, _) => { write!(out, "{}", colors.platform_op(self)) },
         }
     }
 }
@@ -950,23 +958,24 @@ impl Opcode {
             Opcode::LDRSBT => { "ldrsbt" },
             Opcode::STRD => { "strd" },
             Opcode::LDRD => { "ldrd" },
-            Opcode::LDC(_) => { "ldc" },
-            Opcode::LDCL(_) => { "ldcl" },
-            Opcode::LDC2(_) => { "ldc2" },
-            Opcode::LDC2L(_) => { "ldc2l" },
-            Opcode::STC(_) => { "stc" },
-            Opcode::STCL(_) => { "stcl" },
-            Opcode::STC2(_) => { "stc2" },
-            Opcode::STC2L(_) => { "stc2l" },
-            Opcode::MCRR2(_, _) => { "mcrr2" },
+            Opcode::LDC(_, false) => { "ldc" },
+            Opcode::LDC(_, true) => { "ldc2" },
+            Opcode::LDCL(_, false) => { "ldcl" },
+            Opcode::LDCL(_, true) => { "ldc2l" },
+            Opcode::STC(_, false) => { "stc" },
+            Opcode::STC(_, true) => { "stc2" },
+            Opcode::STCL(_, false) => { "stcl" },
+            Opcode::STCL(_, true) => { "stc2l" },
             Opcode::MCR(_, _, _, false) => { "mcr" },
             Opcode::MCR(_, _, _, true) => { "mcr2" },
-            Opcode::MRRC2(_, _) => { "mrrc2" },
             Opcode::MRC(_, _, _, false) => { "mrc" },
             Opcode::MRC(_, _, _, true) => { "mrc2" },
-            Opcode::MCRR(_, _) => { "mcrr" },
-            Opcode::MRRC(_, _) => { "mrrc" },
-            Opcode::CDP2(_, _, _) => { "cdp2" },
+            Opcode::MCRR(_, _, false) => { "mcrr" },
+            Opcode::MCRR(_, _, true) => { "mcrr2" },
+            Opcode::MRRC(_, _, false) => { "mrrc" },
+            Opcode::MRRC(_, _, true) => { "mrrc2" },
+            Opcode::CDP(_, _, _, false) => { "cdp" },
+            Opcode::CDP(_, _, _, true) => { "cdp2" },
             Opcode::SRS(true, true) => { "srsib" },
             Opcode::SRS(false, true) => { "srsia" },
             Opcode::SRS(true, false) => { "srsdb" },

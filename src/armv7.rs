@@ -102,29 +102,23 @@ pub enum Opcode {
     LDRSBT,
     STRD,
     LDRD,
-    LDC(u8),
-    LDCL(u8),
-    LDC2(u8),
-    LDC2L(u8),
-    STC(u8),
-    STCL(u8),
-    STC2(u8),
-    STC2L(u8),
-    MCRR2(u8, u8),
+    LDC(u8, bool),
+    LDCL(u8, bool),
+    STC(u8, bool),
+    STCL(u8, bool),
+    MCRR(u8, u8, bool),
+    MRRC(u8, u8, bool),
     /// > MCR (Move to Coprocessor from ARM Register)
     ///
     /// fields here are `coproc`, `opcode_1`, `opcode_2`, and a bool indicating if the original
     /// encoding was `MCR` or `MCR2` (`true` means `MCR2`).
     MCR(u8, u8, u8, bool),
-    MRRC2(u8, u8),
-    MCRR(u8, u8),
-    MRRC(u8, u8),
     /// > MRC (Move to ARM Register from Coprocessor)
     ///
     /// fields here are `coproc`, `opcode_1`, `opcode_2`, and a bool indicating if the original
     /// encoding was `MRC` or `MRC2` (`true` means `MRC2`).
     MRC(u8, u8, u8, bool),
-    CDP2(u8, u8, u8),
+    CDP(u8, u8, u8, bool),
     SRS(bool, bool),
     RFE(bool, bool),
     LDRT,
@@ -1372,9 +1366,9 @@ impl Decoder<ARMv7> for InstDecoder {
                                     return Err(DecodeError::InvalidOperand);
                                 }
                                 if (word >> 20) & 0b00001 != 0 {
-                                    inst.opcode = Opcode::MRRC2(coproc, opc1);
+                                    inst.opcode = Opcode::MRRC(coproc, opc1, true);
                                 } else {
-                                    inst.opcode = Opcode::MCRR2(coproc, opc1);
+                                    inst.opcode = Opcode::MCRR(coproc, opc1, true);
                                 }
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(Rt)),
@@ -1402,18 +1396,18 @@ impl Decoder<ARMv7> for InstDecoder {
                                 // page A8-663
 
                                 if pudw & 0b0010 != 0 {
-                                    inst.opcode = Opcode::STC2L(coproc);
+                                    inst.opcode = Opcode::STCL(coproc, true);
                                 } else {
-                                    inst.opcode = Opcode::STC2(coproc);
+                                    inst.opcode = Opcode::STC(coproc, true);
                                 }
                             } else {
                                 // op=110xxxx1, LDC
                                 // page A8-393
 
                                 if pudw & 0b0010 != 0 {
-                                    inst.opcode = Opcode::LDC2L(coproc);
+                                    inst.opcode = Opcode::LDCL(coproc, true);
                                 } else {
-                                    inst.opcode = Opcode::LDC2(coproc);
+                                    inst.opcode = Opcode::LDC(coproc, true);
                                 }
                             }
 
@@ -1458,7 +1452,7 @@ impl Decoder<ARMv7> for InstDecoder {
                         if (word >> 4) & 1 == 0 {
                             // CDP2, page A8-356
                             let opc1 = (word >> 20) as u8 & 0b1111;
-                            inst.opcode = Opcode::CDP2(coproc, opc1, opc2);
+                            inst.opcode = Opcode::CDP(coproc, opc1, opc2, true);
                             inst.operands = [
                                 Operand::CReg(CReg::from_u8(Rt)),
                                 Operand::CReg(CReg::from_u8(CRn)),
@@ -2905,12 +2899,164 @@ impl Decoder<ARMv7> for InstDecoder {
                     ];
                 }
             },
-            0b110 | 0b111 => {
+            0b110 => {
                 // coprocessor instructions and supervisor call
                 // page A5-213
                 // low bit of 0b110 or 0b111 corresponds to high bit of op1
-                return Err(DecodeError::Incomplete);
+                //
+                // op1=0b110xxxxx, see table A5-23
+                let coproc = (word >> 8) as u8 & 0b1111;
+
+                if coproc & 0b1110 == 0b1010 {
+                    // Advanced SIMD, Floating-point, op1 = 0xxxxx
+                    return Err(DecodeError::Incomplete);
+                }
+
+                if (word >> 20) & 0b11010 == 0b00000 {
+                    // the `not 11000x0{0,1}` cases in table A5-23, MCRR or MRRC
+                    // but first check that bit 2 of op1 is in fact 1:
+                    if (word >> 20) & 0b00100 != 0 {
+                        // actually MCRR or MRRC
+                        let CRm = word as u8 & 0b1111;
+                        let opc1 = (word >> 4) as u8 & 0b1111;
+                        let Rt = (word >> 12) as u8 & 0b1111;
+                        let Rt2 = (word >> 16) as u8 & 0b1111;
+                        if Rt == 15 || Rt2 == 15 || Rt == Rt2 {
+                            // TODO: actually `UNPREDICTABLE`
+                            return Err(DecodeError::InvalidOperand);
+                        }
+                        if (word >> 20) & 0b00001 != 0 {
+                            inst.opcode = Opcode::MRRC(coproc, opc1, false);
+                        } else {
+                            inst.opcode = Opcode::MCRR(coproc, opc1, false);
+                        }
+                        inst.operands = [
+                            Operand::Reg(Reg::from_u8(Rt)),
+                            Operand::Reg(Reg::from_u8(Rt2)),
+                            Operand::CReg(CReg::from_u8(CRm)),
+                            Operand::Nothing,
+                        ];
+                    } else {
+                        return Err(DecodeError::InvalidOpcode);
+                    }
+                } else {
+                    // STC or LDC
+                    let pudw = (word >> 21) as u8 & 0b1111;
+                    let Rn = (word >> 16) as u8 & 0b1111;
+                    let CRd = (word >> 12) as u8 & 0b1111;
+                    let imm8 = word & 0b11111111;
+
+                    if (word >> 20) & 0b00001 == 0 {
+                        // op=110xxxx0, STC
+                        // page A8-663
+
+                        if pudw & 0b0010 != 0 {
+                            inst.opcode = Opcode::STCL(coproc, false);
+                        } else {
+                            inst.opcode = Opcode::STC(coproc, false);
+                        }
+                    } else {
+                        // op=110xxxx1, LDC
+                        // page A8-393
+
+                        if pudw & 0b0010 != 0 {
+                            inst.opcode = Opcode::LDCL(coproc, false);
+                        } else {
+                            inst.opcode = Opcode::LDC(coproc, false);
+                        }
+                    }
+
+                    let P = pudw & 0b1000 != 0;
+                    let U = pudw & 0b0100 != 0;
+                    let W = pudw & 0b0001 != 0;
+
+                    inst.operands = [
+                        Operand::CReg(CReg::from_u8(CRd)),
+                        if P {
+                            Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), (imm8 << 2) as u16, U, W)
+                        } else {
+                            if W {
+                                // postindex always has wback
+                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), (imm8 << 2) as u16, U, true)
+                            } else {
+                                Operand::RegDeref(Reg::from_u8(Rn))
+                            }
+                        },
+                        if !P && !W {
+                            // TODO: not sure what ldc2{l}'s <option> field really means?
+                            // at this point the invalid encoding and mrrc/mcrr forms have
+                            // been tested, so..
+                            debug_assert!(U);
+                            Operand::CoprocOption(imm8 as u8)
+                        } else {
+                            Operand::Nothing
+                        },
+                        Operand::Nothing,
+                    ];
+                }
             },
+            0b111 => {
+                // coprocessor instructions and supervisor call
+                // page A5-213
+                // low bit of 0b110 or 0b111 corresponds to high bit of op1
+                //
+                // op1=0b111xxxxx, see table A5-22
+                let op1 = (word >> 20) & 0b111111;
+                if ((op1 >> 4) & 1) != 0 {
+                    inst.opcode = Opcode::SVC;
+                    let imm = word & 0xff_ff_ff;
+                    inst.operands = [
+                        Operand::Imm32(imm),
+                        Operand::Nothing,
+                        Operand::Nothing,
+                        Operand::Nothing,
+                    ];
+                    return Ok(());
+                }
+
+                let coproc = (word >> 8) as u8 & 0b1111;
+
+                if coproc & 0b1110 == 0b1010 {
+                    // Advanced SIMD, Floating-point, op1 = 0xxxxx
+                    return Err(DecodeError::Incomplete);
+                }
+
+                if (word >> 4) & 1 == 0 {
+                    // CDP, page A8-356
+                    let CRm = word as u8 & 0b1111;
+                    let opc2 = (word >> 5) as u8 & 0b111;
+                    let Rt = (word >> 12) as u8 & 0b1111;
+                    let CRn = (word >> 16) as u8 & 0b1111;
+
+                    let opc1 = (word >> 20) as u8 & 0b1111;
+                    inst.opcode = Opcode::CDP(coproc, opc1, opc2, false);
+                    inst.operands = [
+                        Operand::CReg(CReg::from_u8(Rt)),
+                        Operand::CReg(CReg::from_u8(CRn)),
+                        Operand::CReg(CReg::from_u8(CRm)),
+                        Operand::Nothing,
+                    ];
+                } else {
+                    // MCR/MRC, page A8-493
+                    let CRm = word as u8 & 0b1111;
+                    let opc2 = (word >> 5) as u8 & 0b111;
+                    let Rt = (word >> 12) as u8 & 0b1111;
+                    let CRn = (word >> 16) as u8 & 0b1111;
+
+                    let opc1 = (word >> 21) as u8 & 0b111;
+                    if (word >> 20) & 1 == 0 {
+                        inst.opcode = Opcode::MCR(coproc, opc1, opc2, false);
+                    } else {
+                        inst.opcode = Opcode::MRC(coproc, opc1, opc2, false);
+                    }
+                    inst.operands = [
+                        Operand::Reg(Reg::from_u8(Rt)),
+                        Operand::CReg(CReg::from_u8(CRn)),
+                        Operand::CReg(CReg::from_u8(CRm)),
+                        Operand::Nothing,
+                    ];
+                }
+            }
             _ => { unreachable!("opc category is three bits"); }
         }
         Ok(())
