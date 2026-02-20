@@ -2977,12 +2977,38 @@ impl Decoder<ARMv7> for InstDecoder {
                     ];
                 }
             },
-            0b110 | 0b111 => {
+            0b110 => {
                 // coprocessor instructions and supervisor call
                 // page A5-213
                 // low bit of 0b110 or 0b111 corresponds to high bit of op1
                 return Err(DecodeError::Incomplete);
             },
+            0b111 => {
+                let op1 = (word >> 20) & 0b111111;
+                // MCR/MRC, page A8-493
+                if ((op1 >> 5) & 1) == 1 && ((op1 >> 4) & 1) == 0 {
+                    let CRm = word as u8 & 0b1111;
+                    let opc2 = (word >> 5) as u8 & 0b111;
+                    let coproc = (word >> 8) as u8 & 0b1111;
+                    let Rt = (word >> 12) as u8 & 0b1111;
+                    let CRn = (word >> 16) as u8 & 0b1111;
+
+                    let opc1 = (word >> 21) as u8 & 0b111;
+                    if (word >> 20) & 1 == 0 {
+                        inst.opcode = Opcode::MCR(coproc, opc1, opc2, false);
+                    } else {
+                        inst.opcode = Opcode::MRC(coproc, opc1, opc2, false);
+                    }
+                    inst.operands = [
+                        Operand::Reg(Reg::from_u8(Rt)),
+                        Operand::CReg(CReg::from_u8(CRn)),
+                        Operand::CReg(CReg::from_u8(CRm)),
+                        Operand::Nothing,
+                    ];
+                } else {
+                    return Err(DecodeError::Incomplete);
+                }
+            }
             _ => { unreachable!("opc category is three bits"); }
         }
         Ok(())
