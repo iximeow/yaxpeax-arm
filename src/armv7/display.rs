@@ -532,7 +532,12 @@ pub(crate) fn visit_inst<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fm
             out.span_end_opcode();
             out.write_fixed_size(" p")?;
             // coproc is a 3-bit field
-            out.write_char((coproc + 0x30) as char)?;
+            if coproc < 10 {
+                out.write_char((coproc + 0x30) as char)?;
+            } else {
+                out.write_char('1')?;
+                out.write_char((coproc + 0x26) as char)?;
+            }
 
             out.write_fixed_size(", ")?;
             // opc1 is a 3-bit field
