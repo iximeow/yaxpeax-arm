@@ -2856,21 +2856,42 @@ impl Decoder<ARMv7> for InstDecoder {
                 // page A5-212
                 let op = (word >> 20) & 0x3f;
                 if op < 0b100000 {
+                    let load = (op & 1) != 0;
                     let wback = (op & 0b000010) != 0;
                     let add = (op & 0b001000) != 0;
                     let pre = (op & 0b010000) != 0;
                     let usermode = (op & 0b000100) != 0;
-                    inst.opcode = if (op & 1) == 0 {
-                        Opcode::STM(add, pre, false, usermode)
+                    let reg = ((word >> 16) & 0xf) as u8;
+                    let regs = (word & 0xffff) as u16;
+
+                    let is_at_least_2_regs = regs.count_ones() >= 2;
+                    let is_sp = reg == 13;
+                    if is_at_least_2_regs && is_sp && wback {
+                        inst.opcode = if load {
+                            Opcode::POP
+                        } else {
+                            Opcode::PUSH
+                        };
+
+                        inst.operands = [
+                            Operand::RegList(regs),
+                            Operand::Nothing,
+                            Operand::Nothing,
+                            Operand::Nothing,
+                        ];
                     } else {
-                        Opcode::LDM(add, pre, false, usermode)
-                    };
-                    inst.operands = [
-                        Operand::RegWBack(Reg::from_u8(((word >> 16) & 0xf) as u8), wback),
-                        Operand::RegList((word & 0xffff) as u16),
-                        Operand::Nothing,
-                        Operand::Nothing,
-                    ];
+                        inst.opcode = if load {
+                            Opcode::LDM(add, pre, false, usermode)
+                        } else {
+                            Opcode::STM(add, pre, false, usermode)
+                        };
+                        inst.operands = [
+                            Operand::RegWBack(Reg::from_u8(((word >> 16) & 0xf) as u8), wback),
+                            Operand::RegList((word & 0xffff) as u16),
+                            Operand::Nothing,
+                            Operand::Nothing,
+                        ];
+                    }
                 } else if op < 0b110000 {
                     // 10xxxx
                     inst.opcode = Opcode::B;
