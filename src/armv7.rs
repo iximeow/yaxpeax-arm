@@ -2721,23 +2721,50 @@ impl Decoder<ARMv7> for InstDecoder {
                         }
                     } else {
                         match op {
-                            0b000 => Opcode::STR,
-                            0b001 => {
-                                if Rn == 0b1111 {
+                            0b000 => {
+                                // PUSH Rt
+                                if Rn == 0b1101 {
                                     inst.operands = [
                                         Operand::Reg(Reg::from_u8(Rt)),
-                                        if P {
-                                            Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm as u16, add, W)
-                                        } else {
-                                            Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm as u16, add, W)
-                                        },
+                                        Operand::Nothing,
                                         Operand::Nothing,
                                         Operand::Nothing,
                                     ];
-                                    inst.opcode = Opcode::LDR;
+                                    inst.opcode = Opcode::PUSH;
                                     return Ok(());
                                 }
-                                Opcode::LDR
+                                Opcode::STR
+                            },
+                            0b001 => {
+                                match Rn {
+                                    // POP Rt
+                                    0b1101 => {
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(Rt)),
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                        inst.opcode = Opcode::POP;
+                                        return Ok(());
+                                    },
+                                    // LDR Rt, [PC, #imm]
+                                    0b1111 => {
+                                        inst.operands = [
+                                            Operand::Reg(Reg::from_u8(Rt)),
+                                            if P {
+                                                Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm as u16, add, W)
+                                            } else {
+                                                Operand::RegDerefPostindexOffset(Reg::from_u8(Rn), imm as u16, add, W)
+                                            },
+                                            Operand::Nothing,
+                                            Operand::Nothing,
+                                        ];
+                                        inst.opcode = Opcode::LDR;
+                                        return Ok(());
+                                    }
+                                    _ => Opcode::LDR
+                                }
                             },
                             0b100 => Opcode::STRB,
                             0b101 => {
