@@ -1333,12 +1333,11 @@ impl Decoder<ARMv7> for InstDecoder {
                     }
                     0b01 => {
                         inst.opcode = Opcode::BLX;
-                        let operand = ((word & 0xffffff) as i32) << 8 >> 7;
+                        let imm24 = ((word & 0xffffff) as i32) << 8 >> 7;
+                        let h = (word >> 24) & 1;
                         inst.operands = [
                             Operand::BranchThumbOffset(
-                                operand | (
-                                    ((word >> 24) & 0b1) as i32
-                                )
+                                (imm24 << 1) | (h << 1) as i32
                             ),
                             Operand::Nothing,
                             Operand::Nothing,
