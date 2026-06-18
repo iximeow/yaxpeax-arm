@@ -1131,6 +1131,11 @@ impl InstDecoder {
         self
     }
 
+    /// returns whether the decoder is currently set to decode in Thumb mode
+    pub fn in_thumb_mode(&self) -> bool {
+        self.thumb
+    }
+
     /// initialize a new `arm` `InstDecoder` with default ("everything") support, but in `thumb`
     /// mode.
     pub fn default_thumb() -> Self {

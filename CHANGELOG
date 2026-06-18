@@ -7,6 +7,8 @@
   * support non-`*2` forms of coprocessor instructions
   * collapse `*2` encoding choice for coprocessor instructions into a paramter
     on the opcode (rather than distinct opcodes)
+* ARMv7: added `armv7::InstDecoder::in_thumb_mode` to read back if an ARMv7
+  decoder is operating in thumb mode. thank you for the patch, @Grond66!
 
 ## 0.4.0
 
