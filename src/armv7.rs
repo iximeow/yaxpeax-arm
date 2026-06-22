@@ -1446,6 +1446,17 @@ impl Decoder<ARMv7> for InstDecoder {
                         }
                     }
                     0b11 => {
+                        // We know the instruction looks like this...
+                        // |1 1 1 1|1 1 1|x x x x|x|x x x x|x x x x|x x x x x|x x|x|x x x x|
+                        //                ^ We need to check that this bit is zero, if any of the
+                        //                  instructions decoded in this block are to match
+                        //                  correctly.
+                        // See A5-214 for the table that shows the required forms for these
+                        // instructions.
+                        if (op1 >> 4) & 1 != 0 {
+                            return Err(DecodeError::InvalidOpcode);
+                        }
+
                         // operands are shared between cdp2 and mcr2/mrc2, but Rt is repurposed as
                         // CRd
                         let CRm = word as u8 & 0b1111;
