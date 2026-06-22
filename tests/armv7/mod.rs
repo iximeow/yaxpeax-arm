@@ -696,6 +696,15 @@ fn test_decode_mul() {
     );
 }
 
+#[test]
+fn test_decode_mrc2() {
+    // Previous versions of this crate would incorrectly decode this as
+    // "mrc2 p<, 7, lr, c15, c12, 5", which is inaccurate. (The LSB of the last byte being set
+    // makes it an invalid instruction.)
+    test_invalid([0xbc, 0xec, 0xff, 0xff]);
+    test_armv6([0xbc, 0xec, 0xff, 0xfe], "mrc2 p12, 7, lr, c15, c12, 5");
+}
+
 static INSTRUCTION_BYTES: [u8; 4 * 60] = [
         0x24, 0xc0, 0x9f, 0xe5,
         0x00, 0xb0, 0xa0, 0xe3,
