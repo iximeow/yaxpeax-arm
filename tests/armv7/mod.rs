@@ -714,6 +714,14 @@ fn test_register_shift_rotate() {
     test_all([0x62, 0x00, 0x01, 0xe0], "and r0, r1, r2, rrx");
 }
 
+#[test]
+fn test_decode_mrc2() {
+    // The LSB of the last byte being set makes op1 not match any row in
+    // A5.7 Unconditional Instructions, but previously this was incorrectly decoded as `mrc2`.
+    test_invalid([0xbc, 0xec, 0xff, 0xff]);
+    test_armv6([0xbc, 0xec, 0xff, 0xfe], "mrc2 p12, 7, lr, c15, c12, 5");
+}
+
 static INSTRUCTION_BYTES: [u8; 4 * 60] = [
         0x24, 0xc0, 0x9f, 0xe5,
         0x00, 0xb0, 0xa0, 0xe3,
