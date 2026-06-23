@@ -696,6 +696,19 @@ fn test_decode_mul() {
     );
 }
 
+#[test]
+fn test_register_shift_rotate() {
+    test_armv6([0xec, 0x02, 0x00, 0x00], "andeq r0, r0, ip, ror 5");
+    test_armv6([0xa0, 0x33, 0x0b, 0x00], "andeq r3, fp, r0, lsr 7");
+    test_armv6([0xa4, 0x33, 0x0b, 0x00], "andeq r3, fp, r4, lsr 7");
+    test_armv6([0xa0, 0x7d, 0x0b, 0x00], "andeq r7, fp, r0, lsr 27");
+
+    // When an LSR or ASR shift has an encoded immediate of zero, it actually means that the
+    // applied shift is 32.
+    test_armv6([0x21, 0x00, 0x20, 0x00], "eoreq r0, r0, r1, lsr 32");
+    test_armv6([0x41, 0x00, 0x20, 0x00], "eoreq r0, r0, r1, asr 32");
+}
+
 static INSTRUCTION_BYTES: [u8; 4 * 60] = [
         0x24, 0xc0, 0x9f, 0xe5,
         0x00, 0xb0, 0xa0, 0xe3,

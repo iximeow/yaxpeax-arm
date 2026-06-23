@@ -7,8 +7,14 @@
   * support non-`*2` forms of coprocessor instructions
   * collapse `*2` encoding choice for coprocessor instructions into a paramter
     on the opcode (rather than distinct opcodes)
+
+several fixes from @Grond66:
 * ARMv7: added `armv7::InstDecoder::in_thumb_mode` to read back if an ARMv7
-  decoder is operating in thumb mode. thank you for the patch, @Grond66!
+  decoder is operating in thumb mode.
+* ARMv7: fix incorrect handling of registers lsr or asr by an immediate 32.
+  yaxpeax-arm incorrectly reported a shift of 0, but should have reported 32.
+
+thank you for the patches!
 
 ## 0.4.0
 

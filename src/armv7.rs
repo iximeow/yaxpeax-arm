@@ -389,8 +389,31 @@ pub struct RegImmShift {
 impl RegImmShift {
     /// the immediate this register is shifted by.
     pub fn imm(&self) -> u8 {
-        (self.data >> 7) as u8 & 0b11111
+        let raw = (self.data >> 7) as u8 & 0b11111;
+        // in the ARMv7m reference,
+        // `Instruction Details` ->
+        //   `Shifts applied to a register` ->
+        //      `Constant shifts`:
+        //
+        // > The assembler encodes <shift> into two type bits and five immediate bits, as follows:
+        // > ...
+        // > LSR #<n>    type = 0b01
+        // >             If <n> < 32, immediate = <n>.
+        // >             If <n> == 32, immediate = 0.
+        // > ASR #<n>    type = 0b10
+        // >             If <n> < 32, immediate = <n>.
+        // >             If <n> == 32, immediate = 0.
+        //
+        // so we have to fix this up here.
+        if raw == 0 {
+            let stype = self.stype();
+            if stype == ShiftStyle::LSR || stype == ShiftStyle::ASR {
+                return 32;
+            }
+        }
+        raw
     }
+
     /// the way in which this register is shifted.
     pub fn stype(&self) -> ShiftStyle {
         ShiftStyle::from((self.data >> 5) as u8 & 0b11)
