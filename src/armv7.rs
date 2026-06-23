@@ -389,7 +389,17 @@ pub struct RegImmShift {
 impl RegImmShift {
     /// the immediate this register is shifted by.
     pub fn imm(&self) -> u8 {
-        (self.data >> 7) as u8 & 0b11111
+        let raw = (self.data >> 7) as u8 & 0b11111;
+        match self.stype() {
+            // These two variants treat the immediate being all zeros as if the immediate was 32.
+            // See A8-289 for details.
+            ShiftStyle::LSR
+            |ShiftStyle::ASR if raw == 0 => 32,
+            ShiftStyle::LSL
+            |ShiftStyle::LSR
+            |ShiftStyle::ASR
+            |ShiftStyle::ROR => raw,
+        }
     }
     /// the way in which this register is shifted.
     pub fn stype(&self) -> ShiftStyle {

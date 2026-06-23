@@ -696,6 +696,15 @@ fn test_decode_mul() {
     );
 }
 
+#[test]
+fn test_register_shift_with_zero_immediate() {
+    // Previous versions of this crate would incorrectly decode this as
+    // "eoreq r0, r0, r1, lsr 0", which is wrong. When an LSR or ASR shift has an encoded immediate
+    // of zero, it actually means that the applied shift is 32.
+    test_armv6([0x21, 0x00, 0x20, 0x00], "eoreq r0, r0, r1, lsr 32");
+    test_armv6([0x41, 0x00, 0x20, 0x00], "eoreq r0, r0, r1, asr 32");
+}
+
 static INSTRUCTION_BYTES: [u8; 4 * 60] = [
         0x24, 0xc0, 0x9f, 0xe5,
         0x00, 0xb0, 0xa0, 0xe3,
