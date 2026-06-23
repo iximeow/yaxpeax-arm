@@ -1822,6 +1822,14 @@ impl Decoder<ARMv7> for InstDecoder {
                                         } else {
                                             inst.opcode = Opcode::STRH;
                                         }
+                                        // According to the encoding A1 of STRH described at
+                                        // A8-703, and the encoding A2 of STRHT described at
+                                        // A8-705, these reserved bits must be zero.
+                                        if self.should_is_must {
+                                            if (word >> 8) as u8 & 0b1111 != 0 {
+                                                return Err(DecodeError::Nonconforming);
+                                            }
+                                        }
                                         inst.operands = [
                                             Operand::Reg(Reg::from_u8(Rd)),
                                             if P {
@@ -1842,6 +1850,14 @@ impl Decoder<ARMv7> for InstDecoder {
                                         } else {
                                             inst.opcode = Opcode::LDRH;
                                         }
+                                        // According to the encoding A1 of LDRH described at
+                                        // A8-447, and the encoding A2 of LDRHT described at
+                                        // A8-449, these reserved bits must be zero.
+                                        if self.should_is_must {
+                                            if (word >> 8) as u8 & 0b1111 != 0 {
+                                                return Err(DecodeError::Nonconforming);
+                                            }
+                                        }
                                         inst.operands = [
                                             Operand::Reg(Reg::from_u8(Rd)),
                                             if P {
@@ -1856,7 +1872,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                         ];
                                     }
                                     0b00100 => {
-                                        // STRHT or STRH
+                                        // STRHT or STRH (immediate)
                                         if !P && W { // flags == 0b0x110
                                             inst.opcode = Opcode::STRHT;
                                         } else {
@@ -1877,7 +1893,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                         ];
                                     }
                                     0b00101 => {
-                                        // LDRHT or LDRH
+                                        // LDRHT or LDRH (immediate)
                                         if !P && W { // flags == 0b0x111
                                             inst.opcode = Opcode::LDRHT;
                                         } else {
@@ -1919,7 +1935,9 @@ impl Decoder<ARMv7> for InstDecoder {
                                             inst.opcode = Opcode::LDRD;
                                         }
                                         if self.should_is_must {
-                                            if (word >> 8) & 0b1111 == 0 {
+                                            // According to encoding A1 of LDRD described in
+                                            // A8-431, these bits should be zero.
+                                            if (word >> 8) & 0b1111 != 0 {
                                                 return Err(DecodeError::Nonconforming);
                                             }
                                         }
@@ -1952,7 +1970,10 @@ impl Decoder<ARMv7> for InstDecoder {
                                             inst.opcode = Opcode::LDRSB;
                                         }
                                         if self.should_is_must {
-                                            if (word >> 8) & 0b1111 == 0 {
+                                            // According to the A1 encoding of LDRSB described in
+                                            // A8-455, and the A2 encoding of LDRSBT described in
+                                            // A8-457, these reserved bits should be zero.
+                                            if (word >> 8) & 0b1111 != 0 {
                                                 return Err(DecodeError::Nonconforming);
                                             }
                                         }
@@ -2000,16 +2021,11 @@ impl Decoder<ARMv7> for InstDecoder {
                                         ];
                                     },
                                     0b00101 => {
-                                        // LDRSB or LDRSBT
+                                        // LDRSB or LDRSBT (immediate)
                                         if !P && W { // flags == 0b0x010
                                             inst.opcode = Opcode::LDRSBT;
                                         } else {
                                             inst.opcode = Opcode::LDRSB;
-                                        }
-                                        if self.should_is_must {
-                                            if (word >> 8) & 0b1111 == 0 {
-                                                return Err(DecodeError::Nonconforming);
-                                            }
                                         }
                                         let Rt = (word >> 12) as u8 & 0b1111;
                                         let Rn = (word >> 16) as u8 & 0b1111;
@@ -2044,8 +2060,11 @@ impl Decoder<ARMv7> for InstDecoder {
                                         } else {
                                             inst.opcode = Opcode::STRD;
                                         }
+
                                         if self.should_is_must {
-                                            if (word >> 8) & 0b1111 == 0 {
+                                            // According to encoding A1 of STRD described at
+                                            // A8-689, these reserved bits should be zero.
+                                            if (word >> 8) & 0b1111 != 0 {
                                                 return Err(DecodeError::Nonconforming);
                                             }
                                         }
@@ -2075,7 +2094,10 @@ impl Decoder<ARMv7> for InstDecoder {
                                             inst.opcode = Opcode::LDRSH;
                                         }
                                         if self.should_is_must {
-                                            if (word >> 8) & 0b1111 == 0 {
+                                            // According to encoding A1 of LDRSH described at
+                                            // A8-463, and encoding A2 of LDRSHT described at
+                                            // A8-465, these reserved bits should be zero.
+                                            if (word >> 8) & 0b1111 != 0 {
                                                 return Err(DecodeError::Nonconforming);
                                             }
                                         }
@@ -2123,16 +2145,11 @@ impl Decoder<ARMv7> for InstDecoder {
                                         ];
                                     },
                                     0b00101 => {
-                                        // LDRSH or LDRSHT
+                                        // LDRSH or LDRSHT (immediate)
                                         if !P && W { // flags == 0b0x010
                                             inst.opcode = Opcode::LDRSHT;
                                         } else {
                                             inst.opcode = Opcode::LDRSH;
-                                        }
-                                        if self.should_is_must {
-                                            if (word >> 8) & 0b1111 == 0 {
-                                                return Err(DecodeError::Nonconforming);
-                                            }
                                         }
                                         let Rt = (word >> 12) as u8 & 0b1111;
                                         let Rn = (word >> 16) as u8 & 0b1111;

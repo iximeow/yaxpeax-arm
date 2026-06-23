@@ -16,6 +16,7 @@ several fixes from @Grond66:
   yaxpeax-arm incorrectly reported a shift of 0, but should have reported 32.
 * ARMv7: reject unconditional instructions with op1=1111xxxx. these were
   decoded as CDP, MCR, or MRC when the bit pattern is actually undefined.
+* ARMv7: fix inverted reserved bit test for some ldr*/str* (immediate) forms.
 
 thank you for the patches!
 
