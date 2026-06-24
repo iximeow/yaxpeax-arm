@@ -17,6 +17,8 @@ several fixes from @Grond66:
 * ARMv7: reject unconditional instructions with op1=1111xxxx. these were
   decoded as CDP, MCR, or MRC when the bit pattern is actually undefined.
 * ARMv7: fix inverted reserved bit test for some ldr*/str* (immediate) forms.
+* ARMv7: fix several issues with data processing instructions:
+  * CMP/CMN decoded "three operands" when they only have two.
 
 thank you for the patches!
 

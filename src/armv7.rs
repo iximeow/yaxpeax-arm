@@ -2558,42 +2558,52 @@ impl Decoder<ARMv7> for InstDecoder {
                                 (Rn, Rd, shift_spec, Rm)
                             };
 
-                            if shift_spec & 0xff0 == 0 {
-                                if (0b1101 & opcode) == 0b1101 {
+                            let last_operand = if shift_spec & 0xff0 == 0 {
+                                // No shift, so the operand is just a register
+                                Operand::Reg(Reg::from_u8(Rm))
+                            } else {
+                                Operand::RegShift(RegShift::from_raw(shift_spec))
+                            };
+
+                            match inst.opcode {
+                                Opcode::MOV
+                                |Opcode::MVN => {
                                     if self.should_is_must {
                                         if Rn != 0 {
                                             return Err(DecodeError::Nonconforming);
                                         }
                                     }
-                                    // MOV or MVN
                                     inst.operands = [
                                         Operand::Reg(Reg::from_u8(Rd)),
-                                        Operand::Reg(Reg::from_u8(Rm)),
+                                        last_operand,
                                         Operand::Nothing,
                                         Operand::Nothing
                                     ];
-                                } else {
+                                }
+
+                                Opcode::CMP
+                                |Opcode::CMN => {
+                                    if self.should_is_must {
+                                        if Rd != 0 {
+                                            return Err(DecodeError::Nonconforming);
+                                        }
+                                    }
                                     inst.operands = [
-                                        Operand::Reg(Reg::from_u8(Rd)),
                                         Operand::Reg(Reg::from_u8(Rn)),
-                                        Operand::Reg(Reg::from_u8(Rm)),
+                                        last_operand,
+                                        Operand::Nothing,
                                         Operand::Nothing
                                     ];
                                 }
-                            } else {
-                                if self.should_is_must {
-                                    if opcode == 0b1101 && Rn != 0 {
-                                        // Rn "should" be zero
-                                        return Err(DecodeError::Nonconforming);
-                                    }
-                                }
 
-                                inst.operands = [
-                                    Operand::Reg(Reg::from_u8(Rd)),
-                                    Operand::Reg(Reg::from_u8(Rn)),
-                                    Operand::RegShift(RegShift::from_raw(shift_spec)),
-                                    Operand::Nothing
-                                ];
+                                _ => {
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(Rd)),
+                                        Operand::Reg(Reg::from_u8(Rn)),
+                                        last_operand,
+                                        Operand::Nothing
+                                    ];
+                                }
                             }
                         } else {
                     //    known 0 because it and bit 5 are not both 1 --v
@@ -2725,7 +2735,24 @@ impl Decoder<ARMv7> for InstDecoder {
                         inst.opcode = Opcode::ADR;
                     }
                     match opcode {
+                        // CMP/CMN (immediate)
+                        0b1010 | 0b1011 => {
+                            // According to A8-368, there are 4 bits right above the immediate that
+                            // are reserved and should be zero
+                            if self.should_is_must && (word >> 12) as u8 & 0b1111 != 0 {
+                                return Err(DecodeError::Nonconforming);
+                            }
+                            // compare has no destination register, only a source.
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(Rn)),
+                                Operand::Imm32(imm),
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+                        }
+                        // MOV (immediate)
                         0b1101 => {
+                            // mov has no source *register*, only the immediate being moved.
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(Rd)),
                                 Operand::Imm32(imm),

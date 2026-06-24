@@ -527,13 +527,14 @@ fn test_decode_arithmetic() {
         Instruction {
             condition: ConditionCode::AL,
             opcode: Opcode::MOV,
-            operands: [Operand::Reg(Reg::from_u8(3)), Operand::Reg(Reg::from_u8(0)), Operand::RegShift(RegShift::from_raw(0x143)), Operand::Nothing],
+            operands: [Operand::Reg(Reg::from_u8(3)), Operand::RegShift(RegShift::from_raw(0x143)), Operand::Nothing, Operand::Nothing],
             s: false,
             thumb_w: false,
             thumb: false,
             wide: false,
         }
     );
+    test_display([0x43, 0x31, 0xa0, 0xe1], "mov r3, r3, asr 2");
     test_decode(
         [0x01, 0x50, 0x43, 0xe2],
         Instruction {
@@ -704,7 +705,6 @@ fn test_decode_mul() {
     );
 }
 
-#[test]
 fn test_register_shift_rotate() {
     test_armv6([0xec, 0x02, 0x00, 0x00], "andeq r0, r0, ip, ror 5");
     test_armv6([0xa0, 0x33, 0x0b, 0x00], "andeq r3, fp, r0, lsr 7");
@@ -728,6 +728,20 @@ fn test_decode_mrc2() {
     // A5.7 Unconditional Instructions, but previously this was incorrectly decoded as `mrc2`.
     test_invalid([0xbc, 0xec, 0xff, 0xff]);
     test_armv6([0xbc, 0xec, 0xff, 0xfe], "mrc2 p12, 7, lr, c15, c12, 5");
+}
+
+#[test]
+fn test_cmp_immediate_decode() {
+    test_all([0xaf, 0x00, 0x56, 0xe3], "cmps r6, 0xaf");
+    test_all([0xaf, 0x00, 0x76, 0xe3], "cmns r6, 0xaf");
+}
+
+#[test]
+fn test_cmp_register_decode() {
+    test_all([0x01, 0x00, 0x52, 0xe1], "cmps r2, r1");
+    test_all([0x01, 0x03, 0x52, 0xe1], "cmps r2, r1, lsl 6");
+    test_all([0x01, 0x00, 0x72, 0xe1], "cmns r2, r1");
+    test_all([0x01, 0x03, 0x72, 0xe1], "cmns r2, r1, lsl 6");
 }
 
 static INSTRUCTION_BYTES: [u8; 4 * 60] = [
