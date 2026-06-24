@@ -331,6 +331,10 @@ pub enum ShiftStyle {
     ASR = 2,
     /// rotate-right, filling with bits shifted out of the value.
     ROR = 3,
+    /// shift right by one, populating the new most-significant bit from the carry flag.
+    ///
+    /// only possible on immediate shifts.
+    RRX = 4,
 }
 
 impl Display for ShiftStyle {
@@ -345,7 +349,7 @@ impl Display for ShiftStyle {
 }
 
 impl ShiftStyle {
-    fn from(bits: u8) -> ShiftStyle {
+    fn from_bits(bits: u8) -> ShiftStyle {
         match bits {
             0b00 => ShiftStyle::LSL,
             0b01 => ShiftStyle::LSR,
@@ -357,10 +361,11 @@ impl ShiftStyle {
 
     fn name(&self) -> &'static [u8; 3] {
         match self {
-            ShiftStyle::LSL => &[b'l', b's', b'l'],
-            ShiftStyle::LSR => &[b'l', b's', b'r'],
-            ShiftStyle::ASR => &[b'a', b's', b'r'],
-            ShiftStyle::ROR => &[b'r', b'o', b'r'],
+            ShiftStyle::LSL => b"lsl",
+            ShiftStyle::LSR => b"lsr",
+            ShiftStyle::ASR => b"asr",
+            ShiftStyle::ROR => b"ror",
+            ShiftStyle::RRX => b"rrx",
         }
     }
 }
@@ -372,7 +377,7 @@ impl RegRegShift {
     }
     /// the way in which this register is shifted.
     pub fn stype(&self) -> ShiftStyle {
-        ShiftStyle::from((self.data >> 5) as u8 & 0b11)
+        ShiftStyle::from_bits((self.data >> 5) as u8 & 0b11)
     }
     /// the general-purpose register to be shifted.
     pub fn shiftee(&self) -> Reg {
@@ -387,9 +392,14 @@ pub struct RegImmShift {
 }
 
 impl RegImmShift {
+    /// The shift immediate, without any interpretation
+    fn imm_raw(&self) -> u8 {
+        (self.data >> 7) as u8 & 0b11111
+    }
+
     /// the immediate this register is shifted by.
     pub fn imm(&self) -> u8 {
-        let raw = (self.data >> 7) as u8 & 0b11111;
+        let raw = self.imm_raw();
         // in the ARMv7m reference,
         // `Instruction Details` ->
         //   `Shifts applied to a register` ->
@@ -403,12 +413,18 @@ impl RegImmShift {
         // > ASR #<n>    type = 0b10
         // >             If <n> < 32, immediate = <n>.
         // >             If <n> == 32, immediate = 0.
+        // > ...
+        // > ROR #<n>    type = 0b11, immediate = <n>.
+        // > RRX         type = 0b11, immediate = 0.
         //
         // so we have to fix this up here.
         if raw == 0 {
             let stype = self.stype();
             if stype == ShiftStyle::LSR || stype == ShiftStyle::ASR {
                 return 32;
+            } else if stype == ShiftStyle::ROR {
+                // this is actually RRX, which rotates by exactly one bit.
+                return 1;
             }
         }
         raw
@@ -416,8 +432,15 @@ impl RegImmShift {
 
     /// the way in which this register is shifted.
     pub fn stype(&self) -> ShiftStyle {
-        ShiftStyle::from((self.data >> 5) as u8 & 0b11)
+        let stype = ShiftStyle::from_bits((self.data >> 5) as u8 & 0b11);
+
+        if self.imm_raw() == 0 && stype == ShiftStyle::ROR {
+            ShiftStyle::RRX
+        } else {
+            stype
+        }
     }
+
     /// the general-purpose register to be shifted.
     pub fn shiftee(&self) -> Reg {
         Reg::from_u8(self.data as u8 & 0b1111)

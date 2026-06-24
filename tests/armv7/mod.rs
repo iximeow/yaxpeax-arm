@@ -707,6 +707,11 @@ fn test_register_shift_rotate() {
     // applied shift is 32.
     test_armv6([0x21, 0x00, 0x20, 0x00], "eoreq r0, r0, r1, lsr 32");
     test_armv6([0x41, 0x00, 0x20, 0x00], "eoreq r0, r0, r1, asr 32");
+
+    // When the argument of an immediate ROR shift is 0, it actually specifies an entirely
+    // different shift mode called RRX which only shifts by one to the right and populates the MSB
+    // with the carry flag.
+    test_all([0x62, 0x00, 0x01, 0xe0], "and r0, r1, r2, rrx");
 }
 
 static INSTRUCTION_BYTES: [u8; 4 * 60] = [

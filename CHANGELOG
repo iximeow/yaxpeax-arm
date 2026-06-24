@@ -9,6 +9,7 @@
     on the opcode (rather than distinct opcodes)
 
 several fixes from @Grond66:
+* ARMv7: support the RRX rotate mode.
 * ARMv7: added `armv7::InstDecoder::in_thumb_mode` to read back if an ARMv7
   decoder is operating in thumb mode.
 * ARMv7: fix incorrect handling of registers lsr or asr by an immediate 32.
