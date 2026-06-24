@@ -55,8 +55,18 @@ impl Instruction {
         unsafe {
             f.write_lt_8(opc.name())?;
         }
+        // test/compare instructions always set flags and are consequently encoded with bit 20 set
+        // as most other instructions that sets flags are. because these instructions
+        // unconditionally set flags, though, their mnemonic skips the `s` suffix.
         if self.s() {
-            f.write_char('s')?;
+            let always_sets_flags =
+                *opc == Opcode::CMP ||
+                *opc == Opcode::CMN ||
+                *opc == Opcode::TST ||
+                *opc == Opcode::TEQ;
+            if !always_sets_flags {
+                f.write_char('s')?;
+            }
         }
         if self.w() {
             f.write_fixed_size(".w")?;
