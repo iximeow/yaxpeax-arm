@@ -2659,6 +2659,24 @@ impl Decoder<ARMv7> for InstDecoder {
                                 Operand::Nothing,
                             ];
                         }
+                        // CMP/CMN (immediate)
+                        0b1010
+                        |0b1011 => {
+                            // According to A8-368, there are 4 bits right above the immediate that
+                            // are reserved and should be zero
+                            if self.should_is_must && (word >> 12) as u8 & 0b1111 != 0 {
+                                return Err(DecodeError::Nonconforming);
+                            }
+
+                            // Unlike most of the other instructions in this category, there are
+                            // only two operands to an immediate CMP.
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(Rn)),
+                                Operand::Imm32(imm),
+                                Operand::Nothing,
+                                Operand::Nothing,
+                            ];
+                        }
                         _ => {
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(Rd)),
