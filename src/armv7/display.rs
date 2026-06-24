@@ -55,7 +55,16 @@ impl Instruction {
         unsafe {
             f.write_lt_8(opc.name())?;
         }
-        if self.s() {
+        // Test operands always set the flags, so even if their S bit is set, we don't want to
+        // print it that way, because the actual assembler mnemonics don't have an 's' after them.
+        let always_sets_flags = match opc {
+            Opcode::CMP
+            |Opcode::CMN
+            |Opcode::TST
+            |Opcode::TEQ => true,
+            _ => false,
+        };
+        if self.s() && !always_sets_flags {
             f.write_char('s')?;
         }
         if self.w() {
