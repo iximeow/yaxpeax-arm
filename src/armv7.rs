@@ -2484,42 +2484,52 @@ impl Decoder<ARMv7> for InstDecoder {
                                 (Rn, Rd, shift_spec, Rm)
                             };
 
-                            if shift_spec & 0xff0 == 0 {
-                                if (0b1101 & opcode) == 0b1101 {
+                            let last_operand = if shift_spec & 0xff0 == 0 {
+                                // No shift, so the operand is just a register
+                                Operand::Reg(Reg::from_u8(Rm))
+                            } else {
+                                Operand::RegShift(RegShift::from_raw(shift_spec))
+                            };
+
+                            match inst.opcode {
+                                Opcode::MOV
+                                |Opcode::MVN => {
                                     if self.should_is_must {
                                         if Rn != 0 {
                                             return Err(DecodeError::Nonconforming);
                                         }
                                     }
-                                    // MOV or MVN
                                     inst.operands = [
                                         Operand::Reg(Reg::from_u8(Rd)),
-                                        Operand::Reg(Reg::from_u8(Rm)),
+                                        last_operand,
                                         Operand::Nothing,
                                         Operand::Nothing
                                     ];
-                                } else {
+                                }
+
+                                Opcode::CMP
+                                |Opcode::CMN => {
+                                    if self.should_is_must {
+                                        if Rd != 0 {
+                                            return Err(DecodeError::Nonconforming);
+                                        }
+                                    }
                                     inst.operands = [
-                                        Operand::Reg(Reg::from_u8(Rd)),
                                         Operand::Reg(Reg::from_u8(Rn)),
-                                        Operand::Reg(Reg::from_u8(Rm)),
+                                        last_operand,
+                                        Operand::Nothing,
                                         Operand::Nothing
                                     ];
                                 }
-                            } else {
-                                if self.should_is_must {
-                                    if opcode == 0b1101 && Rn != 0 {
-                                        // Rn "should" be zero
-                                        return Err(DecodeError::Nonconforming);
-                                    }
-                                }
 
-                                inst.operands = [
-                                    Operand::Reg(Reg::from_u8(Rd)),
-                                    Operand::Reg(Reg::from_u8(Rn)),
-                                    Operand::RegShift(RegShift::from_raw(shift_spec)),
-                                    Operand::Nothing
-                                ];
+                                _ => {
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(Rd)),
+                                        Operand::Reg(Reg::from_u8(Rn)),
+                                        last_operand,
+                                        Operand::Nothing
+                                    ];
+                                }
                             }
                         } else {
                     //    known 0 because it and bit 5 are not both 1 --v

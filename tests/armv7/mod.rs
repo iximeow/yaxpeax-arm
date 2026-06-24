@@ -519,7 +519,7 @@ fn test_decode_arithmetic() {
         Instruction {
             condition: ConditionCode::AL,
             opcode: Opcode::MOV,
-            operands: [Operand::Reg(Reg::from_u8(3)), Operand::Reg(Reg::from_u8(0)), Operand::RegShift(RegShift::from_raw(0x143)), Operand::Nothing],
+            operands: [Operand::Reg(Reg::from_u8(3)), Operand::RegShift(RegShift::from_raw(0x143)), Operand::Nothing, Operand::Nothing],
             s: false,
             thumb_w: false,
             thumb: false,
@@ -700,6 +700,14 @@ fn test_decode_mul() {
 fn test_cmp_immediate_decode() {
     test_all([0xaf, 0x00, 0x56, 0xe3], "cmps r6, 0xaf");
     test_all([0xaf, 0x00, 0x76, 0xe3], "cmns r6, 0xaf");
+}
+
+#[test]
+fn test_cmp_register_decode() {
+    test_all([0x01, 0x00, 0x52, 0xe1], "cmps r2, r1");
+    test_all([0x01, 0x03, 0x52, 0xe1], "cmps r2, r1, lsl 6");
+    test_all([0x01, 0x00, 0x72, 0xe1], "cmns r2, r1");
+    test_all([0x01, 0x03, 0x72, 0xe1], "cmns r2, r1, lsl 6");
 }
 
 static INSTRUCTION_BYTES: [u8; 4 * 60] = [
