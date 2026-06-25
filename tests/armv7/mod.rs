@@ -740,8 +740,10 @@ fn test_cmp_immediate_decode() {
 fn test_cmp_register_decode() {
     test_all([0x01, 0x00, 0x52, 0xe1], "cmps r2, r1");
     test_all([0x01, 0x03, 0x52, 0xe1], "cmps r2, r1, lsl 6");
+    test_all([0x11, 0x03, 0x52, 0xe1], "cmps r2, r1, lsl r3");
     test_all([0x01, 0x00, 0x72, 0xe1], "cmns r2, r1");
     test_all([0x01, 0x03, 0x72, 0xe1], "cmns r2, r1, lsl 6");
+    test_all([0x11, 0x03, 0x72, 0xe1], "cmns r2, r1, lsl r3");
 }
 
 static INSTRUCTION_BYTES: [u8; 4 * 60] = [
