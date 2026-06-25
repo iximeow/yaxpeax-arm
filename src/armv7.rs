@@ -2523,7 +2523,9 @@ impl Decoder<ARMv7> for InstDecoder {
                             }
 
                             Opcode::CMP
-                            |Opcode::CMN => {
+                            |Opcode::CMN
+                            |Opcode::TST
+                            |Opcode::TEQ => {
                                 if self.should_is_must {
                                     if Rd != 0 {
                                         return Err(DecodeError::Nonconforming);
