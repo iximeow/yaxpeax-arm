@@ -18,7 +18,9 @@ several fixes from @Grond66:
   decoded as CDP, MCR, or MRC when the bit pattern is actually undefined.
 * ARMv7: fix inverted reserved bit test for some ldr*/str* (immediate) forms.
 * ARMv7: fix several issues with data processing instructions:
-  * CMP/CMN decoded "three operands" when they only have two.
+  * CMP/CMN decoded "three operands" in some cases when they only have two.
+  * TST/TEQ decoded "three operands" in some cases when they only have two.
+* ARMv7: do not print the "s" suffix for instructions that unconditionally set flags.
 
 thank you for the patches!
 

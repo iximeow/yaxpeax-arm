@@ -2606,6 +2606,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                 ];
                             }
 
+                            Opcode::TST | Opcode::TEQ |
                             Opcode::CMP | Opcode::CMN => {
                                 if self.should_is_must {
                                     if Rd != 0 {
@@ -2731,6 +2732,8 @@ impl Decoder<ARMv7> for InstDecoder {
                         inst.opcode = Opcode::ADR;
                     }
                     match opcode {
+                        // TST/TEQ (immediate)
+                        0b1000 | 0b1001 |
                         // CMP/CMN (immediate)
                         0b1010 | 0b1011 => {
                             // According to A8-368, there are 4 bits right above the immediate that
