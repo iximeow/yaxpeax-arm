@@ -299,6 +299,16 @@ impl RegShift {
         }
     }
 
+    /// Does this shift actually do anything?
+    fn is_noop(&self) -> bool {
+        match self.into_shift() {
+            RegShiftStyle::RegImm(shift) => shift.is_noop(),
+            // We can't know statically that this is a no-op, because the final result is based on
+            // register data. Therefore, consider it a live shift.
+            RegShiftStyle::RegReg(_) => false,
+        }
+    }
+
     /// don't use this. it's for armv7 testing only.
     #[doc(hidden)]
     pub fn from_raw(data: u16) -> Self {
@@ -398,6 +408,11 @@ impl RegImmShift {
     /// the general-purpose register to be shifted.
     pub fn shiftee(&self) -> Reg {
         Reg::from_u8(self.data as u8 & 0b1111)
+    }
+
+    /// Does this shift actually do anything?
+    fn is_noop(&self) -> bool {
+        self.stype() == ShiftStyle::LSL && self.imm() == 0
     }
 }
 
@@ -2466,96 +2481,68 @@ impl Decoder<ARMv7> for InstDecoder {
                         if opcode >= 16 {
                             unreachable!();
                         }
+
                         inst.opcode = DATA_PROCESSING_OPCODES[opcode as usize];
                         inst.set_s(s);
 
-                        // at this point we know this is a data processing instruction
-                        // either immediate shift or register shift
-                        if word & 0b00010000 == 0 {
-                    // |c o n d|0 0 0|x x x x|0|x x x x|x x x x|x x x x x|x x|0|x x x x|
-                    // interpret the operands as
-                    // | Rn | Rd | shift amount | shift | 0 | Rm |
-                            let (Rn, Rd, shift_spec, Rm) = {
-                                let Rm = (word & 0x0f) as u8;
-                                let shift_spec = (word & 0xfff) as u16;
-                                let word = word >> 12;
-                                let Rd = (word & 0x0f) as u8;
-                                let Rn = ((word >> 4) & 0x0f) as u8;
-                                (Rn, Rd, shift_spec, Rm)
-                            };
+                        // |c o n d|0 0 0|x x x x|0|x x x x|x x x x|x x x x x|x x|x|x x x x|
+                        // interpret the operands as
+                        // | Rn | Rd | shift info... |
 
-                            let last_operand = if shift_spec & 0xff0 == 0 {
-                                // No shift, so the operand is just a register
-                                Operand::Reg(Reg::from_u8(Rm))
-                            } else {
-                                Operand::RegShift(RegShift::from_raw(shift_spec))
-                            };
+                        let (Rn, Rd, shift_spec, Rm) = {
+                            let Rm = (word & 0x0f) as u8;
+                            let shift_spec = (word & 0xfff) as u16;
+                            let word = word >> 12;
+                            let Rd = (word & 0x0f) as u8;
+                            let Rn = ((word >> 4) & 0x0f) as u8;
+                            (Rn, Rd, shift_spec, Rm)
+                        };
 
-                            match inst.opcode {
-                                Opcode::MOV
-                                |Opcode::MVN => {
-                                    if self.should_is_must {
-                                        if Rn != 0 {
-                                            return Err(DecodeError::Nonconforming);
-                                        }
-                                    }
-                                    inst.operands = [
-                                        Operand::Reg(Reg::from_u8(Rd)),
-                                        last_operand,
-                                        Operand::Nothing,
-                                        Operand::Nothing
-                                    ];
-                                }
-
-                                Opcode::CMP
-                                |Opcode::CMN => {
-                                    if self.should_is_must {
-                                        if Rd != 0 {
-                                            return Err(DecodeError::Nonconforming);
-                                        }
-                                    }
-                                    inst.operands = [
-                                        Operand::Reg(Reg::from_u8(Rn)),
-                                        last_operand,
-                                        Operand::Nothing,
-                                        Operand::Nothing
-                                    ];
-                                }
-
-                                _ => {
-                                    inst.operands = [
-                                        Operand::Reg(Reg::from_u8(Rd)),
-                                        Operand::Reg(Reg::from_u8(Rn)),
-                                        last_operand,
-                                        Operand::Nothing
-                                    ];
-                                }
-                            }
+                        let reg_shift = RegShift::from_raw(shift_spec);
+                        let last_operand = if reg_shift.is_noop() {
+                            // No shift, so the operand is just a register
+                            Operand::Reg(Reg::from_u8(Rm))
                         } else {
-                    //    known 0 because it and bit 5 are not both 1 --v
-                    // |c o n d|0 0 0|1 0 x x|0|x x x x|x x x x|x x x x 0|x x|1|x x x x|
-                            // interpret the operands as
-                            // | Rn | Rd | Rs | 0 | shift | 1 | Rm |
-                            let (Rn, Rd, shift_spec) = {
-                                let shift_spec = (word & 0xfff) as u16;
-                                let word = word >> 12;
-                                let Rd = (word & 0x0f) as u8;
-                                let Rn = ((word >> 4) & 0x0f) as u8;
-                                (Rn, Rd, shift_spec)
-                            };
-                            // page A5-200 indicates that saturating add and subtract should be
-                            // here?
-                            if (0b1101 & opcode) == 0b1101 {
-                                // these are all invalid
-                                inst.opcode = Opcode::Invalid;
-                                return Err(DecodeError::InvalidOpcode);
-                            } else {
-                                // TODO: unsure about this RegShift...
+                            Operand::RegShift(reg_shift)
+                        };
+
+                        match inst.opcode {
+                            Opcode::MOV
+                            |Opcode::MVN => {
+                                if self.should_is_must {
+                                    if Rn != 0 {
+                                        return Err(DecodeError::Nonconforming);
+                                    }
+                                }
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(Rd)),
+                                    last_operand,
+                                    Operand::Nothing,
+                                    Operand::Nothing
+                                ];
+                            }
+
+                            Opcode::CMP
+                            |Opcode::CMN => {
+                                if self.should_is_must {
+                                    if Rd != 0 {
+                                        return Err(DecodeError::Nonconforming);
+                                    }
+                                }
+                                inst.operands = [
+                                    Operand::Reg(Reg::from_u8(Rn)),
+                                    last_operand,
+                                    Operand::Nothing,
+                                    Operand::Nothing
+                                ];
+                            }
+
+                            _ => {
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(Rd)),
                                     Operand::Reg(Reg::from_u8(Rn)),
-                                    Operand::RegShift(RegShift::from_raw(shift_spec)),
-                                    Operand::Nothing,
+                                    last_operand,
+                                    Operand::Nothing
                                 ];
                             }
                         }
