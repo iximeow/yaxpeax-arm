@@ -2695,7 +2695,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                     Opcode::LSR,
                                     Opcode::ASR,
                                     Opcode::ROR,
-                                ][op2[1..3].load::<usize>()];
+                                ][op1[1..3].load::<usize>()];
                                 let rd = lower2[8..12].load::<u8>();
                                 let rm = lower2[0..4].load::<u8>();
                                 inst.opcode = op;
@@ -2723,14 +2723,18 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                     ][op1];
 
                                     let rm = lower2[..4].load::<u8>();
-                                    let rotate = lower2[1..3].load::<u8>() << 2;
+                                    let rotate = lower2[4..6].load::<u8>() << 3;
                                     let rd = lower2[8..12].load::<u8>();
 
                                     inst.opcode = op;
                                     inst.operands = [
                                         Operand::Reg(Reg::from_u8(rd)),
                                         Operand::Reg(Reg::from_u8(rm)),
-                                        Operand::Imm32(rotate as u32),
+                                        if rotate != 0 {
+                                            Operand::Imm32(rotate as u32)
+                                        } else {
+                                            Operand::Nothing
+                                        },
                                         Operand::Nothing,
                                     ];
                                 } else {
@@ -2739,12 +2743,12 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                         Opcode::UXTAH,
                                         Opcode::SXTAB16,
                                         Opcode::UXTAB16,
-                                        Opcode::SXTAH,
+                                        Opcode::SXTAB,
                                         Opcode::UXTAB,
                                     ][op1];
 
                                     let rm = lower2[..4].load::<u8>();
-                                    let rotate = lower2[1..3].load::<u8>() << 2;
+                                    let rotate = lower2[4..6].load::<u8>() << 3;
                                     let rd = lower2[8..12].load::<u8>();
 
                                     inst.opcode = op;
@@ -2752,7 +2756,11 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                         Operand::Reg(Reg::from_u8(rd)),
                                         Operand::Reg(Reg::from_u8(rn)),
                                         Operand::Reg(Reg::from_u8(rm)),
-                                        Operand::Imm32(rotate as u32),
+                                        if rotate != 0 {
+                                            Operand::Imm32(rotate as u32)
+                                        } else {
+                                            Operand::Nothing
+                                        },
                                     ];
                                 };
                             }

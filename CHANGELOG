@@ -28,6 +28,9 @@ as well as thumb2 fixes from @brandonros:
 * thumb2: some instructions had outright incorrect opcodes:
   * ror (immediate) was decoded as asr,
   * mvn (immediate) was decoded as mov,
+  * sxtab was decoded as sxtah,
+  * lsl, lsr, asr, ror were determining opcode from an incorrect bitfield,
+* thumb2: (un)signed extend-and-rotate loaded an incorrect field for rotate,
 
 thank you for the patches!
 

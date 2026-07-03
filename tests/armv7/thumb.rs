@@ -4247,3 +4247,81 @@ fn test_decode_mov_reg_shift_cases() {
         "rrx r3, r2"
     );
 }
+
+#[test]
+fn test_decode_ux_sx_32b_cases() {
+    // rotation is hw1[5:4] scaled by 8, and omitted when zero
+    test_display(
+        &[0x1f, 0xfa, 0x8b, 0xfb],
+        "uxth.w fp, fp"
+    );
+    test_display(
+        &[0x5f, 0xfa, 0x8c, 0xfc],
+        "uxtb.w ip, ip"
+    );
+    test_display(
+        &[0x5f, 0xfa, 0x9c, 0xfc],
+        "uxtb.w ip, ip, 0x8"
+    );
+    test_display(
+        &[0x1f, 0xfa, 0xab, 0xfb],
+        "uxth.w fp, fp, 0x10"
+    );
+    test_display(
+        &[0x0f, 0xfa, 0x82, 0xf1],
+        "sxth.w r1, r2"
+    );
+    test_display(
+        &[0x52, 0xfa, 0x93, 0xf1],
+        "uxtab.w r1, r2, r3, 0x8"
+    );
+    test_display(
+        &[0x42, 0xfa, 0x83, 0xf1],
+        "sxtab.w r1, r2, r3"
+    );
+    test_display(
+        &[0x02, 0xfa, 0x83, 0xf1],
+        "sxtah.w r1, r2, r3"
+    );
+}
+
+#[test]
+fn test_decode_ux_sx_b16_32b_cases() {
+    test_display(
+        &[0x2f, 0xfa, 0x82, 0xf1],
+        "sxtb16.w r1, r2"
+    );
+    test_display(
+        &[0x3f, 0xfa, 0x82, 0xf1],
+        "uxtb16.w r1, r2"
+    );
+    test_display(
+        &[0x22, 0xfa, 0x83, 0xf1],
+        "sxtab16.w r1, r2, r3"
+    );
+    test_display(
+        &[0x32, 0xfa, 0x83, 0xf1],
+        "uxtab16.w r1, r2, r3"
+    );
+}
+
+#[test]
+fn test_decode_shift_reg_32b_cases() {
+    // register-controlled shift: type is in hw0[6:5]
+    test_display(
+        &[0x02, 0xfa, 0x03, 0xf1],
+        "lsl.w r1, r2, r3"
+    );
+    test_display(
+        &[0x22, 0xfa, 0x03, 0xf1],
+        "lsr.w r1, r2, r3"
+    );
+    test_display(
+        &[0x42, 0xfa, 0x03, 0xf1],
+        "asr.w r1, r2, r3"
+    );
+    test_display(
+        &[0x62, 0xfa, 0x03, 0xf1],
+        "ror.w r1, r2, r3"
+    );
+}
