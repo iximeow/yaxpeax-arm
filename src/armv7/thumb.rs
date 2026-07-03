@@ -838,7 +838,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                             inst.set_w(false);
                                             let rm = lower2[..4].load::<u8>();
                                             let rd = lower2[8..12].load::<u8>();
-                                            inst.opcode = Opcode::ASR;
+                                            inst.opcode = Opcode::ROR;
                                             inst.operands = [
                                                 Operand::Reg(Reg::from_u8(rd)),
                                                 Operand::Reg(Reg::from_u8(rm)),
@@ -1111,7 +1111,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                             if rn == 0b1111 {
                                 // `MVN` (`A8-505`)
                                 // v6T2
-                                inst.opcode = Opcode::MOV;
+                                inst.opcode = Opcode::MVN;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
                                     Operand::Imm32(imm as u32),
@@ -1292,7 +1292,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                             inst.opcode = Opcode::MOV;
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(rd)),
-                                Operand::Imm32(imm as u32 | ((rn as u32) << 16)),
+                                Operand::Imm32(imm as u32 | ((rn as u32) << 12)),
                                 Operand::Nothing,
                                 Operand::Nothing,
                             ];
@@ -1330,7 +1330,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                             inst.opcode = Opcode::MOVT;
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(rd)),
-                                Operand::Imm32(imm as u32 | ((rn as u32) << 16)),
+                                Operand::Imm32(imm as u32 | ((rn as u32) << 12)),
                                 Operand::Nothing,
                                 Operand::Nothing,
                             ];
@@ -2023,7 +2023,9 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                             match size_bits {
                                 0b00 => {
                                     // `STRB_`
-                                    if op2 == 0 {
+                                    // op2 only selects a form when the imm12 bit is clear;
+                                    // otherwise it's just the high bits of imm12.
+                                    if !has_imm12 && op2 == 0 {
                                         // `STRB (register)` (`A8-683`)
                                         // encoding T2
                                         // v6T2
@@ -2048,7 +2050,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                             Operand::Nothing,
                                             Operand::Nothing,
                                         ];
-                                    } else if (op2 & 0b111100) == 0b111000 {
+                                    } else if !has_imm12 && (op2 & 0b111100) == 0b111000 {
                                         // `STRBT` (`A8-685`)
                                         // v6T2
                                         let imm8 = lower & 0b1111_1111;
@@ -2112,7 +2114,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                 0b01 => {
                                     // `STRH_`
                                     // v6T2
-                                    if op2 == 0 {
+                                    if !has_imm12 && op2 == 0 {
                                         // `STRH (register)` (`A8-703`)
                                         let rm = (lower & 0b1111) as u8;
                                         let imm2 = (lower >> 4) & 0b11;
@@ -2135,7 +2137,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                             Operand::Nothing,
                                             Operand::Nothing,
                                         ];
-                                    } else if (op2 & 0b111100) == 0b111000 {
+                                    } else if !has_imm12 && (op2 & 0b111100) == 0b111000 {
                                         // `STRHT` (`A8-705`)
                                         let imm8 = lower & 0b1111_1111;
                                         let rt = ((lower >> 12) & 0b1111) as u8;
@@ -2197,7 +2199,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                 }
                                 0b10 => {
                                     // `STR_`
-                                    if op2 == 0 {
+                                    if !has_imm12 && op2 == 0 {
                                         // `STR (register)` (`A8-677`)
                                         // v6T2
                                         let rm = (lower & 0b1111) as u8;
@@ -2221,7 +2223,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                             Operand::Nothing,
                                             Operand::Nothing,
                                         ];
-                                    } else if (op2 & 0b111100) == 0b111000 {
+                                    } else if !has_imm12 && (op2 & 0b111100) == 0b111000 {
                                         // `STRT` (`A8-707`)
                                         let imm8 = lower & 0b1111_1111;
                                         let rt = ((lower >> 12) & 0b1111) as u8;

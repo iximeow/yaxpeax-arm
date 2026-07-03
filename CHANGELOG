@@ -22,6 +22,13 @@ several fixes from @Grond66:
   * TST/TEQ decoded "three operands" in some cases when they only have two.
 * ARMv7: do not print the "s" suffix for instructions that unconditionally set flags.
 
+as well as thumb2 fixes from @brandonros:
+* thumb2: wide store encodings were very confused about offset widths.
+* thumb2: movw/movt incorrectly reassembled 16-bit immediates into 20-bit immediates.
+* thumb2: some instructions had outright incorrect opcodes:
+  * ror (immediate) was decoded as asr,
+  * mvn (immediate) was decoded as mov,
+
 thank you for the patches!
 
 ## 0.4.0
