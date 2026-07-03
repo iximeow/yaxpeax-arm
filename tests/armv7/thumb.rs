@@ -4136,3 +4136,114 @@ fn test_decode_simd_32b_cases() {
         "vstmdb r3!, {s11, s12, s13, s14, s15, s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31}"
     );
 }
+
+#[test]
+fn test_decode_str_32b_imm12_cases() {
+    // bit 23 selects the imm12 form; low imm12 bits are not the register-offset
+    // or strbt/strht/strt forms.
+    test_display(
+        &[0x83, 0xf8, 0x21, 0x20],
+        "strb.w r2, [r3, 0x21]"
+    );
+    test_display(
+        &[0x83, 0xf8, 0x3f, 0x20],
+        "strb.w r2, [r3, 0x3f]"
+    );
+    test_display(
+        &[0xa3, 0xf8, 0x21, 0x20],
+        "strh.w r2, [r3, 0x21]"
+    );
+    test_display(
+        &[0xc3, 0xf8, 0x21, 0x20],
+        "str.w r2, [r3, 0x21]"
+    );
+    test_display(
+        &[0x83, 0xf8, 0x21, 0x2e],
+        "strb.w r2, [r3, 0xe21]"
+    );
+    test_display(
+        &[0x83, 0xf8, 0x40, 0x20],
+        "strb.w r2, [r3, 0x40]"
+    );
+    test_display(
+        &[0xcd, 0xf8, 0x0c, 0xc0],
+        "str.w ip, [sp, 0xc]"
+    );
+    test_display(
+        &[0xd3, 0xf8, 0x21, 0x20],
+        "ldr.w r2, [r3, 0x21]"
+    );
+    test_display(
+        &[0x93, 0xf8, 0x05, 0x10],
+        "ldrb.w r1, [r3, 0x5]"
+    );
+    test_display(
+        &[0xb3, 0xf8, 0x08, 0x10],
+        "ldrh.w r1, [r3, 0x8]"
+    );
+}
+
+#[test]
+fn test_decode_movw_movt_cases() {
+    // imm16 is imm4:i:imm3:imm8
+    test_display(
+        &[0xcf, 0xf2, 0x05, 0x04],
+        "movt r4, 0xf005"
+    );
+    test_display(
+        &[0x4f, 0xf2, 0x05, 0x00],
+        "mov r0, 0xf005"
+    );
+    test_display(
+        &[0x40, 0xf2, 0x34, 0x12],
+        "mov r2, 0x134"
+    );
+    test_display(
+        &[0xc0, 0xf2, 0x01, 0x00],
+        "movt r0, 0x1"
+    );
+}
+
+#[test]
+fn test_decode_mvn_imm_cases() {
+    test_display(
+        &[0x6f, 0xf0, 0x40, 0x41],
+        "mvn.w r1, 0xc0000000"
+    );
+    test_display(
+        &[0x6f, 0xf0, 0x7f, 0x40],
+        "mvn.w r0, 0xff000000"
+    );
+    test_display(
+        &[0x6f, 0xf0, 0x01, 0x01],
+        "mvn.w r1, 0x1"
+    );
+    test_display(
+        &[0x7f, 0xf0, 0x40, 0x41],
+        "mvns.w r1, 0xc0000000"
+    );
+}
+
+#[test]
+fn test_decode_mov_reg_shift_cases() {
+    test_display(
+        &[0x4f, 0xea, 0xfc, 0x49],
+        "ror sb, ip, 0x13"
+    );
+    test_display(
+        &[0x4f, 0xea, 0x31, 0x42],
+        "ror r2, r1, 0x10"
+    );
+    test_display(
+        &[0x4f, 0xea, 0x72, 0x12],
+        "ror r2, r2, 0x5"
+    );
+    test_display(
+        &[0x4f, 0xea, 0x51, 0x01],
+        "lsr.w r1, r1, 0x1"
+    );
+    test_display(
+        &[0x4f, 0xea, 0x32, 0x03],
+        "rrx r3, r2"
+    );
+}
