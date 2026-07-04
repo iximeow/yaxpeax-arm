@@ -357,15 +357,14 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                         // TODO: should_is_must()
                                         // rt == 0b1111
                                         // rd == 0b0000
-                                        inst.opcode = Opcode::TBB;
+                                        inst.opcode = Opcode::TBH;
                                         inst.operands = [
                                             Operand::RegDerefPreindexRegShift(
                                                 Reg::from_u8(rn),
                                                 // want `<Rm>, LSL #1`, construct a raw shift
-                                                // ourselves
+                                                // ourselves. bit 4 clear selects `RegImm`.
                                                 RegShift::from_raw(
-                                                    0b10000 |        // `RegImm`
-                                                    rd as u16 |            // reg == rd
+                                                    rd as u16 |     // reg == rm
                                                     (0b00 << 5) |   // LSL
                                                     (1 << 7)        // shift == #1
                                                 ),

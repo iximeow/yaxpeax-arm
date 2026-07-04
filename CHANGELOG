@@ -30,6 +30,7 @@ as well as thumb2 fixes from @brandonros:
   * mvn (immediate) was decoded as mov,
   * sxtab was decoded as sxtah,
   * lsl, lsr, asr, ror were determining opcode from an incorrect bitfield,
+  * tbh was decoded as an shifted tbb,
 * thumb2: (un)signed extend-and-rotate loaded an incorrect field for rotate,
 
 thank you for the patches!
