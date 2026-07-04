@@ -4325,3 +4325,40 @@ fn test_decode_shift_reg_32b_cases() {
         "ror.w r1, r2, r3"
     );
 }
+
+#[test]
+fn test_decode_tbb_tbh_cases() {
+    test_display(
+        &[0xdf, 0xe8, 0x13, 0xf0],
+        "tbh [pc, r3, lsl 1]"
+    );
+    test_display(
+        &[0xdf, 0xe8, 0x0b, 0xf0],
+        "tbb [pc, fp]"
+    );
+}
+
+#[test]
+fn test_decode_tbh_operand_shape() {
+    use yaxpeax_arm::armv7::{Opcode, Operand, RegShiftStyle, ShiftStyle};
+
+    let mut reader = yaxpeax_arch::U8Reader::new(&[0xdf, 0xe8, 0x13, 0xf0][..]);
+    let inst = InstDecoder::default_thumb().decode(&mut reader).unwrap();
+    assert_eq!(inst.opcode, Opcode::TBH);
+    match inst.operands[0] {
+        Operand::RegDerefPreindexRegShift(base, shift, add, wback) => {
+            assert_eq!(base.number(), 15);
+            assert!(add);
+            assert!(!wback);
+            match shift.into_shift() {
+                RegShiftStyle::RegImm(s) => {
+                    assert_eq!(s.shiftee().number(), 3);
+                    assert_eq!(s.stype(), ShiftStyle::LSL);
+                    assert_eq!(s.imm(), 1);
+                }
+                RegShiftStyle::RegReg(_) => panic!("TBH index must be a register+immediate shift"),
+            }
+        }
+        other => panic!("unexpected TBH operand: {:?}", other),
+    }
+}
