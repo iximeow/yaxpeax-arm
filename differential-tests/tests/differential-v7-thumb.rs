@@ -528,6 +528,31 @@ fn capstone_differential_thumb() {
                                     return true;
                                 }
                             }
+
+                            // capstone prints the T2 encoding of `ADD (SP plus immediate)` with
+                            // two operands instead of the three from the manual.
+                            if word & 0xff80 == 0xb000 &&
+                                parsed_yax.opcode == "add" &&
+                                parsed_cs.opcode == "add" &&
+                                parsed_yax.operands[0] == parsed_cs.operands[0] &&
+                                parsed_yax.operands[0] == parsed_yax.operands[1] &&
+                                parsed_cs.operands[1] == parsed_yax.operands[2] {
+                                return true;
+                            }
+                        }
+
+                        if (parsed_yax.opcode == "sub" &&
+                            parsed_cs.opcode == "sub") {
+                            // capstone prints the T1 encoding of `SUB (SP minus immediate)` with
+                            // two operands instead of the three from the manual.
+                            if word & 0xff80 == 0xb080 &&
+                                parsed_yax.opcode == "sub" &&
+                                parsed_cs.opcode == "sub" &&
+                                parsed_yax.operands[0] == parsed_cs.operands[0] &&
+                                parsed_yax.operands[0] == parsed_yax.operands[1] &&
+                                parsed_cs.operands[1] == parsed_yax.operands[2] {
+                                return true;
+                            }
                         }
 
                         // TODO: yaxpeax-arm doesn't know about armv8-m yet, which gets `bxns` to
