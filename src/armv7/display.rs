@@ -620,8 +620,15 @@ pub(crate) fn visit_inst<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fm
             panic!("impossible it operand");
         };
 
-        let inv = cond & 1 == 1;
-        let condition = ConditionCode::build(*cond as u8);
+        let (inv, condition) = if *cond == 0b1111 {
+            // we've allowed *unpredictable* instruction encodings. capstone calls this condition
+            // "al" as well, so might as well follow along... and for this condition code it
+            // doesn't invert the fields either!
+            (false, ConditionCode::AL)
+        } else {
+            let inv = cond & 1 == 1;
+            (inv, ConditionCode::build(*cond as u8))
+        };
         if mask & 0b0001 != 0 {
             // three flags
             out.write_char(if inv ^ ((mask & 0b1000) != 0) { 'e' } else { 't' })?;

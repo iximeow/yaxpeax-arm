@@ -3918,8 +3918,13 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                     let firstcond = opa;
                     let mask = opb;
                     inst.opcode = Opcode::IT;
-                    if firstcond == 0b1111 {
-                        return Err(DecodeError::InvalidOperand);
+                    if decoder.should_is_must {
+                        // > if firstcond == ‘1111’ ||
+                        // >    (firstcond == ‘1110’ && BitCount(mask) != 1)
+                        // > then UNPREDICTABLE;
+                        if firstcond == 0b1111 {
+                            return Err(DecodeError::Nonconforming);
+                        }
                     }
                     inst.operands = [
                         Operand::Imm32(firstcond),

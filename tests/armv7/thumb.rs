@@ -19,8 +19,8 @@ fn test_invalid_under(decoder: &InstDecoder, data: &[u8]) {
 }
 
 #[allow(dead_code)]
-fn test_display_under(decoder: &InstDecoder, data: [u8; 4], expected: &'static str) {
-    let mut reader = yaxpeax_arch::U8Reader::new(&data[..]);
+fn test_display_under(decoder: &InstDecoder, data: &[u8], expected: &'static str) {
+    let mut reader = yaxpeax_arch::U8Reader::new(data);
     let instr = match decoder.decode(&mut reader) {
         Err(e) => {
             panic!("failed to decode {:#x?}: {}", data, e)
@@ -74,6 +74,20 @@ fn test_display(data: &[u8], expected: &'static str) {
         instr,
         text, expected
     );
+}
+
+fn test_nonconforming(data: &[u8], expected: &'static str) {
+    let conforming = InstDecoder::default_thumb().allow_nonconforming(false);
+    let nonconforming = InstDecoder::default_thumb().allow_nonconforming(true);
+
+    let mut reader = yaxpeax_arch::U8Reader::new(&data[..]);
+    let result = conforming.decode(&mut reader);
+    assert!(
+        result.is_err(),
+        "got bad result: {:?} from {:#x?}", result, data
+    );
+
+    test_display_under(&nonconforming, data, expected);
 }
 
 #[test]
@@ -1950,6 +1964,10 @@ fn test_decode_it_cases() {
     test_display(
         &[0xef, 0xbf],
         "iteee al"
+    );
+    test_nonconforming(
+        &[0xf7, 0xbf],
+        "ittee al",
     );
 }
 #[test]
