@@ -2559,15 +2559,21 @@ impl Decoder<ARMv7> for InstDecoder {
                             };
 
                             let last_operand = if shift_spec & 0xff0 == 0 {
-                                // No shift, so the operand is just a register
+                                // no shift, so the operand is just a register.
+                                //
+                                // TODO: this shift style is `lsl 0`, and not incorrect to report
+                                // as just that. should it be impossible for `format_reg_shift` to
+                                // get a register shifted by lsl 0? simplifying the register here
+                                // seems valuable for consumers of individual operands. as-is, this
+                                // is inconsistent across the library, which is probably the worst
+                                // it could be...
                                 Operand::Reg(Reg::from_u8(Rm))
                             } else {
                                 Operand::RegShift(RegShift::from_raw(shift_spec))
                             };
 
                             match inst.opcode {
-                                Opcode::MOV
-                                |Opcode::MVN => {
+                                Opcode::MOV | Opcode::MVN => {
                                     if self.should_is_must {
                                         if Rn != 0 {
                                             return Err(DecodeError::Nonconforming);
@@ -2581,8 +2587,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                     ];
                                 }
 
-                                Opcode::CMP
-                                |Opcode::CMN => {
+                                Opcode::CMP | Opcode::CMN => {
                                     if self.should_is_must {
                                         if Rd != 0 {
                                             return Err(DecodeError::Nonconforming);
