@@ -2767,38 +2767,30 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                             let op2 = op2.load::<u8>();
                             if op2 < 0b0100 {
                                 // `Parallel addition and subtraction, signed`
+                                //
+                                // surprise! the encoding of op1/op2 in this table is similar to
+                                // but entirely reordered from the A32 encodings.
                                 let op1 = instr2[4..7].load::<usize>();
                                 let op2 = lower2[4..6].load::<usize>();
-                                if op1 == 0 || op1 > 0b100 || op2 == 0b11 {
-                                    return Err(DecodeError::InvalidOpcode);
-                                }
 
-                                let opcode_idx = (op1 - 1) * 3 + op2;
+                                let opcode_idx = op1 * 4 + op2;
 
                                 let rn = instr2[0..4].load::<u8>();
                                 let rd = lower2[8..12].load::<u8>();
                                 let rm = lower2[0..4].load::<u8>();
 
-                                inst.opcode = [
-                                    Opcode::SADD16,
-                                    Opcode::QADD16,
-                                    Opcode::SHADD16,
-                                    Opcode::SASX,
-                                    Opcode::QASX,
-                                    Opcode::SHASX,
-                                    Opcode::SSAX,
-                                    Opcode::QSAX,
-                                    Opcode::SHSAX,
-                                    Opcode::SSUB16,
-                                    Opcode::QSUB16,
-                                    Opcode::SHSUB16,
-                                    Opcode::SADD8,
-                                    Opcode::QADD8,
-                                    Opcode::SHADD8,
-                                    Opcode::SSUB8,
-                                    Opcode::QSUB8,
-                                    Opcode::SHSUB8,
-                                ][opcode_idx];
+                                static TABLE_A6_25: [Option<Opcode>; 32] = [
+                                    Some(Opcode::SADD8), Some(Opcode::QADD8), Some(Opcode::SHADD8), None,
+                                    Some(Opcode::SADD16), Some(Opcode::QADD16), Some(Opcode::SHADD16), None,
+                                    Some(Opcode::SASX), Some(Opcode::QASX), Some(Opcode::SHASX), None,
+                                    None, None, None, None,
+                                    Some(Opcode::SSUB8), Some(Opcode::QSUB8), Some(Opcode::SHSUB8), None,
+                                    Some(Opcode::SSUB16), Some(Opcode::QSUB16), Some(Opcode::SHSUB16), None,
+                                    Some(Opcode::SSAX), Some(Opcode::QSAX), Some(Opcode::SHSAX), None,
+                                    None, None, None, None,
+                                ];
+
+                                inst.opcode = TABLE_A6_25[opcode_idx].ok_or(DecodeError::InvalidOpcode)?;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
                                     Operand::Reg(Reg::from_u8(rn)),
@@ -2809,39 +2801,25 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                 // `Parallel addition and subtraction, unsigned` (`A6-244`)
                                 let op1 = instr2[4..7].load::<usize>();
                                 let op2 = lower2[4..6].load::<usize>();
-                                if op1 > 0b100 || op2 == 0b11 {
-                                    return Err(DecodeError::InvalidOpcode);
-                                }
 
-                                if op1 == 0 {
-                                    return Err(DecodeError::InvalidOpcode);
-                                }
-                                let opcode_idx = (op1 - 1) * 3 + op2;
+                                let opcode_idx = op1 * 4 + op2;
 
                                 let rn = instr2[0..4].load::<u8>();
                                 let rd = lower2[8..12].load::<u8>();
                                 let rm = lower2[0..4].load::<u8>();
 
-                                inst.opcode = [
-                                    Opcode::UADD16,
-                                    Opcode::UQADD16,
-                                    Opcode::UHADD16,
-                                    Opcode::UASX,
-                                    Opcode::UQASX,
-                                    Opcode::UHASX,
-                                    Opcode::USAX,
-                                    Opcode::UQSAX,
-                                    Opcode::UHSAX,
-                                    Opcode::USUB16,
-                                    Opcode::UQSUB16,
-                                    Opcode::UHSUB16,
-                                    Opcode::UADD8,
-                                    Opcode::UQADD8,
-                                    Opcode::UHADD8,
-                                    Opcode::USUB8,
-                                    Opcode::UQSUB8,
-                                    Opcode::UHSUB8,
-                                ][opcode_idx];
+                                static TABLE_A6_26: [Option<Opcode>; 32] = [
+                                    Some(Opcode::UADD8), Some(Opcode::UQADD8), Some(Opcode::UHADD8), None,
+                                    Some(Opcode::UADD16), Some(Opcode::UQADD16), Some(Opcode::UHADD16), None,
+                                    Some(Opcode::UASX), Some(Opcode::UQASX), Some(Opcode::UHASX), None,
+                                    None, None, None, None,
+                                    Some(Opcode::USUB8), Some(Opcode::UQSUB8), Some(Opcode::UHSUB8), None,
+                                    Some(Opcode::USUB16), Some(Opcode::UQSUB16), Some(Opcode::UHSUB16), None,
+                                    Some(Opcode::USAX), Some(Opcode::UQSAX), Some(Opcode::UHSAX), None,
+                                    None, None, None, None,
+                                ];
+
+                                inst.opcode = TABLE_A6_26[opcode_idx].ok_or(DecodeError::InvalidOpcode)?;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
                                     Operand::Reg(Reg::from_u8(rn)),

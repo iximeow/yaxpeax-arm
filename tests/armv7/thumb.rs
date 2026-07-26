@@ -4283,6 +4283,174 @@ fn test_decode_mov_reg_shift_cases() {
 }
 
 #[test]
+fn test_parallel_addsub() {
+    // TODO: should these have a .w suffix?
+    test_display(
+        &[0x82, 0xfa, 0x03, 0xfb],
+        "sadd8.w fp, r2, r3"
+    );
+    test_display(
+        &[0x92, 0xfa, 0x03, 0xfb],
+        "sadd16.w fp, r2, r3"
+    );
+    test_display(
+        &[0xa2, 0xfa, 0x03, 0xfb],
+        "sasx.w fp, r2, r3"
+    );
+    test_invalid(&[0xb2, 0xfa, 0x03, 0xfb]);
+    test_display(
+        &[0xc2, 0xfa, 0x03, 0xfb],
+        "ssub8.w fp, r2, r3"
+    );
+    test_display(
+        &[0xd2, 0xfa, 0x03, 0xfb],
+        "ssub16.w fp, r2, r3"
+    );
+    test_display(
+        &[0xe2, 0xfa, 0x03, 0xfb],
+        "ssax.w fp, r2, r3"
+    );
+    test_invalid(&[0xf2, 0xfa, 0x03, 0xfb]);
+
+    test_display(
+        &[0x82, 0xfa, 0x13, 0xfb],
+        "qadd8.w fp, r2, r3"
+    );
+    test_display(
+        &[0x92, 0xfa, 0x13, 0xfb],
+        "qadd16.w fp, r2, r3"
+    );
+    test_display(
+        &[0xa2, 0xfa, 0x13, 0xfb],
+        "qasx.w fp, r2, r3"
+    );
+    test_invalid(&[0xb2, 0xfa, 0x13, 0xfb]);
+    test_display(
+        &[0xc2, 0xfa, 0x13, 0xfb],
+        "qsub8.w fp, r2, r3"
+    );
+    test_display(
+        &[0xd2, 0xfa, 0x13, 0xfb],
+        "qsub16.w fp, r2, r3"
+    );
+    test_display(
+        &[0xe2, 0xfa, 0x13, 0xfb],
+        "qsax.w fp, r2, r3"
+    );
+    test_invalid(&[0xf2, 0xfa, 0x13, 0xfb]);
+
+    test_display(
+        &[0x82, 0xfa, 0x23, 0xfb],
+        "shadd8.w fp, r2, r3"
+    );
+    test_display(
+        &[0x92, 0xfa, 0x23, 0xfb],
+        "shadd16.w fp, r2, r3"
+    );
+    test_display(
+        &[0xa2, 0xfa, 0x23, 0xfb],
+        "shasx.w fp, r2, r3"
+    );
+    test_invalid(&[0xb2, 0xfa, 0x23, 0xfb]);
+    test_display(
+        &[0xc2, 0xfa, 0x23, 0xfb],
+        "shsub8.w fp, r2, r3"
+    );
+    test_display(
+        &[0xd2, 0xfa, 0x23, 0xfb],
+        "shsub16.w fp, r2, r3"
+    );
+    test_display(
+        &[0xe2, 0xfa, 0x23, 0xfb],
+        "shsax.w fp, r2, r3"
+    );
+    test_invalid(&[0xf2, 0xfa, 0x23, 0xfb]);
+
+    // and now for
+    // > Parallel addition and subtraction, unsigned
+    test_display(
+        &[0x82, 0xfa, 0x43, 0xfb],
+        "uadd8.w fp, r2, r3"
+    );
+    test_display(
+        &[0x92, 0xfa, 0x43, 0xfb],
+        "uadd16.w fp, r2, r3"
+    );
+    test_display(
+        &[0xa2, 0xfa, 0x43, 0xfb],
+        "uasx.w fp, r2, r3"
+    );
+    test_invalid(&[0xb2, 0xfa, 0x43, 0xfb]);
+    test_display(
+        &[0xc2, 0xfa, 0x43, 0xfb],
+        "usub8.w fp, r2, r3"
+    );
+    test_display(
+        &[0xd2, 0xfa, 0x43, 0xfb],
+        "usub16.w fp, r2, r3"
+    );
+    test_display(
+        &[0xe2, 0xfa, 0x43, 0xfb],
+        "usax.w fp, r2, r3"
+    );
+    test_invalid(&[0xf2, 0xfa, 0x43, 0xfb]);
+
+    test_display(
+        &[0x82, 0xfa, 0x53, 0xfb],
+        "uqadd8.w fp, r2, r3"
+    );
+    test_display(
+        &[0x92, 0xfa, 0x53, 0xfb],
+        "uqadd16.w fp, r2, r3"
+    );
+    test_display(
+        &[0xa2, 0xfa, 0x53, 0xfb],
+        "uqasx.w fp, r2, r3"
+    );
+    test_invalid(&[0xb2, 0xfa, 0x53, 0xfb]);
+    test_display(
+        &[0xc2, 0xfa, 0x53, 0xfb],
+        "uqsub8.w fp, r2, r3"
+    );
+    test_display(
+        &[0xd2, 0xfa, 0x53, 0xfb],
+        "uqsub16.w fp, r2, r3"
+    );
+    test_display(
+        &[0xe2, 0xfa, 0x53, 0xfb],
+        "uqsax.w fp, r2, r3"
+    );
+    test_invalid(&[0xf2, 0xfa, 0x53, 0xfb]);
+
+    test_display(
+        &[0x82, 0xfa, 0x63, 0xfb],
+        "uhadd8.w fp, r2, r3"
+    );
+    test_display(
+        &[0x92, 0xfa, 0x63, 0xfb],
+        "uhadd16.w fp, r2, r3"
+    );
+    test_display(
+        &[0xa2, 0xfa, 0x63, 0xfb],
+        "uhasx.w fp, r2, r3"
+    );
+    test_invalid(&[0xb2, 0xfa, 0x63, 0xfb]);
+    test_display(
+        &[0xc2, 0xfa, 0x63, 0xfb],
+        "uhsub8.w fp, r2, r3"
+    );
+    test_display(
+        &[0xd2, 0xfa, 0x63, 0xfb],
+        "uhsub16.w fp, r2, r3"
+    );
+    test_display(
+        &[0xe2, 0xfa, 0x63, 0xfb],
+        "uhsax.w fp, r2, r3"
+    );
+    test_invalid(&[0xf2, 0xfa, 0x63, 0xfb]);
+}
+
+#[test]
 fn test_decode_ux_sx_32b_cases() {
     // rotation is hw1[5:4] scaled by 8, and omitted when zero
     test_display(
