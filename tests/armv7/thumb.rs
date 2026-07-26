@@ -2681,6 +2681,16 @@ fn test_decode_mov_cases() {
         &[0xff, 0x46],
         "mov pc, pc"
     );
+
+    // lsl r0, r0, 0x0: "if imm5 == '00000' then SEE MOV (register);
+    test_display(
+        &[0x00, 0x00],
+        "movs r0, r0"
+    );
+    test_display(
+        &[0x11, 0x00],
+        "movs r1, r2"
+    );
 }
 #[test]
 fn test_decode_op_s_cases() {

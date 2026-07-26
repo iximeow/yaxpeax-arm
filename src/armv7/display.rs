@@ -548,6 +548,26 @@ pub(crate) fn visit_inst<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fm
 
             return Ok(());
         }
+        Opcode::LSL => {
+            if instr.operands[2] == Operand::Imm12(0) {
+                out.span_start_opcode();
+                out.write_str("mov")?;
+                if instr.s() {
+                    out.write_char('s')?;
+                }
+                out.span_end_opcode();
+
+                out.write_str(" ")?;
+
+                let mut op_visitor = DisplayingOperandVisitor {
+                    f: out
+                };
+                instr.operands[0].visit(&mut op_visitor)?;
+                op_visitor.f.write_str(", ")?;
+                instr.operands[1].visit(&mut op_visitor)?;
+                return Ok(());
+            }
+        }
         Opcode::MRC(coproc, opc1, opc2, _) |
         Opcode::MCR(coproc, opc1, opc2, _) |
         Opcode::CDP(coproc, opc1, opc2, _) => {
