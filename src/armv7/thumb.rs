@@ -2020,275 +2020,114 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                             let size_bits = op1 & 0b011;
                             let has_imm12 = op1 & 0b100 != 0;
                             let op2 = (lower >> 6) & 0b111111;
-                            match size_bits {
-                                0b00 => {
-                                    // `STRB_`
-                                    // op2 only selects a form when the imm12 bit is clear;
-                                    // otherwise it's just the high bits of imm12.
-                                    if !has_imm12 && op2 == 0 {
-                                        // `STRB (register)` (`A8-683`)
-                                        // encoding T2
-                                        // v6T2
-                                        let rm = (lower & 0b1111) as u8;
-                                        let imm2 = (lower >> 4) & 0b11;
-                                        let rt = ((lower >> 12) & 0b1111) as u8;
-                                        inst.opcode = Opcode::STRB;
-                                        inst.operands = [
-                                            Operand::Reg(Reg::from_u8(rt)),
-                                            Operand::RegDerefPreindexRegShift(
-                                                Reg::from_u8(rn),
-                                                RegShift::from_raw(
-                                                    // do things
-                                                    0b00000 |       // imm shift
-                                                    (imm2 << 7) |   // imm
-                                                    rm as u16 |            // shiftee
-                                                    (0b00 << 5) // shift style (lsl)
-                                                ),
-                                                true,   // add
-                                                false,  // wback
-                                            ),
-                                            Operand::Nothing,
-                                            Operand::Nothing,
-                                        ];
-                                    } else if !has_imm12 && (op2 & 0b111100) == 0b111000 {
-                                        // `STRBT` (`A8-685`)
-                                        // v6T2
-                                        let imm8 = lower & 0b1111_1111;
-                                        let rt = ((lower >> 12) & 0b1111) as u8;
-                                        inst.opcode = Opcode::STRBT;
-                                        inst.operands = [
-                                            Operand::Reg(Reg::from_u8(rt)),
-                                            Operand::RegDerefPreindexOffset(
-                                                Reg::from_u8(rn),
-                                                imm8,
-                                                true,   // add
-                                                false,  // wback
-                                            ),
-                                            Operand::Nothing,
-                                            Operand::Nothing,
-                                        ];
-                                    } else {
-                                        // `STRB (immediate, Thumb)` (`A8-679`)
-                                        // encoding T2/T3
-                                        // v6T2
-                                        let (imm, p, u, w) = if has_imm12 {
-                                            let imm12 = lower & 0b1111_1111_1111;
-                                            let p = true;
-                                            let u = true;
-                                            let w = false;
-                                            (imm12, p, u, w)
-                                        } else {
-                                            let imm8 = lower & 0b1111_1111;
-                                            let puw = (lower >> 8) & 0b111;
-                                            let p = puw & 0b100 != 0;
-                                            let u = puw & 0b010 != 0;
-                                            let w = puw & 0b001 != 0;
-                                            (imm8, p, u, w)
-                                        };
-                                        // assert!(puw != 0b110) // would be `strbt`
-                                        let rt = ((lower >> 12) & 0b1111) as u8;
-                                        inst.opcode = Opcode::STRB;
-                                        inst.operands = [
-                                            Operand::Reg(Reg::from_u8(rt)),
-                                            // do the puw
-                                            if p {
-                                                Operand::RegDerefPreindexOffset(
-                                                    Reg::from_u8(rn),
-                                                    imm,
-                                                    u, // add
-                                                    w, // wback
-                                                )
-                                            } else {
-                                                Operand::RegDerefPostindexOffset(
-                                                    Reg::from_u8(rn),
-                                                    imm,
-                                                    u, // add
-                                                    w, // wback
-                                                )
-                                            },
-                                            Operand::Nothing,
-                                            Operand::Nothing,
-                                        ];
-                                    }
-                                }
-                                0b01 => {
-                                    // `STRH_`
+
+                            let (st_normal, st_unprivileged) = match size_bits {
+                                0b00 => (Opcode::STRB, Opcode::STRBT),
+                                0b01 => (Opcode::STRH, Opcode::STRHT),
+                                // practically 0b10, 0b11 is skipped below.
+                                _ => (Opcode::STR, Opcode::STRT),
+                            };
+
+                            if size_bits < 0b11 {
+                                // store (privileged). STRB, STRH, STR.
+                                //
+                                // op2 only selects a form when the imm12 bit is clear;
+                                // otherwise it's just the high bits of imm12.
+                                if !has_imm12 && op2 == 0 {
+                                    // `STRB (register)` (`A8-683`)
+                                    // `STRH (register)` (`A8-703`)
+                                    // `STR (register)` (`A8-677`)
+                                    // encoding T2
                                     // v6T2
-                                    if !has_imm12 && op2 == 0 {
-                                        // `STRH (register)` (`A8-703`)
-                                        let rm = (lower & 0b1111) as u8;
-                                        let imm2 = (lower >> 4) & 0b11;
-                                        let rt = ((lower >> 12) & 0b1111) as u8;
-                                        inst.opcode = Opcode::STRH;
-                                        inst.operands = [
-                                            Operand::Reg(Reg::from_u8(rt)),
-                                            Operand::RegDerefPreindexRegShift(
-                                                Reg::from_u8(rn),
-                                                RegShift::from_raw(
-                                                    // do things
-                                                    0b00000 |       // imm shift
-                                                    (imm2 << 7) |   // imm
-                                                    rm as u16 |            // shiftee
-                                                    (0b00 << 5) // shift style (lsl)
-                                                ),
-                                                true,   // add
-                                                false,  // wback
+                                    let rm = (lower & 0b1111) as u8;
+                                    let imm2 = (lower >> 4) & 0b11;
+                                    let rt = ((lower >> 12) & 0b1111) as u8;
+                                    inst.opcode = st_normal;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rt)),
+                                        Operand::RegDerefPreindexRegShift(
+                                            Reg::from_u8(rn),
+                                            RegShift::from_raw(
+                                                // do things
+                                                0b00000 |       // imm shift
+                                                (imm2 << 7) |   // imm
+                                                rm as u16 |            // shiftee
+                                                (0b00 << 5) // shift style (lsl)
                                             ),
-                                            Operand::Nothing,
-                                            Operand::Nothing,
-                                        ];
-                                    } else if !has_imm12 && (op2 & 0b111100) == 0b111000 {
-                                        // `STRHT` (`A8-705`)
+                                            true,   // add
+                                            false,  // wback
+                                        ),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else if !has_imm12 && (op2 & 0b111100) == 0b111000 {
+                                    // `STRBT` (`A8-685`)
+                                    // `STRHT` (`A8-705`)
+                                    // `STRT` (`A8-707`)
+                                    // v6T2
+                                    let imm8 = lower & 0b1111_1111;
+                                    let rt = ((lower >> 12) & 0b1111) as u8;
+                                    inst.opcode = st_unprivileged;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rt)),
+                                        Operand::RegDerefPreindexOffset(
+                                            Reg::from_u8(rn),
+                                            imm8,
+                                            true,   // add
+                                            false,  // wback
+                                        ),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else {
+                                    // `STRB (immediate, Thumb)` (`A8-679`), or
+                                    // `STRH (immediate, Thumb)` (`A8-699`)
+                                    // encoding T2/T3
+                                    // .. or
+                                    // `STR (immediate, Thumb)` (`A8-673`)
+                                    // encoding T3/T4
+                                    // v6T2
+                                    let (imm, p, u, w) = if has_imm12 {
+                                        let imm12 = lower & 0b1111_1111_1111;
+                                        let p = true;
+                                        let u = true;
+                                        let w = false;
+                                        (imm12, p, u, w)
+                                    } else {
                                         let imm8 = lower & 0b1111_1111;
-                                        let rt = ((lower >> 12) & 0b1111) as u8;
-                                        inst.opcode = Opcode::STRHT;
-                                        inst.operands = [
-                                            Operand::Reg(Reg::from_u8(rt)),
+                                        let puw = (lower >> 8) & 0b111;
+                                        let p = puw & 0b100 != 0;
+                                        let u = puw & 0b010 != 0;
+                                        let w = puw & 0b001 != 0;
+                                        (imm8, p, u, w)
+                                    };
+                                    // assert!(puw != 0b110) // would be `strbt`
+                                    let rt = ((lower >> 12) & 0b1111) as u8;
+                                    inst.opcode = st_normal;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rt)),
+                                        // do the puw
+                                        if p {
                                             Operand::RegDerefPreindexOffset(
                                                 Reg::from_u8(rn),
-                                                imm8,
-                                                true,   // add
-                                                false,  // wback
-                                            ),
-                                            Operand::Nothing,
-                                            Operand::Nothing,
-                                        ];
-                                    } else {
-                                        // `STRH (immediate, Thumb)` (`A8-699`)
-                                        // encoding T2/T3
-                                        // v6T2
-                                        let (imm, p, u, w) = if has_imm12 {
-                                            let imm12 = lower & 0b1111_1111_1111;
-                                            let p = true;
-                                            let u = true;
-                                            let w = false;
-                                            (imm12, p, u, w)
+                                                imm,
+                                                u, // add
+                                                w, // wback
+                                            )
                                         } else {
-                                            let imm8 = lower & 0b1111_1111;
-                                            let puw = (lower >> 8) & 0b111;
-                                            let p = puw & 0b100 != 0;
-                                            let u = puw & 0b010 != 0;
-                                            let w = puw & 0b001 != 0;
-                                            (imm8, p, u, w)
-                                        };
-                                        // assert!(puw != 0b110) // would be `strbt`
-                                        let rt = ((lower >> 12) & 0b1111) as u8;
-                                        inst.opcode = Opcode::STRH;
-                                        inst.operands = [
-                                            Operand::Reg(Reg::from_u8(rt)),
-                                            // do the puw
-                                            if p {
-                                                Operand::RegDerefPreindexOffset(
-                                                    Reg::from_u8(rn),
-                                                    imm,
-                                                    u, // add
-                                                    w, // wback
-                                                )
-                                            } else {
-                                                Operand::RegDerefPostindexOffset(
-                                                    Reg::from_u8(rn),
-                                                    imm,
-                                                    u, // add
-                                                    w, // wback
-                                                )
-                                            },
-                                            Operand::Nothing,
-                                            Operand::Nothing,
-                                        ];
-                                    }
-                                }
-                                0b10 => {
-                                    // `STR_`
-                                    if !has_imm12 && op2 == 0 {
-                                        // `STR (register)` (`A8-677`)
-                                        // v6T2
-                                        let rm = (lower & 0b1111) as u8;
-                                        let imm2 = (lower >> 4) & 0b11;
-                                        let rt = ((lower >> 12) & 0b1111) as u8;
-                                        inst.opcode = Opcode::STR;
-                                        inst.operands = [
-                                            Operand::Reg(Reg::from_u8(rt)),
-                                            Operand::RegDerefPreindexRegShift(
+                                            Operand::RegDerefPostindexOffset(
                                                 Reg::from_u8(rn),
-                                                RegShift::from_raw(
-                                                    // do things
-                                                    0b00000 |       // imm shift
-                                                    (imm2 << 7) |   // imm
-                                                    rm as u16 |            // shiftee
-                                                    (0b00 << 5) // shift style (lsl)
-                                                ),
-                                                true,   // add
-                                                false,  // wback
-                                            ),
-                                            Operand::Nothing,
-                                            Operand::Nothing,
-                                        ];
-                                    } else if !has_imm12 && (op2 & 0b111100) == 0b111000 {
-                                        // `STRT` (`A8-707`)
-                                        let imm8 = lower & 0b1111_1111;
-                                        let rt = ((lower >> 12) & 0b1111) as u8;
-                                        inst.opcode = Opcode::STRT;
-                                        inst.operands = [
-                                            Operand::Reg(Reg::from_u8(rt)),
-                                            Operand::RegDerefPreindexOffset(
-                                                Reg::from_u8(rn),
-                                                imm8,
-                                                true,   // add
-                                                false,  // wback
-                                            ),
-                                            Operand::Nothing,
-                                            Operand::Nothing,
-                                        ];
-                                    } else {
-                                        // `STR (immediate, Thumb)` (`A8-673`)
-                                        // encoding T3/T4
-                                        // v6T2
-                                        let (imm, p, u, w) = if has_imm12 {
-                                            let imm12 = lower & 0b1111_1111_1111;
-                                            let p = true;
-                                            let u = true;
-                                            let w = false;
-                                            (imm12, p, u, w)
-                                        } else {
-                                            let imm8 = lower & 0b1111_1111;
-                                            let puw = (lower >> 8) & 0b111;
-                                            let p = puw & 0b100 != 0;
-                                            let u = puw & 0b010 != 0;
-                                            let w = puw & 0b001 != 0;
-                                            (imm8, p, u, w)
-                                        };
-                                        // assert!(puw != 0b110) // would be `strbt`
-                                        let rt = ((lower >> 12) & 0b1111) as u8;
-                                        inst.opcode = Opcode::STR;
-                                        inst.operands = [
-                                            Operand::Reg(Reg::from_u8(rt)),
-                                            // do the puw
-                                            if p {
-                                                Operand::RegDerefPreindexOffset(
-                                                    Reg::from_u8(rn),
-                                                    imm,
-                                                    u, // add
-                                                    w, // wback
-                                                )
-                                            } else {
-                                                Operand::RegDerefPostindexOffset(
-                                                    Reg::from_u8(rn),
-                                                    imm,
-                                                    u, // add
-                                                    w, // wback
-                                                )
-                                            },
-                                            Operand::Nothing,
-                                            Operand::Nothing,
-                                        ];
-                                    }
+                                                imm,
+                                                u, // add
+                                                w, // wback
+                                            )
+                                        },
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
                                 }
-                                0b11 => {
-                                    return Err(DecodeError::Undefined);
-                                }
-                                _ => {
-                                    unreachable!("impossible bit pattern");
-                                }
+                            } else {
+                                return Err(DecodeError::Undefined);
                             }
                         } else {
                             // `Advanced SIMD element or structure load/store instructions`
