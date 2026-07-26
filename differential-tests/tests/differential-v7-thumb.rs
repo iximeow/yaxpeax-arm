@@ -48,6 +48,14 @@ impl PartialEq for ParsedOperand {
                 offset_l == offset_r &&
                 writeback_l == writeback_r
             },
+            // smooth over yax printing `[rN]` rather than `[rN, #0]` like capstone.
+            (Memory(l), MemoryWithOffset { base, offset: Some(0), writeback: false }) => {
+                l == base
+            },
+            // and make equality reflexive.
+            (MemoryWithOffset { base, offset: Some(0), writeback: false }, Memory(r)) => {
+                base == r
+            },
             (Immediate(l), Immediate(r)) => {
                 l == r
             },
@@ -167,6 +175,14 @@ impl ParsedOperand {
             }
         };
 
+        let parse_imm = |mut s: &str| {
+            if s.starts_with("#") {
+                parse_hex_or_dec(&s[1..])
+            } else {
+                parse_hex_or_dec(s)
+            }
+        };
+
         if s.as_bytes()[0] == b'#' {
             let end = s.find(',').unwrap_or(s.len());
             let mut imm_str = &s[1..end];
@@ -210,13 +226,7 @@ impl ParsedOperand {
             let offset = addr.rfind(',').map(|comma| {
                 addr[comma + 1..].trim()
             }).and_then(|mut offset_str| {
-                if offset_str.as_bytes().get(0) == Some(&b'#') {
-                    offset_str = &offset_str[1..];
-
-                    Some(parse_hex_or_dec(offset_str))
-                } else {
-                    None
-                }
+                Some(parse_imm(offset_str))
             });
 
             let base_end = addr.rfind(',').unwrap_or(addr.len());
@@ -360,6 +370,19 @@ impl ParsedDisassembly {
             }
         }
     }
+
+    fn operand_count(&self) -> u8 {
+        let mut i = 0;
+
+        for op in self.operands.iter() {
+            if op.is_none() {
+                break;
+            }
+            i += 1;
+        }
+
+        i
+    }
 }
 
 #[test]
@@ -470,7 +493,7 @@ fn capstone_differential_thumb() {
                         stats.missed_incomplete.fetch_add(1, Ordering::Relaxed);
                     };
 
-                    fn acceptable_match(yax_text: &str, cs_text: &str) -> bool {
+                    fn acceptable_match(word: u32, yax_text: &str, cs_text: &str) -> bool {
                         if yax_text == cs_text {
                             return true;
                         }
@@ -492,6 +515,36 @@ fn capstone_differential_thumb() {
                             return true;
                         }
 
+                        if (parsed_yax.opcode == "add" &&
+                            parsed_cs.opcode == "add") ||
+                            (parsed_yax.opcode == "adds" &&
+                             parsed_cs.opcode == "adds") {
+                            // capstone prints the T2 encoding of `ADD (register, Thumb)` as if
+                            // it is the T1 encoding with three registers.
+                            if parsed_yax.operand_count() == 2 && parsed_cs.operand_count() == 3 {
+                                if parsed_yax.operands[0] == parsed_cs.operands[0] &&
+                                    parsed_yax.operands[1] == parsed_cs.operands[1] &&
+                                    parsed_cs.operands[0] == parsed_cs.operands[2] {
+                                    return true;
+                                }
+                            }
+                        }
+
+                        // TODO: yaxpeax-arm doesn't know about armv8-m yet, which gets `bxns` to
+                        // replace `bx` in some encodings.
+                        if parsed_yax.opcode == "bx" && parsed_cs.opcode == "bxns" {
+                            if parsed_yax.operands == parsed_cs.operands {
+                                return true;
+                            }
+                        }
+
+                        // TODO: same for blx/blxns.
+                        if parsed_yax.opcode == "blx" && parsed_cs.opcode == "blxns" {
+                            if parsed_yax.operands == parsed_cs.operands {
+                                return true;
+                            }
+                        }
+
                         if true {
                             eprintln!("yax: {} -> {:?}", yax_text, parsed_yax);
                             eprintln!("cs: {} -> {:?}", cs_text, parsed_cs);
@@ -501,7 +554,7 @@ fn capstone_differential_thumb() {
                     }
 
 //                    eprintln!("{}", yax_text);
-                    if !acceptable_match(&yax_text, &cs_text) {
+                    if !acceptable_match(i, &yax_text, &cs_text) {
                         eprintln!("disassembly mismatch: {} != {}. bytes: {:x?}", yax_text, cs_text, bytes);
                         std::process::abort();
                         stats.mismatch.fetch_add(1, Ordering::Relaxed);

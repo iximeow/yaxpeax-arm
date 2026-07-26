@@ -497,6 +497,11 @@ fn test_decode_bcc_cases() {
         &[0x80, 0x47],
         "blx r0"
     );
+    // TODO: at the bare minimum, ARMv8-M decodes this as "blxns r0".
+    test_display(
+        &[0x84, 0x47],
+        "blx r0"
+    );
     test_display(
         &[0x88, 0x47],
         "blx r1"
@@ -805,6 +810,7 @@ fn test_decode_bx_cases() {
         &[0x03, 0x47],
         "bx r0"
     );
+    // TODO: at the bare minimum, ARMv8-M decodes this as "bxns r0".
     test_display(
         &[0x04, 0x47],
         "bx r0"
