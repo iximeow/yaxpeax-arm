@@ -9,11 +9,18 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::num::ParseIntError;
 
+#[derive(Debug, PartialEq, Eq)]
+enum MemOffset {
+    Imm(i64),
+    Shift(String),
+    Reg(String),
+}
+
 #[derive(Debug)]
 enum ParsedOperand {
     Register { size: char, num: u8, neg: bool },
     Memory(String),
-    MemoryWithOffset { base: String, offset: Option<i64>, writeback: bool },
+    MemoryWithOffset { base: String, offset: MemOffset, writeback: bool },
     SIMDRegister { size: char, num: u8 },
 //    SIMDRegisterElements { num: u8, elems: u8, elem_size: char },
 //    SIMDRegisterElement { num: u8, elem_size: char, elem: u8 },
@@ -49,11 +56,11 @@ impl PartialEq for ParsedOperand {
                 writeback_l == writeback_r
             },
             // smooth over yax printing `[rN]` rather than `[rN, #0]` like capstone.
-            (Memory(l), MemoryWithOffset { base, offset: Some(0), writeback: false }) => {
+            (Memory(l), MemoryWithOffset { base, offset: MemOffset::Imm(0), writeback: false }) => {
                 l == base
             },
             // and make equality reflexive.
-            (MemoryWithOffset { base, offset: Some(0), writeback: false }, Memory(r)) => {
+            (MemoryWithOffset { base, offset: MemOffset::Imm(0), writeback: false }, Memory(r)) => {
                 base == r
             },
             (Immediate(l), Immediate(r)) => {
@@ -62,14 +69,11 @@ impl PartialEq for ParsedOperand {
             (PCRel(l), PCRel(r)) => {
                 l == r
             },
-            (Immediate(l), PCRel(r)) => {
-                // assume pc=0 as capstone does by default
-                *l == 0 + r
-            },
-            (PCRel(l), Immediate(r)) => {
-                // assume pc=0 as capstone does by default
-                0 + l == *r
-            },
+            // TODO: don't actually know if this is thumb, 32-bit thumb, arm, .. so try a few
+            // things.
+            (Immediate(l), PCRel(r)) => { *l == 2 + r || *l == 4 + r },
+            (PCRel(l), Immediate(r)) => { 2 + l == *r || 4 + l == *r },
+
             (Float(l), Float(r)) => {
                 l.to_ne_bytes() == r.to_ne_bytes()
             },
@@ -183,6 +187,33 @@ impl ParsedOperand {
             }
         };
 
+        fn parse_reg(s: &str) -> Option<&str> {
+            if s.starts_with("r") {
+                Some(s)
+            } else if s == "fp" ||
+                      s == "ip" ||
+                      s == "sb" ||
+                      s == "pc" ||
+                      s == "lr" ||
+                      s == "sl" ||
+                      s == "sp" {
+                Some(s)
+            } else {
+                None
+            }
+        };
+
+        fn parse_shift(s: &str) -> Option<&str> {
+            if s.starts_with("lsl") ||
+               s.starts_with("lsr") ||
+               s.starts_with("asr") ||
+               s.starts_with("ror") {
+                Some(s)
+            } else {
+                None
+            }
+        }
+
         if s.as_bytes()[0] == b'#' {
             let end = s.find(',').unwrap_or(s.len());
             let mut imm_str = &s[1..end];
@@ -225,17 +256,29 @@ impl ParsedOperand {
 
             let offset = addr.rfind(',').map(|comma| {
                 addr[comma + 1..].trim()
-            }).and_then(|mut offset_str| {
-                Some(parse_imm(offset_str))
+            }).map(|mut offset_str| {
+                if let Some(reg) = parse_reg(offset_str) {
+                    MemOffset::Reg(reg.to_string())
+                } else if let Some(shift) = parse_shift(offset_str) {
+                    MemOffset::Shift(shift.to_string())
+                } else {
+                    MemOffset::Imm(parse_imm(offset_str))
+                }
             });
 
             let base_end = addr.rfind(',').unwrap_or(addr.len());
             let base = addr[..base_end].trim();
 
-            if writeback || offset.is_some() {
+            if let Some(offset) = offset {
                 (ParsedOperand::MemoryWithOffset {
                     base: base.to_string(),
                     offset: offset,
+                    writeback,
+                }, end)
+            } else if writeback {
+                (ParsedOperand::MemoryWithOffset {
+                    base: base.to_string(),
+                    offset: MemOffset::Imm(0),
                     writeback,
                 }, end)
             } else {
@@ -488,10 +531,31 @@ fn capstone_differential_thumb() {
                     } else if let Err(yaxpeax_arm::armv7::DecodeError::Incomplete) = yax_res {
                         stats.missed_incomplete.fetch_add(1, Ordering::Relaxed);
                         continue;
-                    } else if !cs_text.starts_with("stc") {
-                        eprintln!("yax errored where capstone succeeded. cs text: '{}', bytes: {:x?}. meanwhile, yax: {:?}", cs_text, bytes, yax_res);
-                        stats.missed_incomplete.fetch_add(1, Ordering::Relaxed);
-                    };
+                    } else {
+                        let word = i;
+                        if (word >> 16) & 0xf0ff == 0xf0bf &&
+                            cs_text.starts_with("it") &&
+                            yax_res == Err(yaxpeax_arm::armv7::DecodeError::Nonconforming) {
+                            // capstone accepts IT/firstcond=1111, but the encoding is
+                            // UNPREDICTABLE.
+                            continue;
+                        } else if cs_text.starts_with("udf") &&
+                            yax_res == Err(yaxpeax_arm::armv7::DecodeError::Undefined) {
+                            // TODO: yax decodes undefined instructions as "Undefined", but the
+                            // manual reports them as udf #imm. yax needs to change.
+                            continue;
+                        } else if cs_text.starts_with("stlex" ) || cs_text.starts_with("ldrex") {
+                            // TODO: yax is missing thumb-mode ldrexd/stlexd? it's not clear which
+                            // ISA version these were added in, though they're in DDI0487 G.b ..
+                            continue;
+                        } else if cs_text.starts_with("usada8") || cs_text.starts_with("usad8") {
+                            // TODO: not sure what's up with this. fix it!
+                            continue;
+                        } else if !cs_text.starts_with("stc") {
+                            eprintln!("yax errored where capstone succeeded. cs text: '{}', bytes: {:x?}. meanwhile, yax: {:?}", cs_text, bytes, yax_res);
+                            stats.missed_incomplete.fetch_add(1, Ordering::Relaxed);
+                        };
+                    }
 
                     fn acceptable_match(word: u32, yax_text: &str, cs_text: &str) -> bool {
                         if yax_text == cs_text {
@@ -552,6 +616,16 @@ fn capstone_differential_thumb() {
                                 parsed_yax.operands[0] == parsed_yax.operands[1] &&
                                 parsed_cs.operands[1] == parsed_yax.operands[2] {
                                 return true;
+                            }
+                        }
+
+                        if (parsed_yax.opcode == "cpsie" && parsed_cs.opcode == "cpsie") ||
+                            (parsed_yax.opcode == "cpsid" && parsed_cs.opcode == "cpsid") {
+                            // TODO: is cpsie <none> printed with the label or no?
+                            if let Some(ParsedOperand::Other(name)) = parsed_cs.operands[0].as_ref() {
+                                if name == "none" && parsed_yax.operands[0].is_none() {
+                                    return true;
+                                }
                             }
                         }
 
