@@ -1170,7 +1170,7 @@ impl Default for InstDecoder {
         Self {
             mode: DecodeMode::Any,
             version: ARMVersion::Any,
-            should_is_must: true,
+            should_is_must: false,
             thumb: false,
         }
     }
@@ -1189,6 +1189,21 @@ impl InstDecoder {
     /// (this consumes and returns the `InstDecoder` to support use in chained calls.)`
     pub fn with_thumb_mode(mut self, thumb: bool) -> Self {
         self.set_thumb_mode(thumb);
+        self
+    }
+
+    /// set the decoder to decode instructions with "should be .." bit patterns that are not, in
+    /// fact, what they "should" be. instead, decoding will ignore these fields.
+    pub fn set_allow_nonconforming(&mut self, allowed: bool) {
+        self.should_is_must = !allowed;
+    }
+
+    /// set the decoder to decode instructions with "should be .." bit patterns that are not, in
+    /// fact, what they "should" be. instead, decoding will ignore these fields.
+    ///
+    /// (this consumes and returns the `InstDecoder` to support use in chained calls.)`
+    pub fn allow_nonconforming(mut self, allowed: bool) -> Self {
+        self.set_allow_nonconforming(allowed);
         self
     }
 
@@ -1943,7 +1958,7 @@ impl Decoder<ARMv7> for InstDecoder {
 
                                 match flags & 0b00101 {
                                     0b00000 => {
-                                        // LDRD or invalid
+                                        // LDRD (register) or invalid
                                         if !P && W { // flags == 0b0x010
                                             return Err(DecodeError::InvalidOperand);
                                         } else {
@@ -1958,11 +1973,13 @@ impl Decoder<ARMv7> for InstDecoder {
                                         }
                                         let Rm = word as u8 & 0b1111;
                                         let Rt = (word >> 12) as u8 & 0b1111;
-                                        if Rt & 1 != 0 {
-                                            return Err(DecodeError::InvalidOperand);
-                                        }
-                                        if Rt == 15 {
-                                            return Err(DecodeError::InvalidOperand);
+                                        if self.should_is_must {
+                                            if Rt & 1 != 0 {
+                                                return Err(DecodeError::InvalidOperand);
+                                            }
+                                            if Rt == 15 {
+                                                return Err(DecodeError::InvalidOperand);
+                                            }
                                         }
                                         let Rn = (word >> 16) as u8 & 0b1111;
                                         inst.operands = [
@@ -2015,11 +2032,13 @@ impl Decoder<ARMv7> for InstDecoder {
                                             inst.opcode = Opcode::LDRD;
                                         }
                                         let Rt = (word >> 12) as u8 & 0b1111;
-                                        if Rt & 1 != 0 {
-                                            return Err(DecodeError::InvalidOperand);
-                                        }
-                                        if Rt == 14 || Rn == 15 {
-                                            return Err(DecodeError::InvalidOperand);
+                                        if self.should_is_must {
+                                            if Rt & 1 != 0 {
+                                                return Err(DecodeError::InvalidOperand);
+                                            }
+                                            if Rt == 14 || Rn == 15 {
+                                                return Err(DecodeError::InvalidOperand);
+                                            }
                                         }
                                         let Rn = (word >> 16) as u8 & 0b1111;
                                         let imm = (HiOffset << 4) as u16 | LoOffset as u16;
@@ -2069,7 +2088,7 @@ impl Decoder<ARMv7> for InstDecoder {
 
                                 match flags & 0b00101 {
                                     0b00000 => {
-                                        // STRD or invalid
+                                        // STRD (register) or invalid
                                         if !P && W { // flags == 0b0x010
                                             return Err(DecodeError::InvalidOperand);
                                         } else {
@@ -2085,8 +2104,10 @@ impl Decoder<ARMv7> for InstDecoder {
                                         }
                                         let Rm = word as u8 & 0b1111;
                                         let Rt = (word >> 12) as u8 & 0b1111;
-                                        if Rt & 1 != 0 {
-                                            return Err(DecodeError::InvalidOperand);
+                                        if self.should_is_must {
+                                            if Rt & 1 != 0 {
+                                                return Err(DecodeError::InvalidOperand);
+                                            }
                                         }
                                         let Rn = (word >> 16) as u8 & 0b1111;
                                         inst.operands = [
@@ -2139,11 +2160,13 @@ impl Decoder<ARMv7> for InstDecoder {
                                             inst.opcode = Opcode::STRD;
                                         }
                                         let Rt = (word >> 12) as u8 & 0b1111;
-                                        if Rt & 1 != 0 {
-                                            return Err(DecodeError::InvalidOperand);
-                                        }
-                                        if Rt == 15 {
-                                            return Err(DecodeError::InvalidOperand);
+                                        if self.should_is_must {
+                                            if Rt & 1 != 0 {
+                                                return Err(DecodeError::InvalidOperand);
+                                            }
+                                            if Rt == 15 {
+                                                return Err(DecodeError::InvalidOperand);
+                                            }
                                         }
                                         let Rn = (word >> 16) as u8 & 0b1111;
                                         let imm = (HiOffset << 4) as u16 | LoOffset as u16;
@@ -2477,9 +2500,9 @@ impl Decoder<ARMv7> for InstDecoder {
                             // Halfword multiply and multiply accumulate on page A5-200
                             match (word >> 21) & 0b11 {
                                 0b00 => {
-                                    let Rn_b = ((word >> 6) & 1) == 0;
-                                    let Rm_b = ((word >> 5) & 1) == 0;
-                                    inst.opcode = Opcode::SMLA(Rn_b, Rm_b);
+                                    let Rn_t = ((word >> 5) & 1) == 1;
+                                    let Rm_t = ((word >> 6) & 1) == 1;
+                                    inst.opcode = Opcode::SMLA(Rn_t, Rm_t);
                                     inst.operands = [
                                         Operand::Reg(Reg::from_u8((word >> 16) as u8 & 0b1111)),
                                         Operand::Reg(Reg::from_u8(word as u8 & 0b1111)),
@@ -2491,8 +2514,8 @@ impl Decoder<ARMv7> for InstDecoder {
                                 0b01 => {
                                     if word & 0b10000 == 0 {
                                         // SMLAWB, SMLAWT page A8-631
-                                        let Rm_b = ((word >> 5) & 1) == 0;
-                                        inst.opcode = Opcode::SMLAW(Rm_b);
+                                        let Rm_t = ((word >> 5) & 1) == 1;
+                                        inst.opcode = Opcode::SMLAW(Rm_t);
                                         inst.operands = [
                                             Operand::Reg(Reg::from_u8((word >> 16) as u8 & 0b1111)),
                                             Operand::Reg(Reg::from_u8(word as u8 & 0b1111)),
@@ -2502,8 +2525,8 @@ impl Decoder<ARMv7> for InstDecoder {
                                         return Ok(());
                                     } else {
                                         // SMULWB, SMULWT page A8-649
-                                        let Rm_b = ((word >> 5) & 1) == 0;
-                                        inst.opcode = Opcode::SMLAW(Rm_b);
+                                        let Rm_t = ((word >> 5) & 1) == 1;
+                                        inst.opcode = Opcode::SMLAW(Rm_t);
                                         inst.operands = [
                                             Operand::Reg(Reg::from_u8((word >> 16) as u8 & 0b1111)),
                                             Operand::Reg(Reg::from_u8(word as u8 & 0b1111)),
@@ -2514,9 +2537,9 @@ impl Decoder<ARMv7> for InstDecoder {
                                     }
                                 }
                                 0b10 => {
-                                    let Rn_b = ((word >> 6) & 1) == 0;
-                                    let Rm_b = ((word >> 5) & 1) == 0;
-                                    inst.opcode = Opcode::SMLAL_halfword(Rn_b, Rm_b);
+                                    let Rn_t = ((word >> 6) & 1) == 1;
+                                    let Rm_t = ((word >> 5) & 1) == 1;
+                                    inst.opcode = Opcode::SMLAL_halfword(Rn_t, Rm_t);
                                     inst.operands = [
                                         Operand::Reg(Reg::from_u8((word >> 12) as u8 & 0b1111)),
                                         Operand::Reg(Reg::from_u8((word >> 16) as u8 & 0b1111)),
@@ -2530,9 +2553,9 @@ impl Decoder<ARMv7> for InstDecoder {
                                     return Ok(());
                                 }
                                 0b11 => {
-                                    let Rn_b = ((word >> 6) & 1) == 0;
-                                    let Rm_b = ((word >> 5) & 1) == 0;
-                                    inst.opcode = Opcode::SMUL(Rn_b, Rm_b);
+                                    let Rn_t = ((word >> 6) & 1) == 1;
+                                    let Rm_t = ((word >> 5) & 1) == 1;
+                                    inst.opcode = Opcode::SMUL(Rn_t, Rm_t);
                                     inst.operands = [
                                         Operand::Reg(Reg::from_u8((word >> 16) as u8 & 0b1111)),
                                         Operand::Reg(Reg::from_u8(word as u8 & 0b1111)),

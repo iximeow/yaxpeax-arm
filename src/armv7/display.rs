@@ -303,10 +303,12 @@ impl<T: DisplaySink> crate::armv7::OperandVisitor for DisplayingOperandVisitor<'
     }
 
     fn visit_imm12(&mut self, imm: u16) -> Result<Self::Ok, Self::Error> {
+        self.f.write_char('#')?;
         self.f.write_prefixed_u16(imm)
     }
 
     fn visit_imm32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
+        self.f.write_char('#')?;
         self.f.write_prefixed_u32(imm)
     }
 

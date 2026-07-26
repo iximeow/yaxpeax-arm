@@ -57,8 +57,23 @@ fn test_all(data: [u8; 4], expected: &'static str) {
    test_display_under(&InstDecoder::armv6(), data, expected);
    test_display_under(&InstDecoder::armv7(), data, expected);
 }
+fn test_all_nonconforming(data: [u8; 4], expected: &'static str) {
+   test_display_under(&InstDecoder::armv4().allow_nonconforming(true), data, expected);
+   test_display_under(&InstDecoder::armv5().allow_nonconforming(true), data, expected);
+   test_display_under(&InstDecoder::armv6().allow_nonconforming(true), data, expected);
+   test_display_under(&InstDecoder::armv7().allow_nonconforming(true), data, expected);
+   test_invalid_under(&InstDecoder::armv4().allow_nonconforming(false), data);
+   test_invalid_under(&InstDecoder::armv5().allow_nonconforming(false), data);
+   test_invalid_under(&InstDecoder::armv6().allow_nonconforming(false), data);
+   test_invalid_under(&InstDecoder::armv7().allow_nonconforming(false), data);
+}
 fn test_armv5(data: [u8; 4], expected: &'static str) {
    test_display_under(&InstDecoder::armv5(), data, expected);
+//   test_invalid_under(&InstDecoder::armv4(), data);
+}
+fn test_armv5_nonconforming(data: [u8; 4], expected: &'static str) {
+   test_display_under(&InstDecoder::armv5().allow_nonconforming(true), data, expected);
+   test_invalid_under(&InstDecoder::armv5().allow_nonconforming(false), data);
 //   test_invalid_under(&InstDecoder::armv4(), data);
 }
 fn test_armv6(data: [u8; 4], expected: &'static str) {
@@ -225,15 +240,23 @@ fn test_decode_str_ldr() {
     test_all([0xbb, 0x38, 0xe5, 0xe1], "strh r3, [r5, 0x8b]!");
     test_all([0xbb, 0x38, 0xf5, 0xe1], "ldrh r3, [r5, 0x8b]!");
     test_armv5([0xdb, 0x40, 0xa6, 0xe1], "ldrd r4, r5, [r6, fp]!");
+    test_armv5_nonconforming([0xd0, 0x10, 0x00, 0x00], "ldrdeq r1, r2, [r0], -r0");
+// TODO: bits 8..11 are "should be 0", so this decodes only when admitting nonconforming
+    test_armv5_nonconforming([0xdb, 0x48, 0xa6, 0xe1], "ldrd r4, r5, [r6, fp]!");
+    test_armv5_nonconforming([0xdb, 0x38, 0xa5, 0xe1], "ldrd r3, r4, [r5, fp]!");
     test_invalid([0xdb, 0x30, 0xa5, 0xe1]);
+    test_invalid([0xfb, 0x30, 0xe5, 0xe1]);
     test_all([0xdb, 0x30, 0xb5, 0xe1], "ldrsb r3, [r5, fp]!");
+    test_all([0xdb, 0x38, 0xb5, 0xe1], "ldrsb r3, [r5, fp]!");
     test_armv5([0xdb, 0x48, 0xe6, 0xe1], "ldrd r4, r5, [r6, 0x8b]!");
     test_invalid([0xdb, 0x38, 0xe5, 0xe1]);
     test_all([0xdb, 0x38, 0xf5, 0xe1], "ldrsb r3, [r5, 0x8b]!");
-    test_invalid([0xfb, 0x38, 0xa5, 0xe1]);
     test_all([0xfb, 0x40, 0xa6, 0xe1], "strd r4, r5, [r6, fp]!");
-    test_all([0xfb, 0x30, 0xb5, 0xe1], "ldrsh r3, [r5, fp]!");
-    test_invalid([0xfb, 0x30, 0xe5, 0xe1]);
+// TODO: bits 8..11 are "should be 0", so this decodes only when admitting nonconforming
+    test_all_nonconforming([0xfb, 0x48, 0xa6, 0xe1], "strd r4, r5, [r6, fp]!");
+    test_all_nonconforming([0xfb, 0x38, 0xa5, 0xe1], "strd r3, r4, [r5, fp]!");
+    test_all([0xfb, 0x38, 0xb5, 0xe1], "ldrsh r3, [r5, fp]!");
+    test_invalid([0xfb, 0x38, 0xe5, 0xe1]);
     test_all([0xfb, 0x48, 0xe6, 0xe1], "strd r4, r5, [r6, 0x8b]!");
     test_all([0xfb, 0x38, 0xf5, 0xe1], "ldrsh r3, [r5, 0x8b]!");
     test_all([0xfb, 0x38, 0xff, 0xe1], "ldrsh r3, [pc, 0x8b]!");
