@@ -905,6 +905,20 @@ impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for ConditionedOpcode {
             Opcode::STRHT |
             Opcode::LDRBT |
             Opcode::STRBT |
+            Opcode::STLB |
+            Opcode::STLH |
+            Opcode::STL |
+            Opcode::STLEXB |
+            Opcode::STLEXH |
+            Opcode::STLEX |
+            Opcode::STLEXD |
+            Opcode::LDAB |
+            Opcode::LDAH |
+            Opcode::LDA |
+            Opcode::LDAEXB |
+            Opcode::LDAEXH |
+            Opcode::LDAEX |
+            Opcode::LDAEXD |
             Opcode::SWP |
             Opcode::SWPB |
             Opcode::MSR |
@@ -1098,6 +1112,20 @@ impl Opcode {
             Opcode::STRHT => { "strht" },
             Opcode::LDRBT => { "ldrbt" },
             Opcode::STRBT => { "strbt" },
+            Opcode::STLB => { "stlb" },
+            Opcode::STLH => { "stlh" },
+            Opcode::STL => { "stl" },
+            Opcode::STLEXB => { "stlexb" },
+            Opcode::STLEXH => { "stlexh" },
+            Opcode::STLEX => { "stlex" },
+            Opcode::STLEXD => { "stlexd" },
+            Opcode::LDAB => { "ldab" },
+            Opcode::LDAH => { "ldah" },
+            Opcode::LDA => { "lda" },
+            Opcode::LDAEXB => { "ldaexb" },
+            Opcode::LDAEXH => { "ldaexh" },
+            Opcode::LDAEX => { "ldaex" },
+            Opcode::LDAEXD => { "ldaexd" },
             Opcode::SWP => { "swp" },
             Opcode::SWPB => { "swpb" },
             Opcode::SDIV => { "sdiv" },

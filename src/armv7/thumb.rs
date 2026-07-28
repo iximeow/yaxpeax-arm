@@ -323,6 +323,41 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                             Operand::RegDeref(Reg::from_u8(rn)),
                                         ];
                                     }
+                                    0b1000 => {
+                                        // TODO ARMv8
+                                        // TODO: v8 ops
+                                        inst.opcode = Opcode::STLB;
+                                    }
+                                    0b1001 => {
+                                        // TODO ARMv8
+                                        // TODO: v8 ops
+                                        inst.opcode = Opcode::STLH;
+                                    }
+                                    0b1010 => {
+                                        // TODO ARMv8
+                                        // TODO: v8 ops
+                                        inst.opcode = Opcode::STL;
+                                    }
+                                    0b1100 => {
+                                        // TODO ARMv8
+                                        // TODO: v8 ops
+                                        inst.opcode = Opcode::STLEXB;
+                                    }
+                                    0b1101 => {
+                                        // TODO ARMv8
+                                        // TODO: v8 ops
+                                        inst.opcode = Opcode::STLEXH;
+                                    }
+                                    0b1110 => {
+                                        // TODO ARMv8
+                                        // TODO: v8 ops
+                                        inst.opcode = Opcode::STLEX;
+                                    }
+                                    0b1111 => {
+                                        // TODO ARMv8
+                                        // TODO: v8 ops
+                                        inst.opcode = Opcode::STLEXD;
+                                    }
                                     _ => {
                                         return Err(DecodeError::Undefined);
                                     }
@@ -408,7 +443,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                             Operand::Nothing,
                                         ];
                                     }
-                                    0b0110 => {
+                                    0b0111 => {
                                         // `LDREXD`
                                         if rt == 13 || rt == 15 || rt2 == 13 || rt2 == 15 || rn == 15 {
                                             decoder.unpredictable()?;
@@ -422,6 +457,41 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                             Operand::RegDeref(Reg::from_u8(rn)),
                                             Operand::Nothing,
                                         ];
+                                    }
+                                    0b1000 => {
+                                        // TODO ARMv8
+                                        // TODO: v8 ops
+                                        inst.opcode = Opcode::LDAB;
+                                    }
+                                    0b1001 => {
+                                        // TODO ARMv8
+                                        // TODO: v8 ops
+                                        inst.opcode = Opcode::LDAH;
+                                    }
+                                    0b1010 => {
+                                        // TODO ARMv8
+                                        // TODO: v8 ops
+                                        inst.opcode = Opcode::LDA;
+                                    }
+                                    0b1100 => {
+                                        // TODO ARMv8
+                                        // TODO: v8 ops
+                                        inst.opcode = Opcode::LDAEXB;
+                                    }
+                                    0b1101 => {
+                                        // TODO ARMv8
+                                        // TODO: v8 ops
+                                        inst.opcode = Opcode::LDAEXH;
+                                    }
+                                    0b1110 => {
+                                        // TODO ARMv8
+                                        // TODO: v8 ops
+                                        inst.opcode = Opcode::LDAEX;
+                                    }
+                                    0b1111 => {
+                                        // TODO ARMv8
+                                        // TODO: v8 ops
+                                        inst.opcode = Opcode::LDAEXD;
                                     }
                                     _ => {
                                         return Err(DecodeError::Undefined);

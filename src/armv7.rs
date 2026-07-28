@@ -259,6 +259,24 @@ pub enum Opcode {
     UDIV,
     SMLALD(bool),
     SMLSLD(bool),
+
+    // well.. this is kind of awkward.. this module really is *a32* (and t32). armv8 adds new
+    // instructions to both modes. nothing below is "armv7" even though that's the module name.
+    // this all needs new names. sorry!
+    STLB,
+    STLH,
+    STL,
+    STLEXB,
+    STLEXH,
+    STLEX,
+    STLEXD,
+    LDAB,
+    LDAH,
+    LDA,
+    LDAEXB,
+    LDAEXH,
+    LDAEX,
+    LDAEXD,
 }
 
 static DATA_PROCESSING_OPCODES: [Opcode; 16] = [

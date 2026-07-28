@@ -2491,6 +2491,10 @@ fn test_decode_misc_cases() {
         "hint 0x6"
     );
     test_display(
+        &[0x60, 0xb6],
+        "cpsie" // TODO: should this be "none" like capstone?
+    );
+    test_display(
         &[0x61, 0xb6],
         "cpsie f"
     );
@@ -4449,6 +4453,14 @@ fn test_parallel_addsub() {
     );
     test_invalid(&[0xf2, 0xfa, 0x63, 0xfb]);
 }
+
+/*
+#[test]
+fn test_stlex() {
+    test_display(
+        &[0xc0, 0xe8, 0xf1, 0x7b],
+}
+*/
 
 #[test]
 fn test_decode_ux_sx_32b_cases() {
