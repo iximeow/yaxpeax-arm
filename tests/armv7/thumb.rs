@@ -4573,6 +4573,43 @@ fn msr_mrs() {
 }
 
 #[test]
+fn test_target() {
+    // the v8 manuals list a new Test Target with some variants to it..
+    test_nonconforming(
+        &[0x44, 0xe8, 0x3f, 0xfc],
+        "tt ip, r4"
+    );
+    test_nonconforming(
+        &[0x44, 0xe8, 0x7f, 0xfc],
+        "ttt ip, r4"
+    );
+    test_nonconforming(
+        &[0x44, 0xe8, 0xbf, 0xfc],
+        "tta ip, r4"
+    );
+    test_nonconforming(
+        &[0x4d, 0xe8, 0xff, 0xf8],
+        "ttat r8, sp"
+    );
+    test_display(
+        &[0x44, 0xe8, 0x00, 0xfc],
+        "tt ip, r4"
+    );
+    test_display(
+        &[0x44, 0xe8, 0x40, 0xfc],
+        "ttt ip, r4"
+    );
+    test_display(
+        &[0x44, 0xe8, 0x80, 0xfc],
+        "tta ip, r4"
+    );
+    test_display(
+        &[0x4d, 0xe8, 0xc0, 0xf8],
+        "ttat r8, sp"
+    );
+}
+
+#[test]
 fn test_decode_tbh_operand_shape() {
     use yaxpeax_arm::armv7::{Opcode, Operand, RegShiftStyle, ShiftStyle};
 

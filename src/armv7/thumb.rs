@@ -147,6 +147,33 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                         match op1op2 {
                             0b0000 => {
                                 // `STREX` (`A8-691`)
+                                // v8.something
+
+                                // TODO: isa version flags
+                                if rt == 15 /* && decoder.armv8 */ {
+                                    if imm8 & 0b0011_1111 != 0 {
+                                        if decoder.should_is_must {
+                                            return Err(DecodeError::Nonconforming);
+                                        }
+                                    }
+                                    let at = imm8 >> 6;
+                                    inst.opcode = Opcode::TT {
+                                        alternate: (at >> 1) != 0,
+                                        unprivileged: (at & 1) != 0,
+                                    };
+                                    if rd == 13 || rd == 15 || rn == 15 {
+                                        decoder.unpredictable()?;
+                                    }
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        Operand::Reg(Reg::from_u8(rn)),
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+
+                                    return Ok(());
+                                }
+
                                 // v6T2
                                 if rd == 13 || rd == 15 || rt == 13 || rt == 15 || rn == 15 {
                                     decoder.unpredictable()?;

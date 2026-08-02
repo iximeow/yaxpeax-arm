@@ -964,6 +964,7 @@ impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for ConditionedOpcode {
             Opcode::DSB |
             Opcode::CSDB |
             Opcode::SRS(_, _) |
+            Opcode::TT { .. } |
             Opcode::BKPT => { write!(out, "{}", colors.misc_op(self)) },
 
             Opcode::DBG |
@@ -1262,6 +1263,11 @@ impl Opcode {
             Opcode::USUB8 => { "usub8" },
             Opcode::UQSUB8 => { "uqsub8" },
             Opcode::UHSUB8 => { "uhsub8" },
+
+            Opcode::TT { alternate: false, unprivileged: false } => "tt",
+            Opcode::TT { alternate: true, unprivileged: false } => "tta",
+            Opcode::TT { alternate: false, unprivileged: true } => "ttt",
+            Opcode::TT { alternate: true, unprivileged: true } => "ttat",
         }
     }
 }

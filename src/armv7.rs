@@ -277,6 +277,9 @@ pub enum Opcode {
     LDAEXH,
     LDAEX,
     LDAEXD,
+
+    /// ARMv8 `Test Target`
+    TT { alternate: bool, unprivileged: bool },
 }
 
 static DATA_PROCESSING_OPCODES: [Opcode; 16] = [
