@@ -16,6 +16,8 @@
   saved) program status register, was reported as a banked GPR.
 * ARMv8: support thumb2 encoding of `Test Target` instruction, `Opcode::TT`
   (formatted as any of `tt`, `ttt`, `tta`, `ttat`)
+* ARMv8: formerly-coprocessor instructions have been defined into SIMD extensions,
+  meaning some MRC/MCR/CDP instructions have become `DecodeError::Incomplete`
 
 several fixes from @Grond66:
 * ARMv7: support the RRX rotate mode.

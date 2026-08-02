@@ -4149,6 +4149,32 @@ fn decode_table_a6_30(decoder: &InstDecoder, inst: &mut Instruction, instr2: Bit
         return Err(DecodeError::Incomplete);
     } else {
         let coproc = lower2[8..12].load::<u8>();
+        // TODO: this become more structured in v8 thumb, compare with what became
+        // > Coprocessor, floating-point, and vector instructions
+        //
+        // where the "coproc" field is interpreted as only three bits, and values >= 0b100 are
+        // vector/float operations of some sort, except 0b110 which is "architected coprocessor
+        // data-processing instructions"
+        //
+        // using those definitions first, piece out the SIMD instructions..
+        if coproc >= 0b1000 {
+            if coproc & 0b1110 != 0b1100 {
+                // Vector move instructions,
+                // Floating-point data-processing, minNum/maxNum, and convert,
+                // Floating-point and vector move (register)
+                // Vector immediate and register, and coprocessor data-processing instructions
+                // the last one may seem curious, but afaict from DDI0553B.z there are actually no
+                // coprocessor data-processing instructions that are not just vector ops.
+                return Err(DecodeError::Incomplete);
+            }
+
+            // by DDI0487M.c (ARMv8.4?) section
+            // > F3.1.14 Additional Advanced SIMD and floating-point instructions
+            //
+            // seems to have fully consumed the coproc = 0b1xxx space for simd
+            return Err(DecodeError::Incomplete);
+        }
+
         if coproc & 0b1110 != 0b1010 {
             // `not 101x` rows
             if op1 == 0b000100 {
