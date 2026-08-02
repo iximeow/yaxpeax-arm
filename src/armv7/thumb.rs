@@ -1594,13 +1594,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                     let R = instr2[4];
                                     inst.opcode = Opcode::MSR;
                                     inst.operands = [
-                                        // TODO: is this the appropriate banked reg?
-                                        if let Some(op) = Reg::from_sysm(R, sysm as u8) {
-                                            // TODO: from_sysm should succeed?
-                                            op
-                                        } else {
-                                            return Err(DecodeError::InvalidOperand);
-                                        },
+                                        Operand::StatusRegMask(StatusRegMask::from_raw(sysm as u8)?),
                                         Operand::Reg(Reg::from_u8(rn)),
                                         Operand::Nothing,
                                         Operand::Nothing,
@@ -1640,16 +1634,11 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                         } else {
                                             // `Move to Special register, System level` (`B9-1984`)
                                             let mask = lower2[8..12].load::<u8>();
-                                            let R = instr2[4];
+                                            let R = if instr2[4] { 1 } else { 0 };
+                                            let sysm = (R << 4) | mask;
                                             inst.opcode = Opcode::MSR;
                                             inst.operands = [
-                                                // TODO: is this the appropriate?
-                                                if let Some(op) = Reg::from_sysm(R, mask) {
-                                                    // TODO: from_sysm should succeed?
-                                                    op
-                                                } else {
-                                                    return Err(DecodeError::InvalidOperand);
-                                                },
+                                                Operand::StatusRegMask(StatusRegMask::from_raw(sysm as u8)?),
                                                 Operand::Reg(Reg::from_u8(rn)),
                                                 Operand::Nothing,
                                                 Operand::Nothing,
@@ -1658,16 +1647,11 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                     } else {
                                         // `Move to Special register, System level` (`B9-1984`)
                                         let mask = lower2[8..12].load::<u8>();
-                                        let R = instr2[4];
+                                        let R = if instr2[4] { 1 } else { 0 };
+                                        let sysm = (R << 4) | mask;
                                         inst.opcode = Opcode::MSR;
                                         inst.operands = [
-                                            // TODO: is this the appropriate?
-                                            if let Some(op) = Reg::from_sysm(R, mask) {
-                                                // TODO: from_sysm should succeed?
-                                                op
-                                            } else {
-                                                return Err(DecodeError::InvalidOperand);
-                                            },
+                                            Operand::StatusRegMask(StatusRegMask::from_raw(sysm as u8)?),
                                             Operand::Reg(Reg::from_u8(rn)),
                                             Operand::Nothing,
                                             Operand::Nothing,

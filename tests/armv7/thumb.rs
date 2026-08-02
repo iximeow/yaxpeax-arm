@@ -4553,6 +4553,26 @@ fn test_decode_tbb_tbh_cases() {
 }
 
 #[test]
+fn msr_mrs() {
+    test_display(
+        &[0x8f, 0xf3, 0x00, 0x87],
+        "msr.w cpsr_sxc, pc"
+    );
+    test_display(
+        &[0x9f, 0xf3, 0x00, 0x87],
+        "msr.w spsr_sxc, pc"
+    );
+    test_display(
+        &[0x90, 0xf3, 0x00, 0x8b],
+        "msr.w spsr_fxc, r0"
+    );
+    test_display(
+        &[0x9b, 0xf3, 0x00, 0x85],
+        "msr.w spsr_sc, fp"
+    );
+}
+
+#[test]
 fn test_decode_tbh_operand_shape() {
     use yaxpeax_arm::armv7::{Opcode, Operand, RegShiftStyle, ShiftStyle};
 
