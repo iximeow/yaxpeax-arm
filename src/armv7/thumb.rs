@@ -2212,6 +2212,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                         } else {
                             // `Advanced SIMD element or structure load/store instructions`
                             // (`A7-273`)
+                            return Err(DecodeError::Incomplete);
                         }
                     } else {
                         // this section is a merger of three tables:

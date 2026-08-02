@@ -44,6 +44,16 @@ as well as thumb2 fixes from @brandonros:
 
 thank you for the patches!
 
+additionally, one of the cases where thumb-mode SIMD instructions should have
+been rejected with DecodeError::Incomplete instead fell through to report a
+successful decode result of the provided instruction. this now results in
+DecodeError::Incomplete as expected.
+
+when decoding into an instruction multiple times (such as `Decoder::decode_into`)
+the provided instruction would be left in an incoherent state mostly consiting
+of its previous data. when decoding as through `Decoder::decode`, the returned
+instruction had opcode `Invalid`.
+
 ## 0.4.0
 
 * ARMv7 and A64 `Opcode` and `Operand` are now `#[non_exhaustive]`.
