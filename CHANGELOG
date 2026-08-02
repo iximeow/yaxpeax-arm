@@ -10,6 +10,7 @@
 * thumb2: use correct opcode table for parallel addition/subtractions
   * the decoder reused the non-thumb encoding table, but thumb opcode/sizes are
     encoded in a different order.
+* thumb2: `ldrexd` was off by one in looking up an opcode
 
 several fixes from @Grond66:
 * ARMv7: support the RRX rotate mode.
