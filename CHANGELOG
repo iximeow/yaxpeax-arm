@@ -15,6 +15,7 @@
 * thumb2: `mrs` destinations, which should have been a mask of the current (or
   saved) program status register, was reported as a banked GPR.
 * thumb2: some coprocessor instructions were incorrectly decoded as `ldc*/stc*`
+* thumb2: fix missing decode of `s` bit for wide lsl/lsr/asr/ror (register)
 * ARMv8: support thumb2 encoding of `Test Target` instruction, `Opcode::TT`
   (formatted as any of `tt`, `ttt`, `tta`, `ttat`)
 * ARMv8: formerly-coprocessor instructions have been defined into SIMD extensions,

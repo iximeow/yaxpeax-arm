@@ -2762,6 +2762,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                             if !op2[3] {
                                 // `LSL`, `LSR`, `ASR`, `ROR`
                                 // v6T2
+                                inst.set_s(instr2[4]);
                                 let op = [
                                     Opcode::LSL,
                                     Opcode::LSR,

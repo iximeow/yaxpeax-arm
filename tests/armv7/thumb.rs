@@ -3194,6 +3194,23 @@ fn test_decode_op_s_cases() {
         &[0xff, 0x37],
         "adds r7, 0xff"
     );
+
+    test_display(
+        &[0x7c, 0xfa, 0xe, 0xfe],
+        "rors.w lr, ip, lr"
+    );
+    test_display(
+        &[0x5b, 0xfa, 0xe, 0xfe],
+        "asrs.w lr, fp, lr"
+    );
+    test_display(
+        &[0x32, 0xfa, 0xe, 0xfe],
+        "lsrs.w lr, r2, lr"
+    );
+    test_display(
+        &[0x16, 0xfa, 0xe, 0xfe],
+        "lsls.w lr, r6, lr"
+    );
 }
 #[test]
 fn test_decode_pop_cases() {
