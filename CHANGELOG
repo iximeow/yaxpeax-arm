@@ -41,6 +41,10 @@ as well as thumb2 fixes from @brandonros:
   * lsl, lsr, asr, ror were determining opcode from an incorrect bitfield,
   * tbh was decoded as an shifted tbb,
 * thumb2: (un)signed extend-and-rotate loaded an incorrect field for rotate,
+* thumb2: preload hints (PLD, PLI) were over-eagerly decoded
+  namely, ldrb{t} and ldrh{t} into pc are .. weird .. but just weird.
+* thumb2: preload data reported two operands when it has one
+  (the "first operand" was the Rd=r15 operand which makes them preload in the first place)
 
 thank you for the patches!
 

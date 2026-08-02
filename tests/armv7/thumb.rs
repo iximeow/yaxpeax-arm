@@ -4573,6 +4573,43 @@ fn msr_mrs() {
 }
 
 #[test]
+fn prefetch() {
+    test_display(
+        &[0xb0, 0xf8, 0x03, 0xfe],
+        "pld.w [r0, #0xe03]"
+    );
+    // ldrb with upper word bit 7 clear is just ldrb,
+    // but with it set it would be pld
+    test_display(
+        &[0x11, 0xf8, 0x78, 0xff],
+        "ldrb.w pc, [r1, #0x78]!"
+    );
+    test_display(
+        &[0x91, 0xf8, 0x78, 0xff],
+        "pld.w [r1, #0xf78]"
+    );
+    // likewise, ldrh with bits 7, 8 clear Rt=1111 is only prefetch
+    // for some op2 patterns..
+    test_display(
+        &[0x3b, 0xf8, 0x78, 0xff],
+        "ldrh.w pc, [fp, #0x78]!"
+    );
+    test_display(
+        &[0x3b, 0xf8, 0x78, 0xfc],
+        "pld.w [fp, #-0x78]"
+    );
+    test_display(
+        &[0x3b, 0xf8, 0x38, 0xf0],
+        "pld.w [fp, r8, lsl #3]"
+    );
+    // and ldrbt also does not become pld on rt==1111
+    test_display(
+        &[0x10, 0xf8, 0x7c, 0xfe],
+        "ldrbt.w pc, [r0, #0x7c]"
+    );
+}
+
+#[test]
 fn pkh() {
     test_display(
         &[0xc7, 0xea, 0xe8, 0x77],

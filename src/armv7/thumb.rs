@@ -2419,19 +2419,11 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
 
                                 } else if op2 & 0b111100 == 0b111000 {
                                     // `(immediate, Thumb)`
-                                    let opcode = if rt == 0b1111 {
-                                        [
-                                            Opcode::PLD,
-                                            Opcode::PLD,
-                                            Opcode::LDRT,
-                                        ][size]
-                                    } else {
-                                        [
-                                            Opcode::LDRBT,
-                                            Opcode::LDRHT,
-                                            Opcode::LDRT,
-                                        ][size]
-                                    };
+                                    let opcode = [
+                                        Opcode::LDRBT,
+                                        Opcode::LDRHT,
+                                        Opcode::LDRT,
+                                    ][size];
                                     let w = lower2[8];
                                     let u = lower2[9];
                                     let p = lower2[10];
@@ -2449,19 +2441,11 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                     ];
                                 } else if op2 & 0b100100 == 0b100100 {
                                     // `(immediate, Thumb)`
-                                    let opcode = if rt == 0b1111 {
-                                        [
-                                            Opcode::PLD,
-                                            Opcode::PLD,
-                                            Opcode::LDR,
-                                        ][size]
-                                    } else {
-                                        [
+                                    let opcode = [
                                             Opcode::LDRB,
                                             Opcode::LDRH,
                                             Opcode::LDR,
-                                        ][size]
-                                    };
+                                    ][size];
                                     let w = lower2[8];
                                     let u = lower2[9];
                                     let p = lower2[10];
@@ -2759,6 +2743,13 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                 ];
                             }
                         }
+                    }
+
+                    // TODO: so, this is gross! the PLD/PLI/PLT handling needs improvement across
+                    // the board.
+                    if inst.opcode == Opcode::PLD {
+                        inst.operands[0] = inst.operands[1];
+                        inst.operands[1] = Operand::Nothing;
                     }
                 } else {
                     if !op2[4] {
