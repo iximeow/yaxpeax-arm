@@ -4684,6 +4684,34 @@ fn test_target() {
 }
 
 #[test]
+fn test_rfe_srs() {
+    test_display(
+        &[0xb0, 0xe9, 0x00, 0xc0],
+        "rfeia.w r0!"
+    );
+    test_display(
+        &[0x30, 0xe8, 0x00, 0xc0],
+        "rfedb.w r0!"
+    );
+    test_display(
+        &[0x0d, 0xe8, 0x09, 0xc0],
+        "srsdb.w sp, 0x9"
+    );
+    test_display(
+        &[0x8d, 0xe9, 0x09, 0xc0],
+        "srsia.w sp, 0x9"
+    );
+    test_display(
+        &[0x2d, 0xe8, 0x09, 0xc0],
+        "srsdb.w sp!, 0x9"
+    );
+    test_display(
+        &[0xad, 0xe9, 0x09, 0xc0],
+        "srsia.w sp!, 0x9"
+    );
+}
+
+#[test]
 fn test_decode_tbh_operand_shape() {
     use yaxpeax_arm::armv7::{Opcode, Operand, RegShiftStyle, ShiftStyle};
 

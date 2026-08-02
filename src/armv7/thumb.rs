@@ -613,7 +613,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                 0b00 => {
                                     // `SRS (Thumb)` (`B9-1990`)
                                     // v6T2
-                                    inst.opcode = Opcode::SRS(false, true); // `srsdb`
+                                    inst.opcode = Opcode::SRS(true, false); // `srsdb`
                                     inst.operands = [
                                         Operand::RegWBack(Reg::from_u8(13), w),
                                         Operand::Imm12(lower2[0..4].load::<u16>()), // #<mode> ? what's the syntax here? #<the literal>?
@@ -710,7 +710,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                     if rn == 15 {
                                         decoder.unpredictable()?;
                                     }
-                                    inst.opcode = Opcode::RFE(false, true);
+                                    inst.opcode = Opcode::RFE(true, false);
                                     inst.operands = [
                                         Operand::RegWBack(Reg::from_u8(rn), w),
                                         Operand::Nothing,
@@ -775,7 +775,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                     if rn == 15 {
                                         decoder.unpredictable()?;
                                     }
-                                    inst.opcode = Opcode::RFE(true, false);
+                                    inst.opcode = Opcode::RFE(false, true);
                                     inst.operands = [
                                         Operand::RegWBack(Reg::from_u8(rn), w),
                                         Operand::Nothing,
