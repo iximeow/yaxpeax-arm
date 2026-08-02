@@ -4209,100 +4209,166 @@ fn decode_table_a6_30(decoder: &InstDecoder, inst: &mut Instruction, instr2: Bit
                     Operand::Nothing,
                 ];
             } else {
-                if op1 & 1 == 0 {
-                    // `STC, STC2 on page A8-663`
-                    let p = instr2[8];
-                    let u = instr2[7];
-                    let w = instr2[5];
-                    let rn = instr2[0..4].load::<u8>();
-                    let crd = lower2[12..16].load::<u8>();
-                    let imm8 = lower2[0..8].load::<u16>();
+                if op1 & 0b10_0000 == 0 {
+                    // the op1 0xxxxxx rows, minus 000100 and 000101 above
+                    if op1 & 1 == 0 {
+                        // `STC, STC2 on page A8-663`
+                        let p = instr2[8];
+                        let u = instr2[7];
+                        let w = instr2[5];
+                        let rn = instr2[0..4].load::<u8>();
+                        let crd = lower2[12..16].load::<u8>();
+                        let imm8 = lower2[0..8].load::<u16>();
 
-                    if instr2[6] {
-                        inst.opcode = Opcode::STCL(coproc, instr2[12]);
-                    } else {
-                        inst.opcode = Opcode::STC(coproc, instr2[12]);
-                    }
-                    inst.operands = [
-                        Operand::CReg(CReg::from_u8(crd)),
-                        if p {
-                            Operand::RegDerefPreindexOffset(
-                                Reg::from_u8(rn),
-                                imm8 << 2,
-                                u,
-                                w,
-                            )
+                        if instr2[6] {
+                            inst.opcode = Opcode::STCL(coproc, instr2[12]);
                         } else {
-                            if w {
-                                Operand::RegDerefPostindexOffset(
-                                    Reg::from_u8(rn),
-                                    imm8 << 2,
-                                    u,
-                                    false, // TODO: wback? this is true? not true?
-                                )
-                            } else {
-                                Operand::RegDeref(Reg::from_u8(rn))
-                            }
-                        },
-                        if !p && !w {
-                            Operand::CoprocOption(imm8 as u8)
-                        } else {
-                            Operand::Nothing
-                        },
-                        Operand::Nothing,
-                    ];
-                } else {
-                    // `LDC, LDC2 (immediate or literal) on A8-393 or A8-395`
-                    let p = instr2[8];
-                    let u = instr2[7];
-                    let w = instr2[5];
-                    let rn = instr2[0..4].load::<u8>();
-                    let crd = lower2[12..16].load::<u8>();
-                    let imm8 = lower2[0..8].load::<u16>();
-
-                    if rn == 0b1111 {
-                        // `LDC, LDC2 (literal) on A8-395`
-                        // notable for rejecting writeback
-                        if w {
-                            decoder.unpredictable()?;
+                            inst.opcode = Opcode::STC(coproc, instr2[12]);
                         }
-                    } else {
-                        // `LDC, LDC2 (immediate) on A8-393`
-                    }
-
-                    if instr2[6] {
-                        inst.opcode = Opcode::LDCL(coproc, instr2[12]);
-                    } else {
-                        inst.opcode = Opcode::LDC(coproc, instr2[12]);
-                    }
-                    inst.operands = [
-                        Operand::CReg(CReg::from_u8(crd)),
-                        if p {
-                            Operand::RegDerefPreindexOffset(
-                                Reg::from_u8(rn),
-                                imm8 << 2,
-                                u,
-                                w,
-                            )
-                        } else {
-                            if w {
-                                Operand::RegDerefPostindexOffset(
+                        inst.operands = [
+                            Operand::CReg(CReg::from_u8(crd)),
+                            if p {
+                                Operand::RegDerefPreindexOffset(
                                     Reg::from_u8(rn),
                                     imm8 << 2,
                                     u,
-                                    false, // TODO: wback? this is true? not true?
+                                    w,
                                 )
                             } else {
-                                Operand::RegDeref(Reg::from_u8(rn))
+                                if w {
+                                    Operand::RegDerefPostindexOffset(
+                                        Reg::from_u8(rn),
+                                        imm8 << 2,
+                                        u,
+                                        false, // TODO: wback? this is true? not true?
+                                    )
+                                } else {
+                                    Operand::RegDeref(Reg::from_u8(rn))
+                                }
+                            },
+                            if !p && !w {
+                                Operand::CoprocOption(imm8 as u8)
+                            } else {
+                                Operand::Nothing
+                            },
+                            Operand::Nothing,
+                        ];
+                    } else {
+                        // `LDC, LDC2 (immediate or literal) on A8-393 or A8-395`
+                        let p = instr2[8];
+                        let u = instr2[7];
+                        let w = instr2[5];
+                        let rn = instr2[0..4].load::<u8>();
+                        let crd = lower2[12..16].load::<u8>();
+                        let imm8 = lower2[0..8].load::<u16>();
+
+                        if rn == 0b1111 {
+                            // `LDC, LDC2 (literal) on A8-395`
+                            // notable for rejecting writeback
+                            if w {
+                                decoder.unpredictable()?;
                             }
-                        },
-                        if !p && !w {
-                            Operand::CoprocOption(imm8 as u8)
                         } else {
-                            Operand::Nothing
-                        },
-                        Operand::Nothing,
-                    ];
+                            // `LDC, LDC2 (immediate) on A8-393`
+                        }
+
+                        if instr2[6] {
+                            inst.opcode = Opcode::LDCL(coproc, instr2[12]);
+                        } else {
+                            inst.opcode = Opcode::LDC(coproc, instr2[12]);
+                        }
+                        inst.operands = [
+                            Operand::CReg(CReg::from_u8(crd)),
+                            if p {
+                                Operand::RegDerefPreindexOffset(
+                                    Reg::from_u8(rn),
+                                    imm8 << 2,
+                                    u,
+                                    w,
+                                )
+                            } else {
+                                if w {
+                                    Operand::RegDerefPostindexOffset(
+                                        Reg::from_u8(rn),
+                                        imm8 << 2,
+                                        u,
+                                        false, // TODO: wback? this is true? not true?
+                                    )
+                                } else {
+                                    Operand::RegDeref(Reg::from_u8(rn))
+                                }
+                            },
+                            if !p && !w {
+                                Operand::CoprocOption(imm8 as u8)
+                            } else {
+                                Operand::Nothing
+                            },
+                            Operand::Nothing,
+                        ];
+                    }
+                } else {
+                    // the 1xxxxx rows
+                    //
+                    // TODO: thumb encodings here for CDP, MCR, MRC, etc, are all ARMv6t2 or later
+
+                    // as of DDI0406 C.d, a revision of ARMv7, there are no defined instructions
+                    // for op1 == 11xxxx
+                    if op1 & 0b11_0000 != 0b10_0000 {
+                        return Err(DecodeError::InvalidOpcode);
+                    }
+
+                    // ok, now we're down to 10xxxx.
+
+                    // for CDP, MCR, MRC, the operands are largely similar with slightly different
+                    // names and (in the case of opc1) a bit of shifting.
+                    let CRm = lower2[0..4].load::<u8>();
+                    let opc2 = lower2[5..8].load::<u8>();
+                    let coproc = lower2[8..12].load::<u8>();
+                    let CRd = lower2[12..16].load::<u8>();
+                    let CRn = instr2[0..4].load::<u8>();
+                    let opc1 = instr2[4..8].load::<u8>();
+                    let is_2 = instr2[12];
+
+                    // back up to
+                    // > A6.3.18 Coprocessor, Advanced SIMD, and Floating-point instructions
+                    // for this one
+                    let op = lower2[4];
+                    if !op {
+                        // CDP, CDP2 (page A8-356)
+                        inst.opcode = Opcode::CDP(coproc, opc1, opc2, is_2);
+                        inst.operands = [
+                            Operand::CReg(CReg::from_u8(CRd)),
+                            Operand::CReg(CReg::from_u8(CRn)),
+                            Operand::CReg(CReg::from_u8(CRm)),
+                            Operand::Nothing,
+                        ];
+                    } else {
+                        // MCR, MCR2, or MRC, MRC2
+                        //
+                        // a quick rename to match up with the manual..
+                        let Rt = CRd;
+                        let opc1 = opc1 >> 1;
+
+                        if op1 & 1 == 0 {
+                            // MCR, MCR2 (A8-477)
+                            inst.opcode = Opcode::MCR(coproc, opc1, opc2, is_2);
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(CRd)),
+                                Operand::CReg(CReg::from_u8(CRn)),
+                                Operand::CReg(CReg::from_u8(CRm)),
+                                Operand::Nothing,
+                            ];
+                        } else {
+                            // MRC, MRC2 (A8-493)
+                            inst.opcode = Opcode::MRC(coproc, opc1, opc2, is_2);
+                            inst.operands = [
+                                Operand::Reg(Reg::from_u8(CRd)),
+                                Operand::CReg(CReg::from_u8(CRn)),
+                                Operand::CReg(CReg::from_u8(CRm)),
+                                Operand::Nothing,
+                            ];
+                        }
+                    }
                 }
             }
         } else {

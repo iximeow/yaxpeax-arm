@@ -4573,6 +4573,14 @@ fn msr_mrs() {
 }
 
 #[test]
+fn mrc_mcr_cdp() {
+    test_display(
+        &[0x80, 0xfe, 0x80, 0xc6],
+        "cdp2 p6, 8, c12, c0, c0, 4"
+    );
+}
+
+#[test]
 fn prefetch() {
     test_display(
         &[0xb0, 0xf8, 0x03, 0xfe],
