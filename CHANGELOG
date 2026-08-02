@@ -11,6 +11,7 @@
   * the decoder reused the non-thumb encoding table, but thumb opcode/sizes are
     encoded in a different order.
 * thumb2: `ldrexd` was off by one in looking up an opcode
+* thumb2: pkhtb/pkhbt distinction was off by one bit
 * thumb2: `mrs` destinations, which should have been a mask of the current (or
   saved) program status register, was reported as a banked GPR.
 * ARMv8: support thumb2 encoding of `Test Target` instruction, `Opcode::TT`

@@ -1013,7 +1013,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                             // TODO: fix shift
                             // TODO: check opcode
                             inst.s = false;
-                            inst.opcode = if lower & 0b10000 != 0 {
+                            inst.opcode = if lower & 0b100000 != 0 {
                                 Opcode::PKHTB
                             } else {
                                 Opcode::PKHBT

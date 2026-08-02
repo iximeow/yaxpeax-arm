@@ -4573,6 +4573,18 @@ fn msr_mrs() {
 }
 
 #[test]
+fn pkh() {
+    test_display(
+        &[0xc7, 0xea, 0xe8, 0x77],
+        "pkhtb.w r7, r7, r8, asr 31"
+    );
+    test_display(
+        &[0xc7, 0xea, 0xc8, 0x77],
+        "pkhbt.w r7, r7, r8, lsl 31"
+    );
+}
+
+#[test]
 fn test_target() {
     // the v8 manuals list a new Test Target with some variants to it..
     test_nonconforming(
