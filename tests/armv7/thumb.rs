@@ -2590,6 +2590,11 @@ fn test_decode_misc_cases() {
         &[0xfe, 0xde],
         "udf 0xfe"
     );
+
+    test_display(
+        &[0xaf, 0xf3, 0x6e, 0x80],
+        "hint.w 0x6e"
+    );
 }
 #[test]
 fn test_decode_mov_cases() {

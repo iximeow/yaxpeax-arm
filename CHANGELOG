@@ -17,6 +17,8 @@
 * thumb2: some coprocessor instructions were incorrectly decoded as `ldc*/stc*`
 * thumb2: fix missing decode of `s` bit for wide lsl/lsr/asr/ror (register)
 * thumb2: rfeia and rfedb were decoded backwards. likewise for srsia and srsdb
+* thumb2: unknown wide hints are decoded as `hint` like other cases in ARM,
+  rather than rejected as invalid
 * ARMv8: support thumb2 encoding of `Test Target` instruction, `Opcode::TT`
   (formatted as any of `tt`, `ttt`, `tta`, `ttat`)
 * ARMv8: formerly-coprocessor instructions have been defined into SIMD extensions,

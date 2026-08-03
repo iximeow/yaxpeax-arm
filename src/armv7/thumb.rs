@@ -1808,8 +1808,25 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                                     Operand::Nothing,
                                                 ];
                                             }
-                                            _ => {
-                                                return Err(DecodeError::Undefined);
+                                            hint => {
+                                                // from DDI0406 C.d (v7):
+                                                // > Encodings with op1 set to 0b000 and a value of
+                                                // > op2 that is not shown in the table are
+                                                // > unallocated hints, and behave as if op2 is set
+                                                // > to 0b00000000. These unallocated hint encodings
+                                                // > are reserved and software must not use them.
+                                                //
+                                                // so.. it would be "right" to report these as
+                                                // "nop", but the hint operand is interesting for
+                                                // forward compatibility. guess that means we
+                                                // invent a "hint" instruction too?
+                                                inst.opcode = Opcode::HINT;
+                                                inst.operands = [
+                                                    Operand::Imm12(hint as u16),
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                ];
                                             }
                                         }
                                     }

@@ -161,6 +161,16 @@ pub enum Opcode {
     SEV,
     CSDB,
     YIELD,
+    /// ARM generally does not have a blanket `hint #123` instruction, but does have a section of
+    /// opcode space reserved for architectural hinting. this is where `nop`, `yield`, `wfe`, etc
+    /// are defined. those "hints" have defined architectural (non-)effects and have their own
+    /// Opcode variants. for the bit patterns not yet defined to a specific hint, the ARM reference
+    /// manual says the execution on historical processors is as if `op2 is set to 0b00000000`
+    /// (that is, `nop`), but that software must not use these unallocated encodings.
+    ///
+    /// so, `hint` exists to describe these "execute-as-nop" instructions which have at least one
+    /// operand describing possible future behavior. instructions that are defined in this space
+    /// are expected to be decoded as distinct opcodes.
     HINT,
     NOP,
     LEAVEX,
