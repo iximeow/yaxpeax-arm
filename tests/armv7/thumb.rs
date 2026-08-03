@@ -2595,6 +2595,27 @@ fn test_decode_misc_cases() {
         &[0xaf, 0xf3, 0x6e, 0x80],
         "hint.w 0x6e"
     );
+    // defined in ARMv8 or so..
+    test_display(
+        &[0xaf, 0xf3, 0x0d, 0x80],
+        "pacbti.w"
+    );
+    test_display(
+        &[0xaf, 0xf3, 0x0f, 0x80],
+        "bti.w"
+    );
+    test_display(
+        &[0xaf, 0xf3, 0x10, 0x80],
+        "esb.w"
+    );
+    test_display(
+        &[0xaf, 0xf3, 0x1d, 0x80],
+        "pac.w"
+    );
+    test_display(
+        &[0xaf, 0xf3, 0x2d, 0x80],
+        "aut.w"
+    );
 }
 #[test]
 fn test_decode_mov_cases() {

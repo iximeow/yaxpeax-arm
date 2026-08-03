@@ -976,6 +976,11 @@ impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for ConditionedOpcode {
             Opcode::YIELD |
             Opcode::WFE |
             Opcode::WFI |
+            Opcode::PACBTI |
+            Opcode::BTI |
+            Opcode::ESB |
+            Opcode::PAC |
+            Opcode::AUT |
             Opcode::SEV |
             Opcode::ERET |
             Opcode::RFE(_, _) |
@@ -1268,6 +1273,12 @@ impl Opcode {
             Opcode::TT { alternate: true, unprivileged: false } => "tta",
             Opcode::TT { alternate: false, unprivileged: true } => "ttt",
             Opcode::TT { alternate: true, unprivileged: true } => "ttat",
+
+            Opcode::PACBTI => { "pacbti" },
+            Opcode::BTI => { "bti" },
+            Opcode::ESB => { "esb" },
+            Opcode::PAC => { "pac" },
+            Opcode::AUT => { "aut" },
         }
     }
 }

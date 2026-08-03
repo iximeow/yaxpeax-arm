@@ -1797,10 +1797,65 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                                     Operand::Nothing,
                                                 ];
                                             }
+                                            0b00001101 => {
+                                                // `PACBTI T1`
+                                                // v8
+                                                inst.opcode = Opcode::PACBTI;
+                                                inst.operands = [
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                ];
+                                            }
+                                            0b00001111 => {
+                                                // `BTI T1`
+                                                // v8
+                                                inst.opcode = Opcode::BTI;
+                                                inst.operands = [
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                ];
+                                            }
+                                            0b00010000 => {
+                                                // `ESB T1`
+                                                // v8
+                                                inst.opcode = Opcode::ESB;
+                                                inst.operands = [
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                ];
+                                            }
                                             0b00010100 => {
                                                 // `CSDB` (`A8-376`)
                                                 // v6T2
                                                 inst.opcode = Opcode::CSDB;
+                                                inst.operands = [
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                ];
+                                            }
+                                            0b00011101 => {
+                                                // `PAC T1`
+                                                // v8
+                                                inst.opcode = Opcode::PAC;
+                                                inst.operands = [
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                    Operand::Nothing,
+                                                ];
+                                            }
+                                            0b00101101 => {
+                                                // `AUT T1`
+                                                // v8
+                                                inst.opcode = Opcode::AUT;
                                                 inst.operands = [
                                                     Operand::Nothing,
                                                     Operand::Nothing,

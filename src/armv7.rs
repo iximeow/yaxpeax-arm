@@ -290,6 +290,12 @@ pub enum Opcode {
 
     /// ARMv8 `Test Target`
     TT { alternate: bool, unprivileged: bool },
+
+    PACBTI,
+    BTI,
+    ESB,
+    PAC,
+    AUT,
 }
 
 static DATA_PROCESSING_OPCODES: [Opcode; 16] = [
