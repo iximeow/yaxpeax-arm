@@ -12,15 +12,15 @@ use std::num::ParseIntError;
 #[derive(Debug, PartialEq, Eq)]
 enum MemOffset {
     Imm(i64),
-    Shift(String),
-    Reg(String),
+    Shift { regnum: u8, rest: String },
+    Reg { regnum: u8 },
 }
 
 #[derive(Debug)]
 enum ParsedOperand {
     Register { size: char, num: u8, neg: bool },
     Memory(String),
-    MemoryWithOffset { base: String, offset: MemOffset, writeback: bool },
+    MemoryWithOffset { basereg: u8, offset: MemOffset, writeback: bool },
     SIMDRegister { size: char, num: u8 },
 //    SIMDRegisterElements { num: u8, elems: u8, elem_size: char },
 //    SIMDRegisterElement { num: u8, elem_size: char, elem: u8 },
@@ -48,20 +48,30 @@ impl PartialEq for ParsedOperand {
                 }
             },
             (
-                MemoryWithOffset { base: base_l, offset: offset_l, writeback: writeback_l },
-                MemoryWithOffset { base: base_r, offset: offset_r, writeback: writeback_r },
+                MemoryWithOffset { basereg: base_l, offset: offset_l, writeback: writeback_l },
+                MemoryWithOffset { basereg: base_r, offset: offset_r, writeback: writeback_r },
             ) => {
-                base_l == base_r &&
-                offset_l == offset_r &&
-                writeback_l == writeback_r
+                (
+                    base_l == base_r ||
+                    offset_l == offset_r &&
+                    writeback_l == writeback_r
+                )
             },
             // smooth over yax printing `[rN]` rather than `[rN, #0]` like capstone.
-            (Memory(l), MemoryWithOffset { base, offset: MemOffset::Imm(0), writeback: false }) => {
-                l == base
+            (Memory(l), MemoryWithOffset { basereg, offset: MemOffset::Imm(0), writeback: false }) => {
+                if let Some(lreg) = ParsedOperand::parse_reg(l) {
+                    lreg == *basereg
+                } else {
+                    false
+                }
             },
             // and make equality reflexive.
-            (MemoryWithOffset { base, offset: MemOffset::Imm(0), writeback: false }, Memory(r)) => {
-                base == r
+            (MemoryWithOffset { basereg, offset: MemOffset::Imm(0), writeback: false }, Memory(r)) => {
+                if let Some(rreg) = ParsedOperand::parse_reg(r) {
+                    rreg == *basereg
+                } else {
+                    false
+                }
             },
             (Immediate(l), Immediate(r)) => {
                 l == r
@@ -118,6 +128,15 @@ fn test_operand_parsing() {
     assert_eq!(ParsedOperand::parse("-r11", 64), (ParsedOperand::Register { size: 'r', num: 11, neg: true }, 4));
     assert_eq!(ParsedOperand::parse("sl", 32), (ParsedOperand::Register { size: 'r', num: 10, neg: false }, 2));
     assert_eq!(ParsedOperand::parse("-sl", 32), (ParsedOperand::Register { size: 'r', num: 10, neg: true }, 3));
+
+    assert_eq!(
+        ParsedOperand::parse("[r0, sl, lsl #3]", 32),
+        (ParsedOperand::MemoryWithOffset { basereg: 0, offset: MemOffset::Shift { regnum: 10, rest: "lsl #3".to_string() }, writeback: false }, 16)
+    );
+    assert_eq!(
+        ParsedOperand::parse("[r0, r10, lsl #3]", 32),
+        (ParsedOperand::MemoryWithOffset { basereg: 0, offset: MemOffset::Shift { regnum: 10, rest: "lsl #3".to_string() }, writeback: false }, 17)
+    );
 }
 
 #[test]
@@ -160,60 +179,6 @@ fn test_instruction_parsing() {
 
 impl ParsedOperand {
     fn parse(s: &str, width: u8) -> (Self, usize) {
-        let parse_hex_or_dec = |mut s: &str| {
-            let mut negate = false;
-            if s.as_bytes()[0] == b'-' {
-                negate = true;
-                s = &s[1..];
-            }
-
-            let v = if !s.starts_with("0x") {
-                i64::from_str_radix(s, 10).map_err(|e| { panic!("failed to parse {}", s); }).expect("can parse string")
-            } else {
-                u64::from_str_radix(&s[2..], 16).expect("can parse string") as i64
-            };
-            if negate {
-                -v
-            } else {
-                v
-            }
-        };
-
-        let parse_imm = |mut s: &str| {
-            if s.starts_with("#") {
-                parse_hex_or_dec(&s[1..])
-            } else {
-                parse_hex_or_dec(s)
-            }
-        };
-
-        fn parse_reg(s: &str) -> Option<&str> {
-            if s.starts_with("r") {
-                Some(s)
-            } else if s == "fp" ||
-                      s == "ip" ||
-                      s == "sb" ||
-                      s == "pc" ||
-                      s == "lr" ||
-                      s == "sl" ||
-                      s == "sp" {
-                Some(s)
-            } else {
-                None
-            }
-        };
-
-        fn parse_shift(s: &str) -> Option<&str> {
-            if s.starts_with("lsl") ||
-               s.starts_with("lsr") ||
-               s.starts_with("asr") ||
-               s.starts_with("ror") {
-                Some(s)
-            } else {
-                None
-            }
-        }
-
         if s.as_bytes()[0] == b'#' {
             let end = s.find(',').unwrap_or(s.len());
             let mut imm_str = &s[1..end];
@@ -225,7 +190,7 @@ impl ParsedOperand {
                 use std::str::FromStr;
                 (ParsedOperand::Float(f64::from_str(imm_str).expect("can parse string")), end)
             } else {
-                let imm = parse_hex_or_dec(imm_str);
+                let imm = ParsedOperand::parse_hex_or_dec(imm_str);
                 let imm = if width == 32 {
                     imm as i32 as i64
                 } else {
@@ -241,7 +206,7 @@ impl ParsedOperand {
             } else {
                 imm_str
             };
-            let imm = parse_hex_or_dec(imm_str);
+            let imm = ParsedOperand::parse_hex_or_dec(imm_str);
             (ParsedOperand::PCRel(imm), end)
         } else if s.as_bytes()[0] == b'[' {
             let brace_end = s.find(']').map(|x| x + 1).unwrap_or(s.len());
@@ -254,30 +219,30 @@ impl ParsedOperand {
 
             let addr = &s[1..brace_end - 1];
 
-            let offset = addr.rfind(',').map(|comma| {
+            let offset = addr.find(',').map(|comma| {
                 addr[comma + 1..].trim()
             }).map(|mut offset_str| {
-                if let Some(reg) = parse_reg(offset_str) {
-                    MemOffset::Reg(reg.to_string())
-                } else if let Some(shift) = parse_shift(offset_str) {
-                    MemOffset::Shift(shift.to_string())
+                if let Some((reg, shift)) = ParsedOperand::parse_shift(offset_str) {
+                    MemOffset::Shift { regnum: reg, rest: shift.to_string() }
+                } else if let Some(reg) = ParsedOperand::parse_reg(offset_str) {
+                    MemOffset::Reg { regnum: reg }
                 } else {
-                    MemOffset::Imm(parse_imm(offset_str))
+                    MemOffset::Imm(ParsedOperand::parse_imm(offset_str))
                 }
             });
 
-            let base_end = addr.rfind(',').unwrap_or(addr.len());
+            let base_end = addr.find(',').unwrap_or(addr.len());
             let base = addr[..base_end].trim();
 
             if let Some(offset) = offset {
                 (ParsedOperand::MemoryWithOffset {
-                    base: base.to_string(),
+                    basereg: ParsedOperand::parse_reg(base).expect("base is reg"),
                     offset: offset,
                     writeback,
                 }, end)
             } else if writeback {
                 (ParsedOperand::MemoryWithOffset {
-                    base: base.to_string(),
+                    basereg: ParsedOperand::parse_reg(base).expect("base is reg"),
                     offset: MemOffset::Imm(0),
                     writeback,
                 }, end)
@@ -291,7 +256,7 @@ impl ParsedOperand {
                     if let Some(end) = s.find(']') {
                         let group = &s[0..brace_end];
                         let lane = &s[brace_end + 2..end];
-                        let lane = parse_hex_or_dec(lane);
+                        let lane = ParsedOperand::parse_hex_or_dec(lane);
 
                         return (ParsedOperand::SIMDElementLane {
                             elem: group.to_string(),
@@ -301,7 +266,9 @@ impl ParsedOperand {
                 }
 
                 let end = s[brace_end..].find(',').unwrap_or(s.len() - brace_end) + brace_end;
-                (ParsedOperand::RegisterFamily(s[0..end].to_string()), end)
+                let regs = s[0..end].to_string();
+                // TODO: parse register numbers more reasonably...
+                (ParsedOperand::RegisterFamily(regs.replace("sl", "r10")), end)
             } else {
                 let end = s.find(',').unwrap_or(s.len());
                 (ParsedOperand::Other(s[0..end].to_string()), end)
@@ -353,7 +320,7 @@ impl ParsedOperand {
                         Some(lane_selector_start) => {
                             let lane_selector_end = substr.find(']').unwrap();
                             let elem = substr[..lane_selector_start].to_string();
-                            let lane_selector = parse_hex_or_dec(&substr[lane_selector_start + 1..lane_selector_end]) as u8;
+                            let lane_selector = ParsedOperand::parse_hex_or_dec(&substr[lane_selector_start + 1..lane_selector_end]) as u8;
                             (ParsedOperand::SIMDElementLane { elem, lane_selector }, end)
                         }
                         None => {
@@ -367,6 +334,70 @@ impl ParsedOperand {
                     (ParsedOperand::Other(s[start..end].to_string()), end)
                 }
             }
+        }
+    }
+
+    fn parse_hex_or_dec(mut s: &str) -> i64 {
+        let mut negate = false;
+        if s.as_bytes()[0] == b'-' {
+            negate = true;
+            s = &s[1..];
+        }
+
+        let v = if !s.starts_with("0x") {
+            i64::from_str_radix(s, 10).map_err(|e| { panic!("failed to parse {}", s); }).expect("can parse string")
+        } else {
+            u64::from_str_radix(&s[2..], 16).expect("can parse string") as i64
+        };
+        if negate {
+            -v
+        } else {
+            v
+        }
+    }
+
+    fn parse_imm(mut s: &str) -> i64 {
+        if s.starts_with("#") {
+            ParsedOperand::parse_hex_or_dec(&s[1..])
+        } else {
+            ParsedOperand::parse_hex_or_dec(s)
+        }
+    }
+
+    fn parse_reg(s: &str) -> Option<u8> {
+        if s.starts_with("r") {
+            Some(s[1..].parse().expect("can parse regnum"))
+        } else {
+            match s {
+                "sb" => Some(9),
+                "sl" => Some(10),
+                "fp" => Some(11),
+                "ip" => Some(12),
+                "sp" => Some(13),
+                "lr" => Some(14),
+                "pc" => Some(15),
+                _ => {
+                    None
+                }
+            }
+        }
+    }
+
+    fn parse_shift(s: &str) -> Option<(u8, &str)> {
+        if let Some(comma) = s.find(",") {
+            let reg = s[..comma].trim();
+            let rest = s[comma + 1..].trim();
+            assert!(
+                rest.starts_with("lsl") ||
+                   rest.starts_with("lsr") ||
+                   rest.starts_with("asr") ||
+                   rest.starts_with("ror"));
+            let regnum = ParsedOperand::parse_reg(reg).unwrap_or_else(|| {
+                panic!("shift base should be reg, was not in: {}", s);
+            });
+            Some((regnum, rest))
+        } else {
+            None
         }
     }
 }
