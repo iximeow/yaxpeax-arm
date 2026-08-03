@@ -493,13 +493,7 @@ fn capstone_differential_thumb() {
                 csh, capstone_sys::cs_opt_type::CS_OPT_DETAIL, 0,
             ), 0);
         }
-        let cs_insn: *mut capstone_sys::cs_insn = unsafe { libc::malloc(std::mem::size_of::<capstone_sys::cs_insn>()) as *mut capstone_sys::cs_insn };
-        unsafe {
-            // cs_insn is otherwise random garbage: set detail to NULL so
-            // capstone doesn't think it's a real pointer to walk and
-            // populate with operand data.
-            (*cs_insn).detail = std::ptr::null_mut();
-        };
+        let mut cs_insn: *mut capstone_sys::cs_insn = std::ptr::null_mut();
         /*
         let cs = Capstone::new()
             .arm64()
@@ -522,18 +516,25 @@ fn capstone_differential_thumb() {
 //                eprintln!("case {:08x}", i);
             }
 
-//            let res = cs.disasm_all(bytes, 0);
+            if cs_insn != std::ptr::null_mut() {
+                unsafe {
+                    capstone_sys::cs_free(cs_insn, 1);
+                    cs_insn = std::ptr::null_mut();
+                }
+            }
+
             let res = unsafe {
-                capstone_sys::cs_disasm_iter(
+                capstone_sys::cs_disasm(
                     csh,
-                    &mut bytes.as_ptr() as *mut *const u8,
-                    &mut bytes.len() as *mut usize,
-                    &mut 0u64 as *mut u64,
-                    cs_insn,
+                    bytes.as_ptr() as *const u8,
+                    bytes.len() as usize,
+                    0u64, // address
+                    1,    // max decoded instrs
+                    &mut cs_insn,
                 )
             };
 //            if let Ok(insts) = &res {
-            if res {
+            if res != 0 {
 //                let insts_slice = insts.as_ref();
 //              if insts_slice.len() == 1 {
                 {
@@ -551,16 +552,11 @@ fn capstone_differential_thumb() {
                         ).unwrap();
                     };
 
-                    // TODO: temporary to get one diff run done
-                    if cs_text.starts_with("mrseq") {
-                        continue;
-                    }
-
                     let yax_res = yax.decode(&mut yaxpeax_arch::U8Reader::new(bytes));
                     if let Ok(inst) = yax_res {
                         write!(yax_text, "{}", inst).unwrap();
                     } else if let Err(yaxpeax_arm::armv7::DecodeError::Incomplete) = yax_res {
-                        // stats.missed_incomplete.fetch_add(1, Ordering::Relaxed);
+                        stats.missed_incomplete.fetch_add(1, Ordering::Relaxed);
                         continue;
                     } else {
                         let word = i;
@@ -574,6 +570,9 @@ fn capstone_differential_thumb() {
                             yax_res == Err(yaxpeax_arm::armv7::DecodeError::Undefined) {
                             // TODO: yax decodes undefined instructions as "Undefined", but the
                             // manual reports them as udf #imm. yax needs to change.
+                            continue;
+                        } else if yax_res == Err(yaxpeax_arm::armv7::DecodeError::Unpredictable) {
+                            // TODO: some better way of verifying unpredictable encodings.
                             continue;
                         } else if cs_text.starts_with("stlex" ) || cs_text.starts_with("ldrex") {
                             // TODO: yax is missing thumb-mode ldrexd/stlexd? it's not clear which
@@ -594,11 +593,6 @@ fn capstone_differential_thumb() {
                             return true;
                         }
 
-                        // TODO: temp while getting one differential test go..
-                        if yax_text.starts_with("mrseq") && cs_text.starts_with("mrseq") {
-                            return true;
-                        }
-
                         // TODO: capstone prints `blx #0x...`, yax prints `blx.w $+0x...`
                         if yax_text.starts_with("blx.w ") && cs_text.starts_with("blx ") {
                             return true;
@@ -609,31 +603,8 @@ fn capstone_differential_thumb() {
                             return true;
                         }
 
-                        // TODO: more hax
-                        if cs_text.starts_with("stc") {
-                            return true;
-                        }
-
-                        // bizarrely, capstone decodes some bare instructions (`yield`, `wfe`, ..)
-                        // as .. conditional on eq? as in `yieldeq`? why not unconditional? this is
-                        // maybe less absurd if you do not reuse the capstone decoder instance with
-                        // the same instruction???
-                        static STRANGELY_EQ: &'static [&'static str] = &[
-                            "yield", "wfe", "wfi", "sev",
-                        ];
-                        for op in STRANGELY_EQ {
-                            let cs_form = format!("{op}eq ");
-                            if yax_text == *op && cs_text == cs_form {
-                                return true;
-                            }
-                        }
-
                         if yax_text == "udf #0xfe" && cs_text == "trap " {
                             // TODO:
-                            return true;
-                        }
-
-                        if yax_text.starts_with("hint") && cs_text.starts_with("hint") {
                             return true;
                         }
 
@@ -702,16 +673,6 @@ fn capstone_differential_thumb() {
                             }
                         }
 
-                        if (parsed_yax.opcode == "cpsie" && parsed_cs.opcode == "cpsie") ||
-                            (parsed_yax.opcode == "cpsid" && parsed_cs.opcode == "cpsid") {
-                            // TODO: is cpsie <none> printed with the label or no?
-                            if let Some(ParsedOperand::Other(name)) = parsed_cs.operands[0].as_ref() {
-                                if name == "none" && parsed_yax.operands[0].is_none() {
-                                    return true;
-                                }
-                            }
-                        }
-
                         // TODO: yaxpeax-arm doesn't know about armv8-m yet, which gets `bxns` to
                         // replace `bx` in some encodings.
                         if parsed_yax.opcode == "bx" && parsed_cs.opcode == "bxns" {
@@ -767,11 +728,6 @@ fn capstone_differential_thumb() {
                         // > smmls.w pc, r3, lr != smmlsr pc, r3, lr, pc. bytes: [63, fb, 1e, ff]
                         if parsed_yax.opcode.starts_with("smmls.w") && parsed_cs.opcode.starts_with("smmlsr") {
                             return true;
-                        }
-
-                        if yax_text == "pld.w pc, [fp, #0xd82]" && cs_text == "pldw [fp, #0xd82]" {
-                            eprintln!("this should be super impossible..?");
-                            std::process::abort();
                         }
 
                         if parsed_yax.opcode == parsed_cs.opcode {
