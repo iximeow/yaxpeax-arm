@@ -455,6 +455,7 @@ fn capstone_differential_v7() {
 
                     // TODO: temporary to get one diff run done
                     if cs_text.starts_with("mrseq") {
+                        stats.missed_incomplete.fetch_add(1, Ordering::Relaxed);
                         continue;
                     }
 
@@ -467,6 +468,7 @@ fn capstone_differential_v7() {
                     } else if !cs_text.starts_with("stc"){
 //                        eprintln!("yax errored where capstone succeeded. cs text: '{}', bytes: {:x?}. meanwhile, yax: {:?}", cs_text, bytes, yax_res);
                         stats.missed_incomplete.fetch_add(1, Ordering::Relaxed);
+                        continue;
                     };
 
                     fn acceptable_match(yax_text: &str, cs_text: &str) -> bool {
@@ -501,8 +503,9 @@ fn capstone_differential_v7() {
 
 //                    eprintln!("{}", yax_text);
                     if !acceptable_match(&yax_text, &cs_text) {
- //                       eprintln!("disassembly mismatch: {} != {}. bytes: {:x?}", yax_text, cs_text, bytes);
+//                        eprintln!("disassembly mismatch: {} != {}. bytes: {:x?}", yax_text, cs_text, bytes);
 //                        std::process::abort();
+                        stats.mismatch.fetch_add(1, Ordering::Relaxed);
                     } else {
                         stats.good.fetch_add(1, Ordering::Relaxed);
                     }

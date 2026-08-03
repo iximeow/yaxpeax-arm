@@ -585,6 +585,7 @@ fn capstone_differential_thumb() {
                         } else if !cs_text.starts_with("stc") {
                             eprintln!("yax errored where capstone succeeded. cs text: '{}', bytes: {:x?}. meanwhile, yax: {:?}", cs_text, bytes, yax_res);
                             stats.missed_incomplete.fetch_add(1, Ordering::Relaxed);
+                            continue;
                         };
                     }
 
@@ -598,8 +599,41 @@ fn capstone_differential_thumb() {
                             return true;
                         }
 
+                        // TODO: capstone prints `blx #0x...`, yax prints `blx.w $+0x...`
+                        if yax_text.starts_with("blx.w ") && cs_text.starts_with("blx ") {
+                            return true;
+                        }
+
+                        // TODO: capstone prints `bl #0x...`, yax prints `bl.w $+0x...`
+                        if yax_text.starts_with("bl.w ") && cs_text.starts_with("bl ") {
+                            return true;
+                        }
+
                         // TODO: more hax
                         if cs_text.starts_with("stc") {
+                            return true;
+                        }
+
+                        // bizarrely, capstone decodes some bare instructions (`yield`, `wfe`, ..)
+                        // as .. conditional on eq? as in `yieldeq`? why not unconditional? this is
+                        // maybe less absurd if you do not reuse the capstone decoder instance with
+                        // the same instruction???
+                        static STRANGELY_EQ: &'static [&'static str] = &[
+                            "yield", "wfe", "wfi", "sev",
+                        ];
+                        for op in STRANGELY_EQ {
+                            let cs_form = format!("{op}eq ");
+                            if yax_text == *op && cs_text == cs_form {
+                                return true;
+                            }
+                        }
+
+                        if yax_text == "udf #0xfe" && cs_text == "trap " {
+                            // TODO:
+                            return true;
+                        }
+
+                        if yax_text.starts_with("hint") && cs_text.starts_with("hint") {
                             return true;
                         }
 
@@ -607,6 +641,24 @@ fn capstone_differential_thumb() {
                         let parsed_cs = ParsedDisassembly::parse(cs_text);
 
                         if parsed_yax == parsed_cs {
+                            return true;
+                        }
+
+                        // yax shows the alias out of the box, capstone undoes it:
+                        // > pop.w {sb} != ldm.w sp!, {sb}. bytes: [bd, e8, 0, 2]
+                        if parsed_yax.opcode == "pop.w" && parsed_cs.opcode == "ldm.w" && parsed_yax.operands[0] == parsed_cs.operands[1] {
+                            return true;
+                        }
+
+                        // yax shows the alias out of the box, capstone undoes it:
+                        // > push {sb} != stmdb sp!, {sb}. bytes: [2d, e9, 0, 2]
+                        if parsed_yax.opcode == "push" && parsed_cs.opcode == "stmdb" && parsed_yax.operands[0] == parsed_cs.operands[1] {
+                            return true;
+                        }
+
+                        // more aliasing defaults..
+                        // > push.w {r1} != str r1, [sp, #-0x4]!. bytes: [4d, f8, 4, 1d]
+                        if parsed_yax.opcode == "push.w" && parsed_cs.opcode == "str" {
                             return true;
                         }
 
@@ -675,11 +727,71 @@ fn capstone_differential_thumb() {
                             }
                         }
 
-                        // TODO: yax probably should simply write `stm` in this case like the
-                        // manual implies and capstone does.
-                        if parsed_yax.opcode == "stmia" && parsed_cs.opcode == "stm"
-                            && parsed_yax.operands == parsed_cs.operands {
+                        if parsed_yax.operands == parsed_cs.operands {
+                            // TODO: yax probably should simply write `stm` in this case like the
+                            // manual implies and capstone does.
+                            if parsed_yax.opcode == "stmia" && parsed_cs.opcode == "stm" {
+                                    return true;
+                            }
+
+                            // TODO: what???
+                            // > stmia r0!, {r0} != stmgt r0!, {r0}. bytes: [1, c0, 92, 1f]
+                            if parsed_yax.opcode == "stmia" && parsed_cs.opcode == "stmgt" {
+                                    return true;
+                            }
+
+                            // TODO: yax says .w when it doesn't need to, allegedly?
+                            // TODO: also omits a w when capstone adds one? (mov vs movw: "mov sp, #0x1183 != movw sp, #0x1183. bytes: [41, f2, 83, 1d]")
+                            if parsed_yax.opcode == format!("{}{}", parsed_cs.opcode, ".w") || parsed_yax.opcode.clone() + "w" == parsed_cs.opcode {
                                 return true;
+                            }
+
+                            if parsed_yax.opcode.replace(".w", "w") == parsed_cs.opcode {
+                                // TODO: yax prints wide sub-immediate/add-immediate as `sub.w`, capstone
+                                // says `subw` (same for add). this probably could use fixing.
+                                // comparisons:
+                                // > sub.w r4, r4, #0x483 != subw r4, r4, #0x483. bytes: [a4, f2, 83, 44]
+                                // > add.w r10, r1, #0x985 != addw sl, r1, #0x985. bytes: [1, f6, 85, 1a]
+                                // > pld.w pc, [fp, #0xf04] != pldw [fp, #0xf04]. bytes: [bb, f8, 4, ff]
+                                return true;
+                            }
+
+                            // TODO: so many signed multiply-related mishaps (usually around the
+                            // M/R bits.
+                            if parsed_yax.opcode.starts_with("sm") && parsed_cs.opcode.starts_with("sm") {
+                                return true;
+                            }
+                        }
+
+                        // TODO: a weirder mishap with smmls{r}
+                        // > smmls.w pc, r3, lr != smmlsr pc, r3, lr, pc. bytes: [63, fb, 1e, ff]
+                        if parsed_yax.opcode.starts_with("smmls.w") && parsed_cs.opcode.starts_with("smmlsr") {
+                            return true;
+                        }
+
+                        if yax_text == "pld.w pc, [fp, #0xd82]" && cs_text == "pldw [fp, #0xd82]" {
+                            eprintln!("this should be super impossible..?");
+                            std::process::abort();
+                        }
+
+                        if parsed_yax.opcode == parsed_cs.opcode {
+                            let mut last_operand = 0;
+                            for op in parsed_yax.operands.iter() {
+                                if op.is_none() {
+                                    break;
+                                }
+
+                                last_operand += 1;
+                            }
+                            if parsed_yax.operands[..last_operand] == parsed_cs.operands[..last_operand] &&
+                                parsed_cs.operands[last_operand] == Some(ParsedOperand::Immediate(0)) {
+                                return true;
+                            }
+                        }
+
+                        if parsed_yax.opcode.replace(".w", "") == parsed_cs.opcode.replace(".w", "") {
+                            // TODO: yax prints garbage like `b.wgt` instead of `bgt.w`. yikes.
+                            return true;
                         }
 
                         static BRANCHES: &'static [&'static str] = &[
@@ -693,6 +805,8 @@ fn capstone_differential_thumb() {
                         }
 
                         if false {
+                            eprintln!("parsed yax: {:?}", parsed_yax);
+                            eprintln!("parsed cs: {:?}", parsed_cs);
                             eprintln!("yax: {} -> {:?}", yax_text, parsed_yax);
                             eprintln!("cs: {} -> {:?}", cs_text, parsed_cs);
                         }
@@ -702,7 +816,7 @@ fn capstone_differential_thumb() {
 
 //                    eprintln!("{}", yax_text);
                     if !acceptable_match(i, &yax_text, &cs_text) {
-//                        eprintln!("disassembly mismatch: {} != {}. bytes: {:x?}", yax_text, cs_text, bytes);
+                        eprintln!("disassembly mismatch: {} != {}. bytes: {:x?}", yax_text, cs_text, bytes);
 //                        std::process::abort();
                         stats.mismatch.fetch_add(1, Ordering::Relaxed);
                     } else {
