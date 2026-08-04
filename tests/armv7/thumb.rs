@@ -781,7 +781,7 @@ fn test_decode_32b_branch_cases() {
     );
     test_display(
         &[0x3f, 0xf4, 0xfe, 0xaf],
-        "b.weq $-0x4"
+        "beq.w $-0x4"
     );
     // Test for yaxpeax-arm #3
     // branch target was 0x12198 in initial test case at offset 0x82fc
@@ -790,6 +790,10 @@ fn test_decode_32b_branch_cases() {
         &[0x09, 0xf0, 0x4c, 0xbf],
         "b.w $+0x9e98"
     );
+    test_display(
+        &[0x5c, 0xf1, 0x80, 0xae],
+        "bpl.w $+0xdcd00"
+    )
 }
 #[test]
 fn test_decode_bkpt_cases() {

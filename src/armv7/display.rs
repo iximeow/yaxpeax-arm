@@ -68,14 +68,14 @@ impl Instruction {
                 f.write_char('s')?;
             }
         }
-        if self.w() {
-            f.write_fixed_size(".w")?;
-        }
         if self.condition != ConditionCode::AL {
             let name = self.condition.name();
             // all condition codes are two characters long
             f.write_char(name[0] as char)?;
             f.write_char(name[1] as char)?;
+        }
+        if self.w() {
+            f.write_fixed_size(".w")?;
         }
         Ok(())
     }

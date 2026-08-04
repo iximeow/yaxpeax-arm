@@ -10,6 +10,8 @@
 * thumb2: use correct opcode table for parallel addition/subtractions
   * the decoder reused the non-thumb encoding table, but thumb opcode/sizes are
     encoded in a different order.
+* thumb2: write condition code *before* .w suffix
+  * this fixes nonsense "opcodes" like "b.weq", which should have been "beq.w"
 * thumb2: `ldrexd` was off by one in looking up an opcode
 * thumb2: pkhtb/pkhbt distinction was off by one bit
 * thumb2: `mrs` destinations, which should have been a mask of the current (or
