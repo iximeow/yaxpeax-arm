@@ -695,12 +695,6 @@ fn capstone_differential_thumb() {
                                     return true;
                             }
 
-                            // TODO: what???
-                            // > stmia r0!, {r0} != stmgt r0!, {r0}. bytes: [1, c0, 92, 1f]
-                            if parsed_yax.opcode == "stmia" && parsed_cs.opcode == "stmgt" {
-                                    return true;
-                            }
-
                             // TODO: yax says .w when it doesn't need to, allegedly?
                             // TODO: also omits a w when capstone adds one? (mov vs movw: "mov sp, #0x1183 != movw sp, #0x1183. bytes: [41, f2, 83, 1d]")
                             if parsed_yax.opcode == format!("{}{}", parsed_cs.opcode, ".w") || parsed_yax.opcode.clone() + "w" == parsed_cs.opcode {
