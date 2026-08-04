@@ -14,6 +14,7 @@
 * thumb2: pkhtb/pkhbt distinction was off by one bit
 * thumb2: `mrs` destinations, which should have been a mask of the current (or
   saved) program status register, was reported as a banked GPR.
+* thumb2: fixed much confusion about `msr` sources, similar to `mrs`.
 * thumb2: some coprocessor instructions were incorrectly decoded as `ldc*/stc*`
 * thumb2: fix missing decode of `s` bit for wide lsl/lsr/asr/ror (register)
 * thumb2: rfeia and rfedb were decoded backwards. likewise for srsia and srsdb

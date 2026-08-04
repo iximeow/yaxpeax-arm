@@ -4613,6 +4613,31 @@ fn msr_mrs() {
         &[0x9b, 0xf3, 0x00, 0x85],
         "msr.w spsr_sc, fp"
     );
+
+    test_display(
+        &[0x87, 0xf3, 0x20, 0x80],
+        "msr.w r8_usr, r7"
+    );
+
+    test_display(
+        &[0x87, 0xf3, 0x20, 0x89],
+        "msr.w sb_fiq, r7"
+    );
+
+    test_display(
+        &[0xff, 0xf3, 0x00, 0x86],
+        "mrs.w r6, spsr"
+    );
+
+    test_display(
+        &[0xf2, 0xf3, 0x30, 0x8c],
+        "mrs.w ip, spsr_svc"
+    );
+
+    test_display(
+        &[0xfe, 0xf3, 0x30, 0x8c],
+        "mrs.w ip, spsr_hyp"
+    );
 }
 
 #[test]

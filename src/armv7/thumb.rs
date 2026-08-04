@@ -1619,9 +1619,11 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                     // v7VE
                                     let sysm = (((lower >> 4) & 1) << 4) | ((lower >> 8) & 0b1111);
                                     let R = instr2[4];
+                                    let dest = Reg::from_sysm(R, sysm as u8)
+                                        .ok_or(DecodeError::InvalidOperand)?;
                                     inst.opcode = Opcode::MSR;
                                     inst.operands = [
-                                        Operand::StatusRegMask(StatusRegMask::from_raw(sysm as u8)?),
+                                        dest,
                                         Operand::Reg(Reg::from_u8(rn)),
                                         Operand::Nothing,
                                         Operand::Nothing,
@@ -2005,20 +2007,41 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                     ];
                                 }
                             } else {
-                                // `op` is `0b0111110` or `0b0111111`, both are `MRS` but there's
-                                // some discerning to do still.
+                                // `op` is `0b0111110` or `0b0111111`, both are `MRS` (and the
+                                // difference is the `R` bit), but there's some more discerning to
+                                // do for the source operand still.
                                 let imm8 = lower & 0b11111111;
-                                if imm8 & 0b00100000 != 0 {
-                                    // `MRS (Banked register)` (`B9-1978`)
+                                let r = instr2[4];
+                                if imm8 & 0b00100000 == 0 {
+                                    // `MRS (Banked register)` (`B9-1976`)
                                     // v7VE
-                                    let r = instr & 0b10000;
-                                    let sysm = (lower & 0b10000) | (instr & 0b1111);
+                                    if lower & 0b0010_0000_1101_1111 != 0 {
+                                        if decoder.should_is_must {
+                                            return Err(DecodeError::Nonconforming);
+                                        }
+                                    }
                                     let rd = ((lower >> 8) & 0b1111) as u8;
+                                    let source = if r {
+                                        Operand::SPSR
+                                    } else {
+                                        Operand::CPSR
+                                    };
                                     inst.opcode = Opcode::MRS;
                                     inst.operands = [
                                         Operand::Reg(Reg::from_u8(rd)),
-                                        if let Some(op) = Reg::from_sysm(r != 0, sysm as u8) {
-                                            // TODO: from_sysm should succeed?
+                                        source,
+                                        Operand::Nothing,
+                                        Operand::Nothing,
+                                    ];
+                                } else {
+                                    // `MRS` (`B9-1978`)
+                                    // v6T2
+                                    let rd = ((lower >> 8) & 0b1111) as u8;
+                                    let m = (lower & 0b10000) | (instr & 0b1111);
+                                    inst.opcode = Opcode::MRS;
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        if let Some(op) = Reg::from_sysm(r, m as u8) {
                                             op
                                         } else {
                                             return Err(DecodeError::InvalidOperand);
@@ -2026,45 +2049,6 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                         Operand::Nothing,
                                         Operand::Nothing,
                                     ];
-                                } else {
-                                    if op == 0b0111110 {
-                                        // `MRS` (`A8-497`)
-                                        // v6T2
-                                        inst.opcode = Opcode::MRS;
-                                        let rd = ((lower >> 8) & 0b1111) as u8;
-                                        inst.opcode = Opcode::MRS;
-                                        inst.operands = [
-                                            Operand::Reg(Reg::from_u8(rd)),
-                                            // TODO: "<spec_reg>"?
-                                            if let Some(op) = Reg::from_sysm(false, 0) {
-                                                // TODO: from_sysm should succeed?
-                                                op
-                                            } else {
-                                                return Err(DecodeError::InvalidOperand);
-                                            },
-                                            Operand::Nothing,
-                                            Operand::Nothing,
-                                        ];
-                                    } else {
-                                        // `MRS` (`B9-1976`)
-                                        // v6T2
-                                        inst.opcode = Opcode::MRS;
-                                        let rd = ((lower >> 8) & 0b1111) as u8;
-                                        let r = (instr >> 4) & 1;
-                                        inst.opcode = Opcode::MRS;
-                                        inst.operands = [
-                                            Operand::Reg(Reg::from_u8(rd)),
-                                            // TODO: "<spec_reg>"?
-                                            if let Some(op) = Reg::from_sysm(r != 0, 0) {
-                                                // TODO: from_sysm should succeed?
-                                                op
-                                            } else {
-                                                return Err(DecodeError::InvalidOperand);
-                                            },
-                                            Operand::Nothing,
-                                            Operand::Nothing,
-                                        ];
-                                    }
                                 }
                             }
                         } else {
