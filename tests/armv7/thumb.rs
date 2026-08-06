@@ -4650,6 +4650,16 @@ fn mrc_mcr_cdp() {
         &[0x80, 0xfe, 0x80, 0xc6],
         "cdp2 p6, 8, c12, c0, c0, 4"
     );
+
+    test_display(
+        &[0xa0, 0xee, 0x81, 0x13],
+        "cdp p3, 10, c1, c0, c1, 4",
+    );
+
+    test_display(
+        &[0x54, 0xec, 0xa0, 0x91],
+        "mrrc p1, 10, sb, r4, c0"
+    );
 }
 
 #[test]

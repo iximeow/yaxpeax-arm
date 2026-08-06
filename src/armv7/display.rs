@@ -531,8 +531,13 @@ pub(crate) fn visit_inst<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fm
             out.write_char(' ')?;
             write_coproc(coproc, out)?;
             out.write_fixed_size(", ")?;
-            // opc1 is a 3-bit field
-            out.write_char((opc + 0x30) as char)?;
+            // mrc/mcr have 3-bit opc1, but mrrc/mcrr have 4-bit opc1
+            if opc >= 10 {
+                out.write_char('1')?;
+                out.write_char((opc - 10 + 0x30) as char)?;
+            } else {
+                out.write_char((opc + 0x30) as char)?;
+            }
 
             let ops = instr.operands.iter();
             for op in ops {
@@ -586,8 +591,13 @@ pub(crate) fn visit_inst<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fm
             out.write_char(' ')?;
             write_coproc(coproc, out)?;
             out.write_fixed_size(", ")?;
-            // opc1 is a 3-bit field
-            out.write_char((opc1 + 0x30) as char)?;
+            // opc1 is a 3-bit field for MCR and MRC, but is four bits for CDP
+            if opc1 >= 10 {
+                out.write_char('1')?;
+                out.write_char((opc1 - 10 + 0x30) as char)?;
+            } else {
+                out.write_char((opc1 + 0x30) as char)?;
+            }
 
             let ops = instr.operands.iter();
             for op in ops {
