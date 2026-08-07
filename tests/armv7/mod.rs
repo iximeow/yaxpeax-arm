@@ -150,10 +150,10 @@ fn test_decode_str_ldr() {
         [0x04, 0x20, 0x2d, 0xe5],
         Instruction {
             condition: ConditionCode::AL,
-            opcode: Opcode::STR,
+            opcode: Opcode::PUSH,
             operands: [
                 Operand::Reg(Reg::from_u8(2)),
-                Operand::RegDerefPreindexOffset(Reg::from_u8(13), 4, false, true),
+                Operand::Nothing,
                 Operand::Nothing,
                 Operand::Nothing,
             ],
@@ -167,10 +167,10 @@ fn test_decode_str_ldr() {
         [0x04, 0x00, 0x2d, 0xe5],
         Instruction {
             condition: ConditionCode::AL,
-            opcode: Opcode::STR,
+            opcode: Opcode::PUSH,
             operands: [
                 Operand::Reg(Reg::from_u8(0)),
-                Operand::RegDerefPreindexOffset(Reg::from_u8(13), 4, false, true),
+                Operand::Nothing,
                 Operand::Nothing,
                 Operand::Nothing,
             ],
@@ -379,10 +379,10 @@ fn test_decode_pop() {
         [0x04, 0x10, 0x9d, 0xe4],
         Instruction {
             condition: ConditionCode::AL,
-            opcode: Opcode::LDR,
+            opcode: Opcode::POP,
             operands: [
                 Operand::Reg(Reg::from_u8(1)),
-                Operand::RegDerefPostindexOffset(Reg::from_u8(13), 0x4, true, false),
+                Operand::Nothing,
                 Operand::Nothing,
                 Operand::Nothing,
             ],
@@ -394,16 +394,16 @@ fn test_decode_pop() {
     );
     test_display(
         [0x04, 0x10, 0x9d, 0xe4],
-        "pop {r1}"
+        "pop r1" // this is A2 encoding, so only one register can be POPed
     );
     test_decode(
         [0xf0, 0x40, 0x2d, 0xe9],
         Instruction {
             condition: ConditionCode::AL,
-            opcode: Opcode::STM(false, true, false, false),
+            opcode: Opcode::PUSH,
             operands: [
-                Operand::RegWBack(Reg::from_u8(13), true),
                 Operand::RegList(16624),
+                Operand::Nothing,
                 Operand::Nothing,
                 Operand::Nothing,
             ],
@@ -421,10 +421,10 @@ fn test_decode_pop() {
         [0xf0, 0x80, 0xbd, 0x18],
         Instruction {
             condition: ConditionCode::NE,
-            opcode: Opcode::LDM(true, false, false, false),
+            opcode: Opcode::POP,
             operands: [
-                Operand::RegWBack(Reg::from_u8(13), true),
                 Operand::RegList(33008),
+                Operand::Nothing,
                 Operand::Nothing,
                 Operand::Nothing,
             ],
