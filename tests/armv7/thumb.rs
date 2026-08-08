@@ -4035,6 +4035,10 @@ fn test_decode_arithmetic_32b_cases() {
         "adds.w r10, r3, 0x3f800000"
     );
     test_display(
+        &[0x17, 0xf1, 0x00, 0x4c],
+        "adds.w ip, r7, 0x80000000" // neat capstone bug: this is printed as -0x80000000?
+    );
+    test_display(
         &[0x03, 0xf2, 0x7e, 0x5a],
         "add.w r10, r3, 0x57e"
     );

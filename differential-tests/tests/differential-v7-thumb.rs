@@ -28,6 +28,7 @@ enum ParsedOperand {
     Immediate(i64),
     PCRel(i64),
     Float(f64),
+    CoprocOption(u64),
     Other(String),
     RegisterFamily(String),
 }
@@ -74,7 +75,10 @@ impl PartialEq for ParsedOperand {
                 }
             },
             (Immediate(l), Immediate(r)) => {
-                l == r
+                l == r || (
+                    // capstone prints 17f1004c as adds.w ip, r7, -0x8000000 which is .. wrong?
+                    *l == 0x8000000 && *r == -0x80000000
+                )
             },
             (PCRel(l), PCRel(r)) => {
                 l == r
@@ -82,7 +86,15 @@ impl PartialEq for ParsedOperand {
             // TODO: don't actually know if this is thumb, 32-bit thumb, arm, .. so try a few
             // things.
             (Immediate(l), PCRel(r)) => { *l == 2 + r || *l == 4 + r },
-            (PCRel(l), Immediate(r)) => { 2 + l == *r || 4 + l == *r },
+            (PCRel(l), Immediate(r)) => {
+                if (*l >= 0) == (*r >= 0x8000000) {
+                    2 + l == *r || 4 + l == *r
+                } else {
+                    let delta = l.wrapping_sub(*r);
+                    delta.wrapping_add(2) as u32 == 0 ||
+                        delta.wrapping_add(4) as u32 == 0
+                }
+            },
 
             (Float(l), Float(r)) => {
                 l.to_ne_bytes() == r.to_ne_bytes()
@@ -137,6 +149,23 @@ fn test_operand_parsing() {
         ParsedOperand::parse("[r0, r10, lsl #3]", 32),
         (ParsedOperand::MemoryWithOffset { basereg: 0, offset: MemOffset::Shift { regnum: 10, rest: "lsl #3".to_string() }, writeback: false }, 17)
     );
+
+    assert_eq!(
+        ParsedDisassembly::parse("ldm.w r10!, {r0, r1, r7, r8, fp, lr}"),
+        ParsedDisassembly::parse("ldm.w sl!, {r0, r1, r7, r8, fp, lr}"),
+    );
+
+    // 5d, ec 80 70
+    assert_eq!(
+        ParsedDisassembly::parse("mrrc p0, 8, r7, sp, c0"),
+        ParsedDisassembly::parse("mrrc p0, #8, r7, sp, c0"),
+    );
+
+    // 45 f6 80 a5
+    assert_eq!(
+        ParsedDisassembly::parse("bls.w $-0xba500"),
+        ParsedDisassembly::parse("bls.w #0xfff45b04"),
+    );
 }
 
 #[test]
@@ -179,8 +208,10 @@ fn test_instruction_parsing() {
 
 impl ParsedOperand {
     fn parse(s: &str, width: u8) -> (Self, usize) {
-        if s.as_bytes()[0] == b'#' {
-            let end = s.find(',').unwrap_or(s.len());
+        let end = s.find(',').unwrap_or(s.len());
+        if let Some(imm) = ParsedOperand::try_parse_imm(&s[..end]) {
+            (ParsedOperand::Immediate(imm), end)
+        } else if s.as_bytes()[0] == b'#' {
             let mut imm_str = &s[1..end];
             // TODO: improve the following hack, useful to parse `[reg], -1!`
             if imm_str.ends_with('!') {
@@ -199,7 +230,6 @@ impl ParsedOperand {
                 (ParsedOperand::Immediate(imm), end)
             }
         } else if s.as_bytes()[0] == b'$' {
-            let end = s.find(',').unwrap_or(s.len());
             let imm_str = &s[1..end];
             let imm_str = if imm_str.starts_with("+") {
                 &imm_str[1..]
@@ -252,6 +282,9 @@ impl ParsedOperand {
         } else if s.as_bytes()[0] == b'{' {
             let brace_end = s.find('}');
             if let Some(brace_end) = brace_end {
+                if let Some(imm) = ParsedOperand::try_parse_imm(&s[1..brace_end]) {
+                    return (ParsedOperand::CoprocOption(imm as u64), end);
+                }
                 if s.as_bytes().get(brace_end + 1) == Some(&b'[') {
                     if let Some(end) = s.find(']') {
                         let group = &s[0..brace_end];
@@ -270,12 +303,10 @@ impl ParsedOperand {
                 // TODO: parse register numbers more reasonably...
                 (ParsedOperand::RegisterFamily(regs.replace("sl", "r10")), end)
             } else {
-                let end = s.find(',').unwrap_or(s.len());
                 (ParsedOperand::Other(s[0..end].to_string()), end)
             }
         } else {
             let mut start = 0;
-            let end = s.find(',').unwrap_or(s.len());
             let mut substr = &s[..end];
             let mut neg = false;
             if substr.as_bytes()[0] == b'-' {
@@ -283,8 +314,17 @@ impl ParsedOperand {
                 neg = true;
                 substr = &substr[1..];
             }
-            if substr == "sl" {
-                return (ParsedOperand::Register { size: 'r', num: 10, neg }, end);
+
+            // may be a boring register, as in `r11`, or a named form like `sl`, `lr`, `pc`:
+            if let Ok(Some(num)) = Self::try_parse_reg(substr) {
+                return (ParsedOperand::Register { size: 'r', num, neg }, end);
+            }
+
+            // or it may be a writeback memory operand (like `ldm r10!, {reglist}`)
+            if substr.as_bytes()[end - 1] == b'!' {
+                if let Ok(Some(num)) = Self::try_parse_reg(&substr[..end - 1]) {
+                    return (ParsedOperand::MemoryWithOffset { basereg: num, offset: MemOffset::Imm(0), writeback: true }, end);
+                }
             }
             match s.as_bytes()[start] as char {
                 sz @ 'r' => {
@@ -338,6 +378,10 @@ impl ParsedOperand {
     }
 
     fn parse_hex_or_dec(mut s: &str) -> i64 {
+        Self::try_parse_hex_or_dec(s).unwrap_or_else(|| panic!("failed to parse {s}"))
+    }
+
+    fn try_parse_hex_or_dec(mut s: &str) -> Option<i64> {
         let mut negate = false;
         if s.as_bytes()[0] == b'-' {
             negate = true;
@@ -345,42 +389,54 @@ impl ParsedOperand {
         }
 
         let v = if !s.starts_with("0x") {
-            i64::from_str_radix(s, 10).map_err(|e| { panic!("failed to parse {}", s); }).expect("can parse string")
+            i64::from_str_radix(s, 10).ok()?
         } else {
-            u64::from_str_radix(&s[2..], 16).expect("can parse string") as i64
+            u64::from_str_radix(&s[2..], 16).ok()? as i64
         };
         if negate {
-            -v
+            Some(-v)
         } else {
-            v
+            Some(v)
         }
     }
 
     fn parse_imm(mut s: &str) -> i64 {
+        Self::try_parse_imm(s).unwrap_or_else(|| {
+            panic!("failed to parse imm: {s}")
+        })
+    }
+
+    fn try_parse_imm(mut s: &str) -> Option<i64> {
         if s.starts_with("#") {
-            ParsedOperand::parse_hex_or_dec(&s[1..])
+            ParsedOperand::try_parse_hex_or_dec(&s[1..])
         } else {
-            ParsedOperand::parse_hex_or_dec(s)
+            ParsedOperand::try_parse_hex_or_dec(s)
+        }
+    }
+
+    fn try_parse_reg(s: &str) -> Result<Option<u8>, &'static str> {
+        if s.starts_with("r") {
+            let num = s[1..].parse()
+                .map_err(|_| "can parse regnum")?;
+            Ok(Some(num))
+        } else {
+            match s {
+                "sb" => Ok(Some(9)),
+                "sl" => Ok(Some(10)),
+                "fp" => Ok(Some(11)),
+                "ip" => Ok(Some(12)),
+                "sp" => Ok(Some(13)),
+                "lr" => Ok(Some(14)),
+                "pc" => Ok(Some(15)),
+                _ => {
+                    Ok(None)
+                }
+            }
         }
     }
 
     fn parse_reg(s: &str) -> Option<u8> {
-        if s.starts_with("r") {
-            Some(s[1..].parse().expect("can parse regnum"))
-        } else {
-            match s {
-                "sb" => Some(9),
-                "sl" => Some(10),
-                "fp" => Some(11),
-                "ip" => Some(12),
-                "sp" => Some(13),
-                "lr" => Some(14),
-                "pc" => Some(15),
-                _ => {
-                    None
-                }
-            }
-        }
+        Self::try_parse_reg(s).unwrap()
     }
 
     fn parse_shift(s: &str) -> Option<(u8, &str)> {
