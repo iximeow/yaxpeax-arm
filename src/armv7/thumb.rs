@@ -1970,7 +1970,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                         ((i2 as i32) << 21) |
                         ((i1 as i32) << 22) |
                         ((s as i32) << 23);
-                    let imm = (imm << 8) >> 8;
+                    let imm = (imm << 8) >> 7;
                     inst.operands = [
                         Operand::BranchThumbOffset(imm),
                         Operand::Nothing,
