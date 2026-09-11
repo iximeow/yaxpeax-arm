@@ -2091,9 +2091,11 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                     // `HVC` (`B8-1970`)
                                     // v7VE
                                     let imm = lower & 0b1111_1111_1111;
+                                    let imm_upper = instr & 0b1111;
+                                    let imm = (imm_upper << 12) | imm;
                                     inst.opcode = Opcode::HVC;
                                     inst.operands = [
-                                        Operand::Imm12(imm),
+                                        Operand::Imm32(imm as u32),
                                         Operand::Nothing,
                                         Operand::Nothing,
                                         Operand::Nothing,
@@ -2818,7 +2820,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
 
                     // TODO: so, this is gross! the PLD/PLI/PLT handling needs improvement across
                     // the board.
-                    if inst.opcode == Opcode::PLD {
+                    if inst.opcode == Opcode::PLD || inst.opcode == Opcode::PLI {
                         inst.operands[0] = inst.operands[1];
                         inst.operands[1] = Operand::Nothing;
                     }

@@ -4746,6 +4746,19 @@ fn prefetch() {
         &[0x10, 0xf8, 0x7c, 0xfe],
         "ldrbt.w pc, [r0, #0x7c]"
     );
+
+    test_display(
+        &[0x93, 0xf9, 0x00, 0xf6],
+        "pli.w [r3, #0x6000x78]"
+    );
+}
+
+#[test]
+fn hvc() {
+    test_display(
+        &[0xe2, 0xf7, 0x00, 0x81],
+        "hvc.w #0x2100"
+    );
 }
 
 #[test]
