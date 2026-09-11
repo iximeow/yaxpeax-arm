@@ -4664,6 +4664,11 @@ fn mrc_mcr_cdp() {
         &[0x54, 0xec, 0xa0, 0x91],
         "mrrc p1, 10, sb, r4, c0"
     );
+
+    test_display(
+        &[0x1a, 0xee, 0xff, 0xf4],
+        "mrc p4, 0, apsr_nzcv, c10, c15, 7",
+    );
 }
 
 #[test]

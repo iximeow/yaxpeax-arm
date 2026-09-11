@@ -660,6 +660,8 @@ pub enum StatusRegMask {
     SPSR_FSC = 0b11101,
     SPSR_FSX = 0b11110,
     SPSR_FSXC = 0b11111,
+    // not part of the above bitpacking, this is encoded by reg number 0b1111 in some instructions.
+    APSR_NZCV = 0b100000,
 }
 
 impl StatusRegMask {

@@ -1330,6 +1330,7 @@ impl StatusRegMask {
             StatusRegMask::CPSR_SC => "cpsr_sc",
             StatusRegMask::CPSR_SX => "cpsr_sx",
             StatusRegMask::CPSR_SXC => "cpsr_sxc",
+            StatusRegMask::APSR_NZCV => "apsr_nzcv",
             StatusRegMask::APSR_NZCVQ => "apsr_nzcvq",
             StatusRegMask::CPSR_FC => "cpsr_fc",
             StatusRegMask::CPSR_FX => "cpsr_fx",

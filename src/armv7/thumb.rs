@@ -4418,8 +4418,13 @@ fn decode_table_a6_30(decoder: &InstDecoder, inst: &mut Instruction, instr2: Bit
                         } else {
                             // MRC, MRC2 (A8-493)
                             inst.opcode = Opcode::MRC(coproc, opc1, opc2, is_2);
+                            let dest = if CRd == 0b1111 {
+                                Operand::StatusRegMask(StatusRegMask::APSR_NZCV)
+                            } else {
+                                Operand::Reg(Reg::from_u8(CRd))
+                            };
                             inst.operands = [
-                                Operand::Reg(Reg::from_u8(CRd)),
+                                dest,
                                 Operand::CReg(CReg::from_u8(CRn)),
                                 Operand::CReg(CReg::from_u8(CRm)),
                                 Operand::Nothing,
