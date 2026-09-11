@@ -1452,7 +1452,8 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                             inst.opcode = Opcode::SSAT;
                             inst.operands = [
                                 Operand::Reg(Reg::from_u8(rd)),
-                                Operand::Imm32((lower & 0b11111) as u32),
+                                // TODO:  ssat r3, #0x3, r7, lsl #22 != ssat r3, #4, r7, lsl #0x16. bytes: [7, f3, 83, 53]
+                                Operand::Imm32((lower & 0b11111) as u32 + 1),
                                 Operand::RegShift(shift),
                                 Operand::Nothing,
                             ];
@@ -1466,7 +1467,8 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                 inst.opcode = Opcode::SSAT;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
-                                    Operand::Imm32((lower & 0b11111) as u32),
+                                // TODO:  ssat r3, #0x3, r7, lsl #22 != ssat r3, #4, r7, lsl #0x16. bytes: [7, f3, 83, 53]
+                                    Operand::Imm32((lower & 0b11111) as u32 + 1),
                                     Operand::RegShift(shift),
                                     Operand::Nothing,
                                 ];
@@ -1476,7 +1478,8 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                 inst.opcode = Opcode::SSAT16;
                                 inst.operands = [
                                     Operand::Reg(Reg::from_u8(rd)),
-                                    Operand::Imm32((lower & 0b11111) as u32),
+                                    // TODO: testcase
+                                    Operand::Imm32((lower & 0b11111) as u32 + 1),
                                     Operand::Reg(Reg::from_u8(rn)),
                                     Operand::Nothing,
                                 ];

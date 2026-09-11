@@ -4695,6 +4695,23 @@ fn mrc_mcr_cdp() {
 }
 
 #[test]
+fn smml() {
+    // smmla, smmlar, smmls, smmlsr
+    test_display(
+        &[0x64, 0xfb, 0x1f, 0x92],
+        "smmlsr r2, r4, pc, sb"
+    );
+    test_display(
+        &[0x59, 0xfb, 0x1b, 0x66],
+        "smmlar r6, sb, fp, r6"
+    );
+    test_display(
+        &[0x20, 0xfb, 0x1d, 0xd1],
+        "smladx r1, r0, sp, sp"
+    );
+}
+
+#[test]
 fn prefetch() {
     test_display(
         &[0xb0, 0xf8, 0x03, 0xfe],
