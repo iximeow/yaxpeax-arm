@@ -858,7 +858,9 @@ impl <T: fmt::Write, Y: YaxColors> Colorize<T, Y> for ConditionedOpcode {
             Opcode::UMLAL |
             Opcode::SMLSD |
             Opcode::SMMLA |
+            Opcode::SMMLAR |
             Opcode::SMMLS |
+            Opcode::SMMLSR |
             Opcode::USADA8 |
             Opcode::USAD8 |
             Opcode::SDIV |
@@ -1185,7 +1187,9 @@ impl Opcode {
             Opcode::SMLSLD(false) => { "smlsldb" },
             Opcode::SMLSD => { "smlsd" },
             Opcode::SMMLA => { "smmla" },
+            Opcode::SMMLAR => { "smmlar" },
             Opcode::SMMLS => { "smmls" },
+            Opcode::SMMLSR => { "smmlsr" },
             Opcode::USADA8 => { "usada8" },
             Opcode::USAD8 => { "usad8" },
             Opcode::SMLAD => { "smlad" },

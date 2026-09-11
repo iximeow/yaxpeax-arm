@@ -3228,15 +3228,29 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                         Operand::Reg(Reg::from_u8(rm)),
                                         Operand::Nothing,
                                     ];
+                                } else if op1 == 0b110 {
+                                    // Ra == 0b1111? unpredictable!
+                                    decoder.unpredictable()?;
+                                    if op2 >= 0b10 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                    if op2 == 0b00 {
+                                        inst.opcode = Opcode::SMMLS;
+                                    } else {
+                                        inst.opcode = Opcode::SMMLSR;
+                                    }
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        Operand::Reg(Reg::from_u8(rn)),
+                                        Operand::Reg(Reg::from_u8(rm)),
+                                        Operand::Reg(Reg::from_u8(ra)),
+                                    ];
                                 } else {
                                     if op2 >= 0b10 {
                                         return Err(DecodeError::InvalidOpcode);
                                     }
                                     if op1 == 0b111 && op2 == 0b00 {
                                         return Err(DecodeError::InvalidOpcode);
-                                    }
-                                    if op1 == 0b110 {
-                                        decoder.unpredictable()?;
                                     }
                                     inst.opcode = [
                                         Opcode::MUL, // already handled
@@ -3245,7 +3259,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                         Opcode::UDF, // already handled
                                         Opcode::SMUSD,
                                         Opcode::SMMUL,
-                                        Opcode::SMMLS,
+                                        Opcode::SMMLS, // already handled
                                         Opcode::USAD8,
                                     ][op1];
                                     inst.operands = [
@@ -3291,15 +3305,41 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                         Operand::Reg(Reg::from_u8(rm)),
                                         Operand::Reg(Reg::from_u8(ra)),
                                     ];
+                                } else if op1 == 0b110 {
+                                    if op2 >= 0b10 {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                    if op2 == 0b00 {
+                                        inst.opcode = Opcode::SMMLS;
+                                    } else {
+                                        inst.opcode = Opcode::SMMLSR;
+                                    }
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        Operand::Reg(Reg::from_u8(rn)),
+                                        Operand::Reg(Reg::from_u8(rm)),
+                                        Operand::Reg(Reg::from_u8(ra)),
+                                    ];
+                                } else if op1 == 0b101 {
+                                    if op2 == 0b00 {
+                                        inst.opcode = Opcode::SMMLA;
+                                    } else if op2 == 0b01 {
+                                        inst.opcode = Opcode::SMMLAR;
+                                    } else {
+                                        return Err(DecodeError::InvalidOpcode);
+                                    }
+                                    inst.operands = [
+                                        Operand::Reg(Reg::from_u8(rd)),
+                                        Operand::Reg(Reg::from_u8(rn)),
+                                        Operand::Reg(Reg::from_u8(rm)),
+                                        Operand::Reg(Reg::from_u8(ra)),
+                                    ];
                                 } else {
                                     if op2 >= 0b10 {
                                         return Err(DecodeError::InvalidOpcode);
                                     }
                                     if op1 == 0b111 && op2 == 0b00 {
                                         return Err(DecodeError::InvalidOpcode);
-                                    }
-                                    if op1 == 0b110 {
-                                        decoder.unpredictable()?;
                                     }
                                     inst.opcode = [
                                         Opcode::MUL, // already handled
@@ -3308,7 +3348,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                         Opcode::UDF, // already handled
                                         Opcode::SMLSD,
                                         Opcode::SMMLA,
-                                        Opcode::SMMLS,
+                                        Opcode::SMMLS, // already handled
                                         Opcode::USADA8,
                                     ][op1];
                                     inst.operands = [

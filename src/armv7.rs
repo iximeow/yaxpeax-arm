@@ -257,7 +257,9 @@ pub enum Opcode {
 
     SMLSD,
     SMMLA,
+    SMMLAR,
     SMMLS,
+    SMMLSR,
     USADA8,
     USAD8,
     SMLAD,

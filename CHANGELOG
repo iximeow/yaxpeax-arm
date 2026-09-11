@@ -36,6 +36,8 @@
   the field is 1-based rather than 0-based, so for example an instruction which
   had that operand as "1" was incorrectly decoded as being "0"
 * thumb2: fix `hvc` immediate missing its upper four bits
+* thumb2: report "round" bit of `smmls` and `smmla` (as the new `smmlsr` and
+  `smmlar` opcodes)
 * ARMv7: do not try to elide memory offset when 0 in postindex operands.
   this makes a post-index (and implied writeback!) ambiguous with a pre-indexed
   access with offset zero. that is, `[r1, 0]` may be written as `[r1]`, but
