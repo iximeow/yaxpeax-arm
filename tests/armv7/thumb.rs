@@ -3616,6 +3616,25 @@ fn test_decode_ldr_32b_cases() {
         &[0xf3, 0xe9, 0x7e, 0x5a],
         "ldrd r5, r10, [r3, 0x1f8]!"
     );
+    // this is LDRD (literal) .. kind of. P == 0 but Rn == 0b1111 so following the manual we
+    // actually get to LDRD (literal) with P == 0 and maybe even W == 1. additionally:
+    // > if W == '1' then UNPREDICTABLE;
+    //
+    // yax at one point ignored W (and P) in this particular configuration, but capstone operates
+    // as if these are effectual. that seems ... fine ... particularly given yax is set up to
+    // reject this encoding as `unpredictable` if requested anyway.
+    test_display(
+        &[0x7f, 0xe8, 0x80, 0x3e],
+        "ldrd r3, lr, [pc], -0x200"
+    );
+
+    // i'd had a bird-brained idea to write a post-index operand with offset 0, like `[r1], #0`, as
+    // simply `[r1]`. the problem here is that post-index access implies writeback, which at best
+    // is `[r1]!`. but it's better to not do any of this.
+    test_display(
+        &[0x18, 0xf9, 0x00, 0x99],
+        "ldrsb.w sb, [r8], -0x0"
+    );
 }
 
 #[test]
@@ -3729,7 +3748,7 @@ fn test_decode_str_32b_cases() {
     );
     test_display(
         &[0x41, 0xf8, 0x00, 0x2b],
-        "str.w r2, [r1]"
+        "str.w r2, [r1], 0x0"
     );
 }
 

@@ -286,7 +286,13 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                     inst.operands = [
                                         Operand::Reg(Reg::from_u8(rt)),
                                         Operand::Reg(Reg::from_u8(rd)),
-                                        Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8 << 2, u, false),
+                                        if p {
+                                            Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8 << 2, u, w)
+                                        } else {
+                                            decoder.unpredictable()?;
+                                            // p == 0 and w == 0 is impossible, would be tbb/tbh
+                                            Operand::RegDerefPostindexOffset(Reg::from_u8(rn), imm8 << 2, u, false)
+                                        },
                                         Operand::Nothing,
                                     ];
                                 }
@@ -595,7 +601,13 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                     inst.operands = [
                                         Operand::Reg(Reg::from_u8(rt)),
                                         Operand::Reg(Reg::from_u8(rd)),
-                                        Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8 << 2, u, false),
+                                        if p {
+                                            Operand::RegDerefPreindexOffset(Reg::from_u8(rn), imm8 << 2, u, w)
+                                        } else {
+                                            decoder.unpredictable()?;
+                                            // p == 0 and w == 0 is impossible, would be tbb/tbh
+                                            Operand::RegDerefPostindexOffset(Reg::from_u8(rn), imm8 << 2, u, false)
+                                        },
                                         Operand::Nothing,
                                     ];
                                 }

@@ -245,13 +245,11 @@ impl<T: DisplaySink> crate::armv7::OperandVisitor for DisplayingOperandVisitor<'
         self.f.write_reg(base.number())?;
         self.f.write_char(']')?;
 
-        if offset != 0 {
-            self.f.write_fixed_size(", ")?;
-            if !add {
-                self.f.write_char('-')?;
-            }
-            self.f.write_prefixed_u16(offset)?;
+        self.f.write_fixed_size(", ")?;
+        if !add {
+            self.f.write_char('-')?;
         }
+        self.f.write_prefixed_u16(offset)?;
         Ok(())
     }
 

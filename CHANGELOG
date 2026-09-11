@@ -27,6 +27,15 @@
   rather than pc
 * thumb2: several instructions which decode an explicit rotate operand now do so
   into a distinct Operand::Ror (sxth, uxth, stxb16, utxb16, sxtb, uxtb)
+* thumb2: have unpredictable ldrd (literal) match a more "typical" interpretation
+  when ldrd is encoded as post-index with writeback, the manual describes the
+  behavior as "unpredictable", but capstone and others report this as a
+  post-index as the bits imply. yaxpeax will still reject this encoding if
+  configured to reject unpredictable instructions.
+* ARMv7: do not try to elide memory offset when 0 in postindex operands.
+  this makes a post-index (and implied writeback!) ambiguous with a pre-indexed
+  access with offset zero. that is, `[r1, 0]` may be written as `[r1]`, but
+  `[r1], 0` has a different meaning than `[r1]`.
 * ARMv8: support thumb2 encoding of `Test Target` instruction, `Opcode::TT`
   (formatted as any of `tt`, `ttt`, `tta`, `ttat`)
 * ARMv8: formerly-coprocessor instructions have been defined into SIMD extensions,
