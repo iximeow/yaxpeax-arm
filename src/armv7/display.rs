@@ -301,12 +301,10 @@ impl<T: DisplaySink> crate::armv7::OperandVisitor for DisplayingOperandVisitor<'
     }
 
     fn visit_imm12(&mut self, imm: u16) -> Result<Self::Ok, Self::Error> {
-        self.f.write_char('#')?;
         self.f.write_prefixed_u16(imm)
     }
 
     fn visit_imm32(&mut self, imm: u32) -> Result<Self::Ok, Self::Error> {
-        self.f.write_char('#')?;
         self.f.write_prefixed_u32(imm)
     }
 
@@ -686,7 +684,7 @@ pub(crate) fn visit_inst<T: DisplaySink>(instr: &Instruction, out: &mut T) -> fm
                 }
                 if let Operand::Imm12(mode) = &instr.operands[1] {
                     if comma { out.write_char(',')?; }
-                    out.write_fixed_size(" #")?;
+                    out.write_fixed_size(" ")?;
                     out.write_prefixed_u16(*mode)?;
                 }
                 return Ok(());
