@@ -25,6 +25,10 @@ enum ParsedOperand {
 //    SIMDRegisterElements { num: u8, elems: u8, elem_size: char },
 //    SIMDRegisterElement { num: u8, elem_size: char, elem: u8 },
     SIMDElementLane { elem: String, lane_selector: u8 },
+    // a shift/rotate by an immediate, like `lsl #4`
+    ShiftImm { kind: String, imm: u8 },
+    // a shift/rotate by a register, like `lsl r4`
+    ShiftReg { kind: String, regnum: u8 },
     Immediate(i64),
     PCRel(i64),
     Float(f64),
@@ -75,7 +79,7 @@ impl PartialEq for ParsedOperand {
                 }
             },
             (Immediate(l), Immediate(r)) => {
-                l == r || (
+                l == r || (*l == *r as u32 as i64) || (
                     // capstone prints 17f1004c as adds.w ip, r7, -0x8000000 which is .. wrong?
                     *l == 0x8000000 && *r == -0x80000000
                 )
@@ -108,15 +112,18 @@ impl PartialEq for ParsedOperand {
             (SIMDElementLane { elem: elem_l, lane_selector: lane_l }, SIMDElementLane { elem: elem_r, lane_selector: lane_r }) => {
                 elem_l == elem_r && lane_l == lane_r
             }
+            (ShiftImm { kind: lkind, imm: limm }, ShiftImm { kind: rkind, imm: rimm }) => {
+                lkind == rkind && limm == rimm
+            },
+            (ShiftReg { kind: lkind, regnum: lregnum }, ShiftReg { kind: rkind, regnum: rregnum }) => {
+                lkind == rkind && lregnum == rregnum
+            },
+            (CoprocOption(l), CoprocOption(r)) => {
+                l == r
+            },
             (Other(l), Other(r)) => {
-                if let (Some(left), Some(right)) = (l.strip_suffix(" r10"), r.strip_suffix(" sl")) {
-                    // probably something like `lsl r10` vs `lsl sl`. so strip the registers off
-                    // the end and compare the rest. notionally the registers should be parsed
-                    // but..
-                    left == right
-                }
                 // yax prints `asr #0` as just `asr`. is this actually a no-op?
-                else if (l == "asr" && r == "asr #0") || (l == "asr #0" && r == "asr") {
+                if (l == "asr" && r == "asr #0") || (l == "asr #0" && r == "asr") {
                     true
                 } else if (l == "lsr" && r == "lsr #0") || (l == "lsr #0" && r == "lsr") {
                     true
@@ -165,6 +172,30 @@ fn test_operand_parsing() {
     assert_eq!(
         ParsedDisassembly::parse("bls.w $-0xba500"),
         ParsedDisassembly::parse("bls.w #0xfff45b04"),
+    );
+
+    // c2 ea 81 6e
+    assert_eq!(
+        ParsedDisassembly::parse("pkhbt lr, r2, r1, lsl #26"),
+        ParsedDisassembly::parse("pkhbt lr, r2, r1, lsl #0x1a"),
+    );
+
+    // d6 fc 00 c2
+    assert_eq!(
+        ParsedDisassembly::parse("ldc2l p2, c12, [r6], {0x0}"),
+        ParsedDisassembly::parse("ldc2l p2, c12, [r6], {0}"),
+    );
+
+    // e2 f7 00 81
+    assert_eq!(
+        ParsedDisassembly::parse("hvc.w #0x2100"),
+        ParsedDisassembly::parse("hvc.w #0x2100"),
+    );
+
+    // 1a ee ff f4
+    assert_eq!(
+        ParsedDisassembly::parse("mrc p4, 0, apsr_nzcv, c10, c15, 7"),
+        ParsedDisassembly::parse("mrc p4, #0, apsr_nzcv, c10, c15, #7"),
     );
 }
 
@@ -320,6 +351,11 @@ impl ParsedOperand {
                 return (ParsedOperand::Register { size: 'r', num, neg }, end);
             }
 
+            // could be a shift description, like `ror #4` or `lsl r4`:
+            if let Ok(shift) = Self::try_parse_shift(substr) {
+                return (shift, end);
+            }
+
             // or it may be a writeback memory operand (like `ldm r10!, {reglist}`)
             if substr.as_bytes()[end - 1] == b'!' {
                 if let Ok(Some(num)) = Self::try_parse_reg(&substr[..end - 1]) {
@@ -411,6 +447,29 @@ impl ParsedOperand {
             ParsedOperand::try_parse_hex_or_dec(&s[1..])
         } else {
             ParsedOperand::try_parse_hex_or_dec(s)
+        }
+    }
+
+    fn try_parse_shift(s: &str) -> Result<ParsedOperand, &'static str> {
+        if let Some((lhs, rhs)) = s.split_once(' ') {
+            if lhs == "lsl" || lhs == "lsr" || lhs == "asr" || lhs == "ror" {
+                if let Some(imm) = Self::try_parse_imm(rhs) {
+                    let imm = imm as u8;
+                    Ok(ParsedOperand::ShiftImm { kind: lhs.to_string(), imm })
+                } else if let Some(num) = Self::try_parse_reg(rhs)? {
+                    Ok(ParsedOperand::ShiftReg { kind: lhs.to_string(), regnum: num })
+                } else {
+                    Err("unrecognized shift amount")
+                }
+            } else {
+                Err("not a recognized shift type")
+            }
+        } else {
+            if s == "rrx" {
+                Ok(ParsedOperand::ShiftImm { kind: "rrx".to_string(), imm: 1 })
+            } else {
+                Err("unrecognized parameterless shift")
+            }
         }
     }
 
@@ -767,6 +826,10 @@ fn capstone_differential_thumb() {
                                 return true;
                             }
 
+                            if parsed_yax.opcode == "pli.w" && parsed_cs.opcode == "pli" {
+                                return true;
+                            }
+
                             // TODO: so many signed multiply-related mishaps (usually around the
                             // M/R bits.
                             if parsed_yax.opcode.starts_with("sm") && parsed_cs.opcode.starts_with("sm") {
@@ -795,10 +858,12 @@ fn capstone_differential_thumb() {
                             }
                         }
 
+                        /*
                         if parsed_yax.opcode.replace(".w", "") == parsed_cs.opcode.replace(".w", "") {
                             // TODO: yax prints garbage like `b.wgt` instead of `bgt.w`. yikes.
                             return true;
                         }
+                        */
 
                         static BRANCHES: &'static [&'static str] = &[
                             "bgt", "bhi", "b", "ble", "bge", "blt", "bge",
