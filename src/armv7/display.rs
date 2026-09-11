@@ -357,6 +357,13 @@ impl<T: DisplaySink> crate::armv7::OperandVisitor for DisplayingOperandVisitor<'
         Ok(())
     }
 
+    fn visit_rotate(&mut self, amt: u8) -> Result<Self::Ok, Self::Error> {
+        self.emit_shift_type(ShiftStyle::ROR)?;
+        self.f.write_char(' ')?;
+        self.f.write_prefixed_u16(amt as u16)?;
+        Ok(())
+    }
+
     fn visit_apsr(&mut self) -> Result<Self::Ok, Self::Error> {
         self.f.span_start_register();
         self.f.write_fixed_size("apsr")?;
@@ -1436,6 +1443,9 @@ impl super::Operand {
             }
             Operand::StatusRegMask(mask) => {
                 visitor.visit_status_reg_mask(mask)
+            }
+            Operand::Ror(amt) => {
+                visitor.visit_rotate(amt)
             }
             Operand::APSR => {
                 visitor.visit_apsr()

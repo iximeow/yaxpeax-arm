@@ -775,6 +775,10 @@ pub enum Operand {
     BankedSPSR(Bank),
     /// a mask of bits for the `spsr` register.
     StatusRegMask(StatusRegMask),
+    /// a standalone rotate right by the specified amount.
+    ///
+    /// this typically applies equally to multiple operands; see `sxtah`, `uxtah`, etc.
+    Ror(u8),
     /// the `apsr` register.
     APSR,
     /// the `spsr` register.
@@ -846,6 +850,8 @@ pub trait OperandVisitor {
     fn visit_banked_spsr(&mut self, bank: Bank) -> Result<Self::Ok, Self::Error>;
     /// process an operand that is some set of bits out of a status register.
     fn visit_status_reg_mask(&mut self, mask: StatusRegMask) -> Result<Self::Ok, Self::Error>;
+    /// process an operand that is a standalone rotate of other operands in the instruction.
+    fn visit_rotate(&mut self, amt: u8) -> Result<Self::Ok, Self::Error>;
     /// process an operand that is `APSR`.
     fn visit_apsr(&mut self) -> Result<Self::Ok, Self::Error>;
     /// process an operand that is `SPSR`.

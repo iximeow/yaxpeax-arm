@@ -4526,11 +4526,11 @@ fn test_decode_ux_sx_32b_cases() {
     );
     test_display(
         &[0x5f, 0xfa, 0x9c, 0xfc],
-        "uxtb.w ip, ip, 0x8"
+        "uxtb.w ip, ip, ror 0x8"
     );
     test_display(
         &[0x1f, 0xfa, 0xab, 0xfb],
-        "uxth.w fp, fp, 0x10"
+        "uxth.w fp, fp, ror 0x10"
     );
     test_display(
         &[0x0f, 0xfa, 0x82, 0xf1],
@@ -4538,11 +4538,15 @@ fn test_decode_ux_sx_32b_cases() {
     );
     test_display(
         &[0x52, 0xfa, 0x93, 0xf1],
-        "uxtab.w r1, r2, r3, 0x8"
+        "uxtab.w r1, r2, r3, ror 0x8"
     );
     test_display(
         &[0x42, 0xfa, 0x83, 0xf1],
         "sxtab.w r1, r2, r3"
+    );
+    test_display(
+        &[0x2f, 0xfa, 0xfb, 0xf9],
+        "sxtb16.w sb, fp, ror 0x18"
     );
     test_display(
         &[0x02, 0xfa, 0x83, 0xf1],

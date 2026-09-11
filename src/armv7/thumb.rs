@@ -2860,7 +2860,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                         Operand::Reg(Reg::from_u8(rd)),
                                         Operand::Reg(Reg::from_u8(rm)),
                                         if rotate != 0 {
-                                            Operand::Imm32(rotate as u32)
+                                            Operand::Ror(rotate as u8)
                                         } else {
                                             Operand::Nothing
                                         },
@@ -2886,7 +2886,7 @@ pub fn decode_into<T: Reader<<ARMv7 as Arch>::Address, <ARMv7 as Arch>::Word>>(d
                                         Operand::Reg(Reg::from_u8(rn)),
                                         Operand::Reg(Reg::from_u8(rm)),
                                         if rotate != 0 {
-                                            Operand::Imm32(rotate as u32)
+                                            Operand::Ror(rotate as u8)
                                         } else {
                                             Operand::Nothing
                                         },

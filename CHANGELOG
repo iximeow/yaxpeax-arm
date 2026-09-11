@@ -25,6 +25,8 @@
 * thumb2: support ARMv8 hints PACBTI, BTI, ESB, PAC, and AUT
 * thumb2: fix `mrc`, `mrc2` use of register number "15", which means apsr_nzcv,
   rather than pc
+* thumb2: several instructions which decode an explicit rotate operand now do so
+  into a distinct Operand::Ror (sxth, uxth, stxb16, utxb16, sxtb, uxtb)
 * ARMv8: support thumb2 encoding of `Test Target` instruction, `Opcode::TT`
   (formatted as any of `tt`, `ttt`, `tta`, `ttat`)
 * ARMv8: formerly-coprocessor instructions have been defined into SIMD extensions,
