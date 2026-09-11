@@ -1,3 +1,7 @@
+// names from the manual are like, `Rt`, `CRd`, etc, which are not typical snake
+// case and provoke style warnings.
+#![allow(non_snake_case)]
+
 use yaxpeax_arch::Arch;
 
 use crate::armv7::{
@@ -4467,7 +4471,7 @@ fn decode_table_a6_30(decoder: &InstDecoder, inst: &mut Instruction, instr2: Bit
                             // MCR, MCR2 (A8-477)
                             inst.opcode = Opcode::MCR(coproc, opc1, opc2, is_2);
                             inst.operands = [
-                                Operand::Reg(Reg::from_u8(CRd)),
+                                Operand::Reg(Reg::from_u8(Rt)),
                                 Operand::CReg(CReg::from_u8(CRn)),
                                 Operand::CReg(CReg::from_u8(CRm)),
                                 Operand::Nothing,
@@ -4475,10 +4479,10 @@ fn decode_table_a6_30(decoder: &InstDecoder, inst: &mut Instruction, instr2: Bit
                         } else {
                             // MRC, MRC2 (A8-493)
                             inst.opcode = Opcode::MRC(coproc, opc1, opc2, is_2);
-                            let dest = if CRd == 0b1111 {
+                            let dest = if Rt == 0b1111 {
                                 Operand::StatusRegMask(StatusRegMask::APSR_NZCV)
                             } else {
-                                Operand::Reg(Reg::from_u8(CRd))
+                                Operand::Reg(Reg::from_u8(Rt))
                             };
                             inst.operands = [
                                 dest,

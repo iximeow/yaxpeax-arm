@@ -729,6 +729,7 @@ fn test_decode_mul() {
     );
 }
 
+#[test]
 fn test_register_shift_rotate() {
     test_armv6([0xec, 0x02, 0x00, 0x00], "andeq r0, r0, ip, ror 5");
     test_armv6([0xa0, 0x33, 0x0b, 0x00], "andeq r3, fp, r0, lsr 7");
