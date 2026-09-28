@@ -92,6 +92,9 @@ when decoding into an instruction multiple times (such as `Decoder::decode_into`
 the provided instruction would be left in an incoherent state mostly consiting
 of its previous data. when decoding as through `Decoder::decode`, the returned
 instruction had opcode `Invalid`.
+* documentation for how to process `StatusRegMask`
+* fix incorrect decoding of STM pre/post increment for encoding T1
+  - "stm" would report preincrement when the semantic is postincrement"
 
 ## 0.4.0
 
