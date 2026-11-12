@@ -1,5 +1,9 @@
 ## 0.6.0
 
+* a64: logical-immediate instructions (`AND`/`ORR`/`EOR`/`ANDS` with an
+  immediate) now reject `N = 1` when `sf = 0`. that encoding is UNDEFINED, and
+  yaxpeax-arm decoded it with a plausible-looking but invalid immediate.
+
 * the added-in-0.5.0 RRX rotate type now correctly reports rotating by one bit,
   rather than by "0 bits"
 
