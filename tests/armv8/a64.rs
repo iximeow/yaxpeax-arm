@@ -4816,6 +4816,23 @@ fn test_reserved() {
 }
 
 #[test]
+fn test_logical_shifted_register_shift_width() {
+    // the shift amount is 6 bits, but a 32-bit operation has only 32 bit
+    // positions: `sf == 0 && imm6[5] == 1` is UNDEFINED (Arm ARM C6.2.15 and
+    // the same rule on the other logical shifted-register instructions).
+    test_err([0xa5, 0xab, 0x21, 0x0a], DecodeError::InvalidOperand); // bic w5, w29, w1, lsl #42
+    test_err([0x33, 0xdc, 0x0b, 0x2a], DecodeError::InvalidOperand); // orr w19, w1, w11, lsl #55
+    test_err([0xeb, 0x80, 0xb2, 0x4a], DecodeError::InvalidOperand); // eon w11, w7, w18, asr #32
+    test_err([0xc3, 0xe6, 0xb4, 0x6a], DecodeError::InvalidOperand); // bics w3, w22, w20, asr #57
+
+    // shifts that fit, and 64-bit forms which may use the whole 6-bit range,
+    // must still decode.
+    test_display([0xa5, 0x7f, 0x21, 0x0a], "bic w5, w29, w1, lsl #31");
+    test_display([0xa5, 0x03, 0x21, 0x0a], "bic w5, w29, w1");
+    test_display([0xa5, 0xab, 0x21, 0x8a], "bic x5, x29, x1, lsl #42");
+}
+
+#[test]
 fn test_system() {
     // capstone says `msr s0_0_c2_c0_0, xzr`, but this looks like an unallocated encoding?
     test_err([0x1f, 0x20, 0x00, 0xd5], DecodeError::InvalidOpcode);
