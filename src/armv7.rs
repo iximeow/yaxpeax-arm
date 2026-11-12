@@ -594,6 +594,22 @@ impl Reg {
     }
 }
 
+/// the second register of a pair that the encoding only names the first half of.
+///
+/// A32 encodes the second register of `LDRD`/`STRD` as `Rt + 1`, so `Rt = 15`
+/// names a register that does not exist. that encoding is UNPREDICTABLE (Arm
+/// ARM F5.1.80: `if t == 15 || t2 == 15 || t == t2 then UnpredictableProcedure()`),
+/// and must be refused rather than computed: `Reg::from_u8(16)` panics, which
+/// made `allow_nonconforming(true)` decoders panic on attacker-controlled
+/// bytes.
+fn pair_second_reg(rt: u8) -> Result<Reg, DecodeError> {
+    if rt >= 15 {
+        return Err(DecodeError::InvalidOperand);
+    }
+
+    Ok(Reg::from_u8(rt + 1))
+}
+
 /// a control register.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(transparent)]
@@ -2020,18 +2036,13 @@ impl Decoder<ARMv7> for InstDecoder {
                                         }
                                         let Rm = word as u8 & 0b1111;
                                         let Rt = (word >> 12) as u8 & 0b1111;
-                                        if self.should_is_must {
-                                            if Rt & 1 != 0 {
-                                                return Err(DecodeError::InvalidOperand);
-                                            }
-                                            if Rt == 15 {
-                                                return Err(DecodeError::InvalidOperand);
-                                            }
+                                        if self.should_is_must && Rt & 1 != 0 {
+                                            return Err(DecodeError::InvalidOperand);
                                         }
                                         let Rn = (word >> 16) as u8 & 0b1111;
                                         inst.operands = [
                                             Operand::Reg(Reg::from_u8(Rt)),
-                                            Operand::Reg(Reg::from_u8(Rt + 1)),
+                                            Operand::Reg(pair_second_reg(Rt)?),
                                             if P {
                                                 Operand::RegDerefPreindexReg(Reg::from_u8(Rn), Reg::from_u8(Rm), U, W)
                                             } else {
@@ -2091,7 +2102,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                         let imm = (HiOffset << 4) as u16 | LoOffset as u16;
                                         inst.operands = [
                                             Operand::Reg(Reg::from_u8(Rt)),
-                                            Operand::Reg(Reg::from_u8(Rt + 1)),
+                                            Operand::Reg(pair_second_reg(Rt)?),
                                             if P {
                                                 Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm, U, W)
                                             } else {
@@ -2159,7 +2170,7 @@ impl Decoder<ARMv7> for InstDecoder {
                                         let Rn = (word >> 16) as u8 & 0b1111;
                                         inst.operands = [
                                             Operand::Reg(Reg::from_u8(Rt)),
-                                            Operand::Reg(Reg::from_u8(Rt + 1)),
+                                            Operand::Reg(pair_second_reg(Rt)?),
                                             if P {
                                                 Operand::RegDerefPreindexReg(Reg::from_u8(Rn), Reg::from_u8(Rm), U, W)
                                             } else {
@@ -2207,19 +2218,14 @@ impl Decoder<ARMv7> for InstDecoder {
                                             inst.opcode = Opcode::STRD;
                                         }
                                         let Rt = (word >> 12) as u8 & 0b1111;
-                                        if self.should_is_must {
-                                            if Rt & 1 != 0 {
-                                                return Err(DecodeError::InvalidOperand);
-                                            }
-                                            if Rt == 15 {
-                                                return Err(DecodeError::InvalidOperand);
-                                            }
+                                        if self.should_is_must && Rt & 1 != 0 {
+                                            return Err(DecodeError::InvalidOperand);
                                         }
                                         let Rn = (word >> 16) as u8 & 0b1111;
                                         let imm = (HiOffset << 4) as u16 | LoOffset as u16;
                                         inst.operands = [
                                             Operand::Reg(Reg::from_u8(Rt)),
-                                            Operand::Reg(Reg::from_u8(Rt + 1)),
+                                            Operand::Reg(pair_second_reg(Rt)?),
                                             if P {
                                                 Operand::RegDerefPreindexOffset(Reg::from_u8(Rn), imm, U, W)
                                             } else {
