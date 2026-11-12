@@ -8114,6 +8114,13 @@ impl Decoder<ARMv8> for InstDecoder {
                         let imms = (word >> 10) & 0x3f;
                         let immr = (word >> 16) & 0x3f;
                         let N = (word >> 22) & 1;
+                        // "N" selects 64-bit elements in the bitmask immediate;
+                        // a 32-bit operation cannot use it, and the encoding is
+                        // UNDEFINED (Arm ARM C6.2.14: `if sf == '0' && N != '0'
+                        // then EndOfDecode(Decode_UNDEF)`).
+                        if (word >> 31) & 1 == 0 && N != 0 {
+                            return Err(DecodeError::InvalidOpcode);
+                        }
                         let size = match word >> 29 {
                             0b000 => {
                                 inst.opcode = Opcode::AND;
