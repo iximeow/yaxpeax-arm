@@ -7898,6 +7898,16 @@ impl Decoder<ARMv8> for InstDecoder {
                         let imm6 = ((word >> 10) & 0x3f) as u8;
                         let Rm = ((word >> 16) & 0x1f) as u16;
 
+                        // a 32-bit operation has only 32 bit positions, so the
+                        // high bit of the 6-bit shift amount must be clear:
+                        // `sf == 0 && imm6[5] == 1` is UNDEFINED (Arm ARM
+                        // C6.2.15, and the same rule in the other logical
+                        // shifted-register instructions). the add/sub shifted
+                        // register decoder below already checks this.
+                        if size == SizeCode::W && imm6 >= 32 {
+                            return Err(DecodeError::InvalidOperand);
+                        }
+
                         inst.operands[0] = Operand::Register(size, Rd);
                         inst.operands[1] = Operand::Register(size, Rn);
                         inst.operands[2] = Operand::RegShift(docs::DecodeShift(shift), imm6, size, Rm);
