@@ -980,3 +980,31 @@ pub fn bench_60000_instrs(b: &mut Bencher) {
     });
 }
 */
+
+#[test]
+fn ldrd_strd_pair_second_register_out_of_range_is_an_error() {
+    // A32 `LDRD`/`STRD` encode the second register as `Rt + 1`, so `Rt = 15`
+    // would name register 16. Arm ARM F5.1.80 makes that UNPREDICTABLE
+    // (`if t == 15 || t2 == 15 || t == t2 then UnpredictableProcedure()`), so
+    // refusing it is correct - but it must be a decode error, not a panic.
+    // `Reg::from_u8(Rt + 1)` used to panic whenever nonconforming encodings
+    // were allowed.
+    let ldrd_sweep = [0xf2, 0xf3, 0xeb, 0x71]; // LDRD Rt=15, from the sweep
+    let ldrd = [0xd0, 0xf0, 0xc0, 0xe1]; // LDRD Rt=15
+    let strd = [0xf0, 0xf0, 0xc0, 0xe1]; // STRD Rt=15
+
+    for data in [ldrd_sweep, ldrd, strd] {
+        for decoder in [
+            InstDecoder::armv7(),
+            InstDecoder::armv7().allow_nonconforming(true),
+            InstDecoder::armv5().allow_nonconforming(true),
+        ] {
+            test_invalid_under(&decoder, data);
+        }
+    }
+
+    // and the valid pairs must still decode, so the fix doesn't over-reject.
+    let nonconforming = InstDecoder::armv7().allow_nonconforming(true);
+    test_display_under(&nonconforming, [0xd0, 0x00, 0xc0, 0xe1], "ldrd r0, r1, [r0]");
+    test_display_under(&nonconforming, [0xf0, 0x00, 0xc0, 0xe1], "strd r0, r1, [r0]");
+}

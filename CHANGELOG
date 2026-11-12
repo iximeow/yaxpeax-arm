@@ -1,5 +1,8 @@
 ## 0.6.0
 
+* ARMv7: `LDRD`/`STRD` with `Rt = 15` are now decode errors rather than panics.
+  the second register of the pair is encoded as `Rt + 1`, which used to build
+  register 16 and panic even under `allow_nonconforming(true)`.
 * the added-in-0.5.0 RRX rotate type now correctly reports rotating by one bit,
   rather than by "0 bits"
 
